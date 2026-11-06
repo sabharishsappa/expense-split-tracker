@@ -217,6 +217,7 @@ interface AppDao {
 
     @Query("SELECT category, COUNT(*) AS n FROM txn WHERE category != '' GROUP BY category")
     fun tagCounts(): Flow<List<TagCount>>
+    @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'") suspend fun acctRulesList(): List<Rule>
     @Query("SELECT * FROM bill WHERE paid = 0 ORDER BY dueDate")
     fun dueBills(): Flow<List<Bill>>
     @Query("SELECT * FROM bill WHERE paid = 0")

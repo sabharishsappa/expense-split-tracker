@@ -24,9 +24,9 @@ class SmsReceiver : BroadcastReceiver() {
                     val at = if (time > 0) time else System.currentTimeMillis()
                     val bill = BillParser.parse(body)
                     if (bill != null) { Repo.ingestBill(app, bill, at); continue }
-                    val p = SmsParser.parse(body) ?: continue
-                    val t = Repo.ingest(app, p, at, body)
-                    if (t != null) Repo.notifyNew(app, t)
+                    val p = SmsParser.parse(body)
+                    if (p != null) { val t = Repo.ingest(app, p, at, body); if (t != null) Repo.notifyNew(app, t) }
+                    BalanceSms.parse(body)?.let { Repo.ingestBalance(app, it, at) }
                 }
             } catch (e: Throwable) {
                 CrashLog.record(app, e)

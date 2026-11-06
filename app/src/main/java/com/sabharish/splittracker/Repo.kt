@@ -396,6 +396,18 @@ object Repo {
     suspend fun setBillPaid(ctx: Context, id: Long, paid: Boolean) = Db.get(ctx).dao().setBillPaid(id, paid)
 
     // ---------- accounts ----------
+    /** A bank message showed the real balance: restart that account's running balance from it. Returns true if used. */
+    suspend fun ingestBalance(ctx: Context, hit: BalanceHit, smsTime: Long): Boolean {
+        val dao = Db.get(ctx).dao()
+        val key = Accounts.keyOf(hit.bank, hit.last)
+        val saved = dao.acctRulesList().mapNotNull { Accounts.decode(it) }.firstOrNull { it.key == key }
+        val known = saved != null || Accounts.detected(dao.allTxnsList()).any { Accounts.keyOf(it.first, it.second) == key }
+        if (!known) return false
+        if (saved != null && smsTime + 1 <= saved.asOf) return false      // older than what we already have
+        dao.putRule(Accounts.encode(Account(key, hit.bank, hit.last, saved?.name ?: "", hit.balance, smsTime + 1)))
+        return true
+    }
+
     suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double) {
         val bank = key.substringBefore("|"); val last = key.substringAfter("|")
         Db.get(ctx).dao().putRule(Accounts.encode(Account(key, bank, last, name.trim(), balance, System.currentTimeMillis())))
@@ -443,8 +455,9 @@ object Repo {
                 val text = it.getString(bi)
                 val bill = BillParser.parse(text)
                 if (bill != null) { ingestBill(ctx, bill, it.getLong(di)); continue }
-                val p = SmsParser.parse(text) ?: continue
-                if (ingest(ctx, p, it.getLong(di), text ?: "") != null) added++
+                val p = SmsParser.parse(text)
+                if (p != null && ingest(ctx, p, it.getLong(di), text ?: "") != null) added++
+                BalanceSms.parse(text)?.let { h -> ingestBalance(ctx, h, it.getLong(di)) }
             }
         }
         added

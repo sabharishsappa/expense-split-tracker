@@ -712,7 +712,7 @@ fun WelcomeDialog(onPick: (Long) -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("From which date should I track your spends?", fontWeight = FontWeight.SemiBold)
-                Text("Messages from that day until now go straight into your Inbox, so nothing is missed. New messages after that arrive with a notification — and stay in the Inbox until you sort them.", fontSize = 13.sp, color = muted())
+                Text("Messages from that date go into your Inbox. New ones arrive with a notification and stay in the Inbox until you sort them.", fontSize = 13.sp, color = muted())
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     options.forEach { (label, t) -> Pill(label, { sel = t }, selected = sel == t, strong = sel == t) }
                     Pill("Pick a date", { picking = true }, selected = options.none { it.second == sel }, strong = options.none { it.second == sel })

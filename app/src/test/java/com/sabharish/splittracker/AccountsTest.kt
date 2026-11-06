@@ -112,3 +112,35 @@ class AccountsTest {
         assertNull(TransferMatcher.find(spend, listOf(up(2, "UPI_IN", 100.0, 11 * min, "KOTAK", "2670"))))
     }
 }
+
+class BalanceSmsTest {
+    private fun hit(b: String) = BalanceSms.parse(b)
+    @Test fun sbiAtm() {
+        val h = hit("Dear SBI Customer, Rs.15000 withdrawn at SBI ATM T1NH000952327 from A/cX3157 on 29Nov23 Transaction Number 4858. Available Balance Rs.16183.91. If not withdrawn by you...")!!
+        org.junit.Assert.assertEquals(Triple("SBI", "3157", 16183.91), Triple(h.bank, h.last, h.balance))
+    }
+    @Test fun sbiSalary() {
+        val h = hit("Your A/C XXXXX883157 has credit for BY SALARY of Rs 4,249.00 on 26/07/24. Avl Bal Rs 24,230.53.-SBI")!!
+        org.junit.Assert.assertEquals("3157", h.last); org.junit.Assert.assertEquals(24230.53, h.balance, 0.001)
+    }
+    @Test fun dbsCurrentBalance() {
+        val h = hit("Your DBS Bank A/c ************5943 is debited with INR 22.70 on 12-02-2024 for fee. Current balance: INR 985.63 as of 12/Feb/2024 01:31:13.")!!
+        org.junit.Assert.assertEquals("DBS", h.bank); org.junit.Assert.assertEquals(985.63, h.balance, 0.001)
+    }
+    @Test fun unionBank() {
+        val h = hit("A/c *3815 Credited for Rs:100.00 on 11-03-2025 10:45:33 by Mob Bk ref no 831559121411 Avl Bal Rs:9155.80.Never Share OTP/PIN/CVV-Union Bank of India")!!
+        org.junit.Assert.assertEquals(9155.80, h.balance, 0.001)
+        val h2 = hit("Your SB A/c *3815 Debited for Rs.2000.00 on 11-03-2025 11:16:02 by ATM Avl Bal Rs.7155.80, If not you, Call 1800222243 -Union Bank of India")!!
+        org.junit.Assert.assertEquals("UNION", h2.bank); org.junit.Assert.assertEquals(7155.80, h2.balance, 0.001)
+    }
+    @Test fun cardMessagesAreIgnored() {
+        org.junit.Assert.assertNull(hit("INR 500 spent on IndusInd Card XX4122 at X. Avl Limit INR 50000"))
+        org.junit.Assert.assertNull(hit("hello"))
+        org.junit.Assert.assertNull(hit(""))
+    }
+    @Test fun checkpointAfterTransactionIsNotDoubleCounted() {
+        val t = TestUtil.tx(1, "Ravi", 500.0, TestUtil.ms(2026, 11, 6), kind = "UPI_OUT", bank = "SBI", card = "3157")
+        val a = Account("SBI|3157", "SBI", "3157", "", 1000.0, t.smsTime + 1)
+        org.junit.Assert.assertEquals(1000.0, Accounts.balance(a, listOf(t), listOf("SBI" to "3157")), 0.001)
+    }
+}

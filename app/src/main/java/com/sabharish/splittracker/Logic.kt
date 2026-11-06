@@ -74,7 +74,7 @@ object Logic {
 
     /** One line describing what the single ✓ will do to every ticked bill. */
     fun bulkSummary(count: Int, total: Double, tag: String, people: List<String>): String {
-        if (count == 0) return "Tick the bills to change"
+        if (count == 0) return ""
         if (tag.isBlank() && people.isEmpty()) return "Pick a tag and/or who these were for"
         val parts = ArrayList<String>()
         if (tag.isNotBlank()) parts.add("tag $tag")

@@ -79,3 +79,27 @@ object TransferMatcher {
             .minByOrNull { abs(it.smsTime - t.smsTime) }
     }
 }
+
+data class BalanceHit(val bank: String, val last: String, val balance: Double)
+
+/**
+ * Many bank messages end with "Avl Bal Rs 4,463.90". That is the real balance at that moment, so it replaces
+ * whatever we had calculated — salary, ATM and cheque entries that carry no UPI message stay correct this way.
+ */
+object BalanceSms {
+    private val bal = Regex("""(?:avl\.? ?bal(?:ance)?|available bal(?:ance)?|current bal(?:ance)?|clear bal(?:ance)?)\s*(?:is|:|-)?\s*(?:rs\.?|inr)?\s*:?\s*([\d,]+(?:\.\d+)?)""", RegexOption.IGNORE_CASE)
+    private val acct = Regex("""(?:a/?c|acct|account)\s*(?:no\.?)?\s*(?:ending)?\s*[X*x]*\s*(\d{4})\b""", RegexOption.IGNORE_CASE)
+    private val banks = listOf("SBI" to "SBI", "ICICI" to "ICICI", "HDFC" to "HDFC", "KOTAK" to "KOTAK", "FEDERAL" to "FEDERAL",
+        "DBS" to "DBS", "YES BANK" to "YES", "INDUSIND" to "INDUSIND", "UNION BANK" to "UNION", "BOI" to "BOI", "AXIS" to "AXIS")
+
+    fun parse(body: String?): BalanceHit? {
+        if (body.isNullOrBlank()) return null
+        val b = body.replace(Regex("\\s+"), " ")
+        if (Regex("credit card|card ending|spent on", RegexOption.IGNORE_CASE).containsMatchIn(b)) return null
+        val amount = bal.find(b)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: return null
+        val last = acct.find(b)?.groupValues?.get(1) ?: return null
+        val up = b.uppercase()
+        val bank = banks.firstOrNull { up.contains(it.first) }?.second ?: return null
+        return BalanceHit(bank, last, amount)
+    }
+}

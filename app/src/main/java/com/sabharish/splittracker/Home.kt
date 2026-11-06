@@ -77,7 +77,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                 Text(Logic.money(total), color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    if (owed.isEmpty()) "All settled 🎉" else "${owed.size} ${if (owed.size == 1) "person" else "people"} · tap to see details",
+                    if (owed.isEmpty()) "All settled 🎉" else "${owed.size} ${if (owed.size == 1) "person owes" else "people owe"} you",
                     color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp
                 )
                 val lent = Logic.lentTotal(pending)
@@ -130,7 +130,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(a.label, fontSize = 16.sp)
-                                if (!a.hasBalance) Text("Tap to enter today's balance", fontSize = 12.sp, color = muted())
+                                Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)} · tap to correct" else "Tap to set balance", fontSize = 12.sp, color = muted())
                             }
                             if (a.hasBalance) Text(Logic.money(a.balance), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                                 color = if (a.balance < 0) MaterialTheme.colorScheme.error else green())
@@ -138,7 +138,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                     }
                 }
             }
-            item { Text("Moves between your own accounts are spotted automatically and kept out of your spends.", fontSize = 12.sp, color = muted()) }
+            item { Text("Transfers between your own accounts are left out of your spends.", fontSize = 12.sp, color = muted()) }
         }
         item {
             Card(
@@ -147,7 +147,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Check a statement", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("Upload a card or bank statement and see what's missing or extra", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Upload a statement to find missing or extra payments", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
         }
@@ -201,7 +201,7 @@ private fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name (optional)") })
                 Spacer(Modifier.height(6.dp))
-                Text("From now on every UPI in/out message updates it.", fontSize = 12.sp, color = muted())
+                Text("Updates automatically from your bank messages.", fontSize = 12.sp, color = muted())
             }
         },
         confirmButton = { TextButton(onClick = { amount.replace(",", "").toDoubleOrNull()?.let { onSave(name, it) } }) { Text("✓") } },
@@ -256,7 +256,7 @@ private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
             text = {
                 Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                     Text("1. Which card or account?", fontWeight = FontWeight.SemiBold)
-                    if (sources.isEmpty()) Text("Nothing to check yet. Statements can be checked once some transactions are in.", fontSize = 13.sp, color = muted())
+                    if (sources.isEmpty()) Text("Nothing to check yet.", fontSize = 13.sp, color = muted())
                     sources.forEach { s -> Pill(s.label, { source = s }, selected = source == s, modifier = Modifier.padding(top = 6.dp)) }
                     Spacer(Modifier.height(12.dp))
                     Text("2. PDF password (if any)", fontWeight = FontWeight.SemiBold)
