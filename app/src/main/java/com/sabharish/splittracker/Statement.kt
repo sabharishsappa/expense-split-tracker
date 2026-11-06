@@ -41,7 +41,7 @@ object Statement {
     private val serialRx = Regex("""^\d{10,}\s+""")
     private val plainRx = Regex("""(?<![\w.])-?($NUM)\s*$""")
     private val decimalTok = Regex("""-?\d[\d,]*\.\d{1,2}""")
-    private val skipRx = Regex("""\b(total|statement|due|opening|closing|balance|previous|summary|limit|rewards?|points)\b""", RegexOption.IGNORE_CASE)
+    private val skipRx = Regex("""^(total|statement|due|opening|closing|balance|previous|summary|limit|rewards?|points)\b""", RegexOption.IGNORE_CASE)
     private val formats = listOf("dd/MM/yyyy", "dd-MM-yyyy", "dd.MM.yyyy", "dd/MM/yy", "dd-MM-yy", "dd MMM yyyy", "dd-MMM-yyyy", "dd/MMM/yyyy", "dd-MMM-yy", "dd MMM yy")
 
     private fun parseDate(s: String): Long? {

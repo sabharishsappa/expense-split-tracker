@@ -243,3 +243,15 @@ class StatementLayoutsIcici {
         assertEquals("PAYU*SWIGGY INSTAMART PRI Bangalore", l[0].desc)
     }
 }
+
+class StatementSkipWordsTest {
+    @Test fun merchantNamesContainingHeaderWordsAreKept() {
+        val l = Statement.parse("""
+            -       -                 Opening Balance                            -                                    -                   -             1,011.50
+            70          15 Sep 2026   PCD/2159/RATNADEEP RETAIL LIMIT/ED           625805473342                      82.00                                  929.50
+        """.trimIndent())
+        assertEquals(1, l.size)
+        assertEquals(82.0, l[0].amount, 0.001)
+        assertFalse(l[0].credit)
+    }
+}
