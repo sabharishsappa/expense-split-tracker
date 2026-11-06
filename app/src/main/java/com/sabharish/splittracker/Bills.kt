@@ -26,7 +26,9 @@ object BillParser {
     fun parseDue(s: String): Long? {
         for (f in formats) try {
             val df = SimpleDateFormat(f, Locale.ENGLISH); df.isLenient = false
-            df.parse(s.trim())?.let { return it.time }
+            val t = s.trim(); val pos = java.text.ParsePosition(0)
+            val d = df.parse(t, pos)
+            if (d != null && pos.index == t.length && java.util.Calendar.getInstance().also { it.time = d }.get(java.util.Calendar.YEAR) >= 1990) return d.time
         } catch (_: Exception) {}
         return null
     }
