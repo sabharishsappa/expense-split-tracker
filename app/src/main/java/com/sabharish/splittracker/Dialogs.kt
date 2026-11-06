@@ -57,6 +57,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
@@ -452,6 +454,22 @@ private fun share(ctx: Context, text: String) {
 // ---------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------
+/** A titled group of settings on a rounded card. */
+@Composable
+private fun Section(title: String, hint: String = "", content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 18.dp)) {
+        Text(title.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = muted(), modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
+        Column(
+            Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            content()
+            if (hint.isNotEmpty()) Text(hint, fontSize = 12.sp, color = muted())
+        }
+    }
+}
+
+/** Full-screen settings. Everything saves as you change it; there is no Save button. */
 @Composable
 fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
@@ -460,6 +478,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val last by vm.lastBackup.collectAsState()
     var note by remember { mutableStateOf("") }
+    var confirmRestore by remember { mutableStateOf<String?>(null) }
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             val text = vm.backupText()
@@ -470,96 +489,98 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             val text = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" }
-            vm.restore(text)
-            onDismiss()
+            confirmRestore = text
         }
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Settings") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(value = upi, onValueChange = { upi = it }, singleLine = true,
-                    label = { Text("My UPI ID (added to reminders)") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = names, onValueChange = { names = it }, singleLine = true,
-                    label = { Text("My name words (to hide own transfers)") }, modifier = Modifier.fillMaxWidth())
-                Text("Comma separated. UPI payments to or from a name containing any of these are treated as your own transfers.", fontSize = 12.sp, color = muted())
-                Spacer(Modifier.height(14.dp))
-                Text("Tags", fontWeight = FontWeight.SemiBold)
-                Text("Tap a tag to rename, delete or hide it.", fontSize = 12.sp, color = muted())
-                val mine by vm.customTags.collectAsState()
-                val hidden by vm.hiddenTags.collectAsState()
-                var newTag by remember { mutableStateOf(false) }
-                var editing by remember { mutableStateOf<String?>(null) }
-                Spacer(Modifier.height(6.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (Categories.all.filter { it != "Other" } + mine).forEach { c ->
-                        Pill(if (c in hidden) "$c (hidden)" else "$c  ✎", { editing = c }, selected = c in mine)
+    confirmRestore?.let { text ->
+        AlertDialog(
+            onDismissRequest = { confirmRestore = null },
+            title = { Text("Restore this backup?") },
+            text = { Text("Everything on this phone is replaced by the backup.") },
+            confirmButton = { TextButton(onClick = { vm.restore(text); confirmRestore = null; onDismiss() }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = { confirmRestore = null }) { Text("Cancel") } }
+        )
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                    Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    Section("Payments", "Your UPI ID goes into reminders. Transfers to or from names containing your name words are treated as your own money.") {
+                        OutlinedTextField(value = upi, onValueChange = { upi = it; Repo.putPref(ctx, "upi", it.trim()) }, singleLine = true,
+                            label = { Text("My UPI ID") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = names, onValueChange = { names = it; Repo.putPref(ctx, "selfnames", it.trim()) }, singleLine = true,
+                            label = { Text("My name words, comma separated") }, modifier = Modifier.fillMaxWidth())
                     }
-                    Pill("+ New tag", { newTag = true })
-                }
-                if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n); newTag = false }
-                editing?.let { t -> EditTagDialog(vm, t, t in mine, t in hidden) { editing = null } }
-                Spacer(Modifier.height(14.dp))
-                val rules by vm.tagRules.collectAsState()
-                Text("Remembered tags (${rules.size})", fontWeight = FontWeight.SemiBold)
-                Text("A merchant you tagged once is tagged automatically next time. Tap ✕ to forget one.", fontSize = 12.sp, color = muted())
-                rules.take(30).forEach { r ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${r.ruleKey.removePrefix("cat|")} → ${r.people}", Modifier.weight(1f), fontSize = 13.sp)
-                        TextButton(onClick = { vm.removeTagRule(r.ruleKey) }) { Text("✕") }
+                    Section("Tags", "Tap a tag to rename, hide or delete it.") {
+                        val mine by vm.customTags.collectAsState()
+                        val hidden by vm.hiddenTags.collectAsState()
+                        var newTag by remember { mutableStateOf(false) }
+                        var editing by remember { mutableStateOf<String?>(null) }
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            (Categories.all.filter { it != "Other" } + mine).forEach { c ->
+                                Pill(if (c in hidden) "$c (hidden)" else c, { editing = c }, selected = c in mine, compact = true)
+                            }
+                            Pill("+ New", { newTag = true }, compact = true)
+                        }
+                        if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n); newTag = false }
+                        editing?.let { t -> EditTagDialog(vm, t, t in mine, t in hidden) { editing = null } }
                     }
-                }
-                if (rules.size > 30) Text("…and ${rules.size - 30} more", fontSize = 12.sp, color = muted())
-                Spacer(Modifier.height(14.dp))
-                Text("Appearance", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("system" to "Auto", "light" to "Light", "dark" to "Dark").forEach { (m, label) ->
-                        Pill(label, { ThemeState.mode = m; Repo.putPref(ctx, "theme", m) }, selected = ThemeState.mode == m)
+                    Section("Appearance") {
+                        Segmented(listOf("Auto", "Light", "Dark"),
+                            when (ThemeState.mode) { "light" -> "Light"; "dark" -> "Dark"; else -> "Auto" },
+                            { label -> val m = when (label) { "Light" -> "light"; "Dark" -> "dark"; else -> "system" }; ThemeState.mode = m; Repo.putPref(ctx, "theme", m) })
                     }
-                }
-                Spacer(Modifier.height(14.dp))
-                var crash by remember { mutableStateOf(CrashLog.read(ctx)) }
-                val clipboard = LocalClipboardManager.current
-                if (crash.isNotEmpty()) {
-                    Text("The app crashed last time", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
-                    Text(crash.take(700), fontSize = 10.sp, color = muted())
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(crash)); note = "Crash report copied" }) { Text("Copy report") }
-                        OutlinedButton(onClick = { CrashLog.clear(ctx); crash = "" }) { Text("Clear") }
+                    Section("Backup & restore", "Saves transactions, bills, tags, people, rules and settings to one file. Restore replaces what is on this phone.") {
+                        Text(if (last > 0) "Last backup: ${Repo.shortDate(last)}" else "No backup yet", fontSize = 14.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { saveFile.launch("SplitTracker-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
+                            OutlinedButton(onClick = { openFile.launch(arrayOf("*/*")) }) { Text("Restore") }
+                        }
+                        if (note.isNotEmpty()) Text(note, fontSize = 13.sp, color = teal())
                     }
-                    Spacer(Modifier.height(14.dp))
-                }
-                Text("Backup", fontWeight = FontWeight.SemiBold)
-                Text(if (last > 0) "Last backup: ${Repo.shortDate(last)}" else "No backup yet", fontSize = 12.sp, color = muted())
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { saveFile.launch("SplitTracker-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
-                    OutlinedButton(onClick = { openFile.launch(arrayOf("*/*")) }) { Text("Restore") }
-                }
-                if (note.isNotEmpty()) Text(note, fontSize = 12.sp, color = teal())
-                Text("Saves everything: transactions, tags, people, rules, settings. Restore replaces what is on this phone.", fontSize = 12.sp, color = muted())
-                Spacer(Modifier.height(14.dp))
-                Text("Import older messages", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { vm.importDays(180); onDismiss() }) { Text("6 months") }
-                    OutlinedButton(onClick = { vm.importDays(365); onDismiss() }) { Text("1 year") }
-                    OutlinedButton(onClick = { vm.importDays(1095); onDismiss() }) { Text("3 years") }
+                    Section("Import older messages", "Safe to repeat — messages already in the app are skipped.") {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("1 month" to 30, "3 months" to 90, "6 months" to 180, "1 year" to 365).forEach { (label, d) ->
+                                OutlinedButton(onClick = { vm.importDays(d); onDismiss() }) { Text(label) }
+                            }
+                        }
+                    }
+                    val rules by vm.tagRules.collectAsState()
+                    var showRules by remember { mutableStateOf(false) }
+                    Section("Remembered merchants", "A merchant you tagged once is tagged automatically next time.") {
+                        Row(Modifier.fillMaxWidth().clickable { showRules = !showRules }, verticalAlignment = Alignment.CenterVertically) {
+                            Text("${rules.size} remembered", Modifier.weight(1f), fontSize = 15.sp)
+                            Text(if (showRules) "Hide" else "Show", color = teal())
+                        }
+                        if (showRules) {
+                            rules.take(40).forEach { r ->
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("${r.ruleKey.removePrefix("cat|")} → ${r.people}", Modifier.weight(1f), fontSize = 13.sp)
+                                    TextButton(onClick = { vm.removeTagRule(r.ruleKey) }) { Text("Forget") }
+                                }
+                            }
+                            if (rules.size > 40) Text("…and ${rules.size - 40} more", fontSize = 12.sp, color = muted())
+                        }
+                    }
+                    var crash by remember { mutableStateOf(CrashLog.read(ctx)) }
+                    val clipboard = LocalClipboardManager.current
+                    if (crash.isNotEmpty()) Section("Problem report", "Copy this and send it to the developer.") {
+                        Text(crash.take(600), fontSize = 10.sp, color = muted())
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(crash)); note = "Report copied" }) { Text("Copy") }
+                            OutlinedButton(onClick = { CrashLog.clear(ctx); crash = "" }) { Text("Clear") }
+                        }
+                    }
+                    Spacer(Modifier.height(32.dp))
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                Repo.putPref(ctx, "upi", upi.trim())
-                Repo.putPref(ctx, "selfnames", names.trim())
-                onDismiss()
-            }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+        }
+    }
 }
 
 /** Small dialog to create your own tag. */
