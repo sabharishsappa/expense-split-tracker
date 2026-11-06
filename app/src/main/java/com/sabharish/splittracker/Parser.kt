@@ -97,7 +97,7 @@ object SmsParser {
                 else -> local
             }
         }
-        if (n.none { it.isDigit() } && n == n.uppercase() && n.any { it.isLetter() }) {
+        if (n.contains(" ") && n.none { it.isDigit() } && n == n.uppercase() && n.any { it.isLetter() }) {
             n = n.lowercase().split(" ").joinToString(" ") { w -> w.replaceFirstChar { c -> c.uppercase() } }
         }
         return n

@@ -130,7 +130,8 @@ class ParserTest {
     @Test fun cleanNameRules() {
         assertEquals("Paytm merchant", SmsParser.cleanName("paytmqr123@paytm"))
         assertEquals("Ramesh Kumar", SmsParser.cleanName("RAMESH KUMAR"))
-        assertEquals("KA01AR1140", SmsParser.cleanName("KA01AR1140"))   // has digits: left alone
+        assertEquals("KA01AR1140", SmsParser.cleanName("KA01AR1140"))
+        assertEquals("BMTC", SmsParser.cleanName("BMTC"))   // single-word acronyms stay as-is
         assertEquals("rahul.k", SmsParser.cleanName("rahul.k@okaxis"))
     }
 }
