@@ -135,9 +135,9 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
             val upi = spends.size - cards
             if (cards > 0 && upi > 0) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill("All", { via = "All" }, selected = via == "All")
-                    Pill("Card · $cards", { via = "Card" }, selected = via == "Card")
-                    Pill("UPI · $upi", { via = "UPI" }, selected = via == "UPI")
+                    Pill("All", { via = "All" }, selected = via == "All", compact = true)
+                    Pill("Card · $cards", { via = "Card" }, selected = via == "Card", compact = true)
+                    Pill("UPI · $upi", { via = "UPI" }, selected = via == "UPI", compact = true)
                 }
                 Spacer(Modifier.height(10.dp))
             }
@@ -174,14 +174,14 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSimilar: () -> Unit, onSele
         Spacer(Modifier.height(8.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
-                Pill("Tag ▾", { if (picked.isNotEmpty()) tagMenu = true }, strong = picked.isNotEmpty())
+                Pill("Tag ▾", { if (picked.isNotEmpty()) tagMenu = true }, strong = picked.isNotEmpty(), compact = true)
                 TagMenu(vm, tagMenu, { tagMenu = false }) { vm.bulkCategory(picked, it); onDone() }
             }
-            Pill("People…", { if (picked.isNotEmpty()) people = true }, strong = picked.isNotEmpty())
-            Pill("Mine", { if (picked.isNotEmpty()) { vm.bulkPeople(picked, listOf(Repo.ME)); onDone() } })
-            Pill("+ Similar", onSimilar)
-            Pill("All", onSelectAll)
-            Pill("Done ✕", onDone)
+            Pill("People…", { if (picked.isNotEmpty()) people = true }, strong = picked.isNotEmpty(), compact = true)
+            Pill("Mine", { if (picked.isNotEmpty()) { vm.bulkPeople(picked, listOf(Repo.ME)); onDone() } }, compact = true)
+            Pill("+ Similar", onSimilar, compact = true)
+            Pill("All", onSelectAll, compact = true)
+            Pill("Done ✕", onDone, compact = true)
         }
     }
     if (people) PeopleSelectDialog(vm, "Who were these for?", { people = false }) { vm.bulkPeople(picked, it); people = false; onDone() }
@@ -474,9 +474,9 @@ fun PendingScreen(vm: MainVm) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { remindFor = e.key }) { Text("Remind") }
-                    OutlinedButton(onClick = { settleFor = e.key }) {
-                        Text(if (ticked.isEmpty()) "Mark all paid" else "Mark ${ticked.size} paid · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}")
+                    Button(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text("Remind", maxLines = 1) }
+                    OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
+                        Text(if (ticked.isEmpty()) "Mark all paid" else "Paid · ${ticked.size} · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}", maxLines = 1)
                     }
                 }
             }
@@ -523,7 +523,7 @@ fun AllScreen(vm: MainVm) {
             f = when (it) { "Any" -> f.copy(tagState = "Any", tag = ""); "Untagged" -> f.copy(tagState = "Untagged", tag = ""); else -> f.copy(tagState = "Any", tag = it) }
         }
         FilterPill("Status", Filters.statuses, f.status) { f = f.copy(status = it) }
-        if (f.active) Pill("Clear ✕", { f = TxnFilter() })
+        if (f.active) Pill("Clear ✕", { f = TxnFilter() }, compact = true)
     }
     Spacer(Modifier.height(6.dp))
     Text("${shown.size} transactions · ${Logic.money(shown.filter { it.kind == "SPEND" || it.kind == "UPI_OUT" }.sumOf { it.amount })} spent",
@@ -555,7 +555,7 @@ private fun FilterPill(title: String, options: List<String>, selected: String, o
     var open by remember { mutableStateOf(false) }
     val on = selected != options.first() && selected != "Any" && selected != "Any time"
     Box {
-        Pill(if (on) selected else "$title ▾", { open = true }, selected = on)
+        Pill(if (on) selected else "$title ▾", { open = true }, selected = on, compact = true)
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { o -> DropdownMenuItem(text = { Text(o) }, onClick = { onPick(o); open = false }) }
         }

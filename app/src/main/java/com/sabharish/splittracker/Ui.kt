@@ -82,20 +82,21 @@ fun Pill(
     onClick: () -> Unit,
     selected: Boolean = false,
     strong: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
     val on = selected || strong
     Box(
         modifier
-            .heightIn(min = 44.dp)
+            .heightIn(min = if (compact) 36.dp else 44.dp)
             .clip(RoundedCornerShape(50))
             .background(if (on) scheme.primary else scheme.surfaceVariant)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = if (compact) 12.dp else 16.dp, vertical = if (compact) 6.dp else 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = if (on) scheme.onPrimary else scheme.onSurface, fontSize = 15.sp)
+        Text(text, color = if (on) scheme.onPrimary else scheme.onSurface, fontSize = if (compact) 13.sp else 15.sp, maxLines = 1)
     }
 }
 

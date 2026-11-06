@@ -124,9 +124,13 @@ fun App(vm: MainVm) {
                 NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
                     icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
                 NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.Email, null) }, label = { Text(if (spends.size + money.size > 0) "Inbox ${spends.size + money.size}" else "Inbox") })
+                    icon = {
+                        androidx.compose.material3.BadgedBox(badge = { if (spends.size + money.size > 0) androidx.compose.material3.Badge { Text("${spends.size + money.size}") } }) {
+                            Icon(Icons.Default.Email, null)
+                        }
+                    }, label = { Text("Inbox") })
                 NavigationBarItem(selected = tab == 2, onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.Person, null) }, label = { Text("Pending") })
+                    icon = { Icon(Icons.Default.Person, null) }, label = { Text("Owed") })
                 NavigationBarItem(selected = tab == 3, onClick = { tab = 3 },
                     icon = { Icon(Icons.Default.List, null) }, label = { Text("All") })
                 NavigationBarItem(selected = tab == 4, onClick = { tab = 4 },
