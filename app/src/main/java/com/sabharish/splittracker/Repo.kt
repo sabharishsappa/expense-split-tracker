@@ -66,12 +66,15 @@ object Repo {
 
     // ---------- ingest ----------
     /** Stores one parsed SMS. Returns the new transaction when it needs the user's attention. */
-    suspend fun ingest(ctx: Context, p: Parsed, smsTime: Long): Txn? {
+    suspend fun ingest(ctx: Context, p: Parsed, smsTime: Long, body: String = ""): Txn? {
         val db = Db.get(ctx)
         val dao = db.dao()
         return db.withTransaction {
             val dup = dao.near(p.kind, p.amount, p.card, p.merchant, smsTime - 180_000, smsTime + 180_000)
-            if (dup > 0) return@withTransaction null
+            if (dup > 0) {
+                if (body.isNotBlank()) dao.fillBody(p.kind, p.amount, p.card, p.merchant, smsTime - 180_000, smsTime + 180_000, body)
+                return@withTransaction null
+            }
             val isUpi = p.kind.startsWith("UPI")
             var status = when (p.kind) {
                 "SPEND", "UPI_OUT", "UPI_IN", "REFUND" -> "INBOX"
@@ -96,7 +99,7 @@ object Repo {
             }
             val t = Txn(
                 bank = p.bank, card = p.card, kind = p.kind, amount = p.amount, merchant = p.merchant,
-                txnDate = p.dateMillis ?: smsTime, smsTime = smsTime, status = status, category = cat
+                txnDate = p.dateMillis ?: smsTime, smsTime = smsTime, status = status, category = cat, body = body
             )
             val id = dao.insert(t.copy(note = transferNote))
             var saved = t.copy(id = id, note = transferNote)
@@ -229,11 +232,18 @@ object Repo {
     }
 
     suspend fun ignore(ctx: Context, t: Txn) = Db.get(ctx).dao().setStatus(t.id, "IGNORED")
-    suspend fun setCategory(ctx: Context, t: Txn, c: String) {
+    /** Tags this transaction and every untagged one from the same merchant. Returns how many others were tagged. */
+    suspend fun setCategory(ctx: Context, t: Txn, c: String): Int {
         val dao = Db.get(ctx).dao()
         dao.setCategory(t.id, c)
-        if (c.isNotBlank()) dao.putRule(Rule(catKey(t.merchant), "CAT", c))
+        if (c.isBlank()) return 0
+        dao.putRule(Rule(catKey(t.merchant), "CAT", c))
+        val same = Logic.similar(t, dao.uncategorised())
+        same.forEach { dao.setCategory(it.id, c) }
+        return same.size
     }
+
+    suspend fun removeTagRule(ctx: Context, key: String) = Db.get(ctx).dao().deleteRule(key)
 
     suspend fun suggestion(ctx: Context, t: Txn): Rule? = Db.get(ctx).dao().rule(merchantKey(t.merchant, t.card))
 
@@ -260,6 +270,24 @@ object Repo {
     suspend fun settle(ctx: Context, person: String, amount: Double, mode: String) {
         val db = Db.get(ctx)
         db.withTransaction { applySettlement(db.dao(), person, amount, mode) }
+    }
+
+    /** Marks exactly the ticked bills as fully paid. */
+    suspend fun settleShares(ctx: Context, person: String, shareIds: Set<Long>, mode: String) {
+        val db = Db.get(ctx)
+        db.withTransaction {
+            val dao = db.dao()
+            var total = 0.0
+            for (id in shareIds) {
+                val s = dao.share(id) ?: continue
+                if (s.person != person) continue
+                val due = s.amount - s.settled
+                if (due <= 0.004) continue
+                dao.setSettled(s.id, s.amount)
+                total += due
+            }
+            if (total > 0.004) dao.insertSettlement(Settlement(person = person, amount = Math.round(total * 100) / 100.0, date = System.currentTimeMillis(), mode = mode))
+        }
     }
 
     /** A received UPI payment is a repayment from [person]. */
@@ -322,8 +350,9 @@ object Repo {
             val bi = it.getColumnIndex("body")
             val di = it.getColumnIndex("date")
             while (it.moveToNext()) {
-                val p = SmsParser.parse(it.getString(bi)) ?: continue
-                if (ingest(ctx, p, it.getLong(di)) != null) added++
+                val text = it.getString(bi)
+                val p = SmsParser.parse(text) ?: continue
+                if (ingest(ctx, p, it.getLong(di), text ?: "") != null) added++
             }
         }
         added

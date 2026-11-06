@@ -107,6 +107,16 @@ object Logic {
         return if (n.lowercase(Locale.ROOT) in taken) existing else existing + n
     }
 
+    /** What is still due on the ticked bills. Nothing ticked means all of them. */
+    fun dueOf(rows: List<PendingRow>, ticked: Set<Long>): Double =
+        rows.filter { ticked.isEmpty() || it.shareId in ticked }.sumOf { it.amount - it.settled }
+
+    /** Other transactions from the same merchant (spelling, case and spaces ignored). */
+    fun similar(t: Txn, others: List<Txn>): List<Txn> {
+        val n = norm(t.merchant)
+        return if (n.isEmpty()) emptyList() else others.filter { it.id != t.id && norm(it.merchant) == n }
+    }
+
     fun parseTags(s: String): List<String> = s.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     fun joinTags(tags: List<String>): String = tags.joinToString(",")
 

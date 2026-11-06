@@ -22,7 +22,7 @@ class SmsReceiver : BroadcastReceiver() {
             try {
                 for ((body, time) in bodies) {
                     val p = SmsParser.parse(body) ?: continue
-                    val t = Repo.ingest(app, p, if (time > 0) time else System.currentTimeMillis())
+                    val t = Repo.ingest(app, p, if (time > 0) time else System.currentTimeMillis(), body)
                     if (t != null) Repo.notifyNew(app, t)
                 }
             } finally {

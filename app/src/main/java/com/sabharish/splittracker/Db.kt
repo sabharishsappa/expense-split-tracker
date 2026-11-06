@@ -34,7 +34,8 @@ data class Txn(
     val category: String = "",
     val refundOf: Long = 0,
     val note: String = "",
-    val auto: Boolean = false   // tagged automatically by a remembered rule
+    val auto: Boolean = false,  // tagged automatically by a remembered rule
+    val body: String = ""       // the original SMS text, for searching
 )
 
 @Entity(tableName = "share", indices = [Index("txnId"), Index("person")])
@@ -130,8 +131,14 @@ interface AppDao {
     @Query("SELECT * FROM txn WHERE kind = :kind AND status = 'INBOX' AND amount BETWEEN :lo AND :hi AND smsTime BETWEEN :from AND :to")
     suspend fun transferCandidates(kind: String, lo: Double, hi: Double, from: Long, to: Long): List<Txn>
 
+    @Query("SELECT * FROM rule WHERE ruleKey LIKE 'cat|%' ORDER BY ruleKey")
+    fun catRules(): Flow<List<Rule>>
+
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'")
     fun acctRules(): Flow<List<Rule>>
+
+    @Query("UPDATE txn SET body = :body WHERE body = '' AND kind = :kind AND amount = :amount AND card = :card AND merchant = :merchant AND smsTime BETWEEN :from AND :to")
+    suspend fun fillBody(kind: String, amount: Double, card: String, merchant: String, from: Long, to: Long, body: String)
 
     @Query("SELECT * FROM txn WHERE id = :id")
     suspend fun get(id: Long): Txn?
@@ -184,6 +191,9 @@ interface AppDao {
     @Query("UPDATE share SET settled = :v WHERE id = :id")
     suspend fun setSettled(id: Long, v: Double)
 
+    @Query("SELECT * FROM share WHERE id = :id")
+    suspend fun share(id: Long): Share?
+
     @Query("SELECT t.card AS card, t.txnDate AS txnDate, t.category AS category, s.person AS person, s.amount AS shareAmt, s.settled AS settled FROM txn t JOIN share s ON s.txnId = t.id WHERE t.kind IN ('SPEND','UPI_OUT')")
     fun summary(): Flow<List<SummaryRow>>
 
@@ -195,6 +205,12 @@ interface AppDao {
 
     @Query("SELECT * FROM txn WHERE category = '' AND kind IN ('SPEND','UPI_OUT')")
     suspend fun uncategorised(): List<Txn>
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE txn ADD COLUMN body TEXT NOT NULL DEFAULT ''")
+    }
 }
 
 val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -211,7 +227,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class], version = 3, exportSchema = false)
+@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class], version = 4, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): AppDao
 
@@ -219,7 +235,7 @@ abstract class Db : RoomDatabase() {
         @Volatile private var inst: Db? = null
         fun get(ctx: Context): Db = inst ?: synchronized(this) {
             inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "splittracker.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build().also { inst = it }
         }
     }

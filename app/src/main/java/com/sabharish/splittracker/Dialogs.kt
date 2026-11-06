@@ -438,6 +438,17 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 }
                 if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n); newTag = false }
                 Spacer(Modifier.height(14.dp))
+                val rules by vm.tagRules.collectAsState()
+                Text("Remembered tags (${rules.size})", fontWeight = FontWeight.SemiBold)
+                Text("A merchant you tagged once is tagged automatically next time. Tap ✕ to forget one.", fontSize = 12.sp, color = muted())
+                rules.take(30).forEach { r ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${r.ruleKey.removePrefix("cat|")} → ${r.people}", Modifier.weight(1f), fontSize = 13.sp)
+                        TextButton(onClick = { vm.removeTagRule(r.ruleKey) }) { Text("✕") }
+                    }
+                }
+                if (rules.size > 30) Text("…and ${rules.size - 30} more", fontSize = 12.sp, color = muted())
+                Spacer(Modifier.height(14.dp))
                 Text("Appearance", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -499,4 +510,26 @@ fun TagMenu(vm: MainVm, expanded: Boolean, onDismiss: () -> Unit, onPick: (Strin
         DropdownMenuItem(text = { Text("+ New tag…", color = MaterialTheme.colorScheme.primary) }, onClick = { newTag = true })
     }
     if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n)?.let { onPick(it) }; newTag = false; onDismiss() }
+}
+
+/** Confirms that the ticked bills were paid. */
+@Composable
+fun PaidDialog(person: String, count: Int, amount: Double, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var mode by remember { mutableStateOf("UPI") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("$person paid $count ${if (count == 1) "bill" else "bills"}") },
+        text = {
+            Column {
+                Text(Logic.money(amount), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill("UPI", { mode = "UPI" }, selected = mode == "UPI")
+                    Pill("Cash", { mode = "Cash" }, selected = mode == "Cash")
+                    Pill("Other", { mode = "Other" }, selected = mode == "Other")
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(mode) }) { Text("✓") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }

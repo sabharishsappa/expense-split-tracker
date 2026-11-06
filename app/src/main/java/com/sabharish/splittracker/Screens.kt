@@ -1,6 +1,7 @@
 package com.sabharish.splittracker
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -360,6 +361,7 @@ fun PendingScreen(vm: MainVm) {
     var remindFor by remember { mutableStateOf<String?>(null) }
     val grouped = rows.groupBy { it.person }
     val total = rows.sumOf { it.amount - it.settled }
+    val ticks = remember { mutableMapOf<String, androidx.compose.runtime.snapshots.SnapshotStateList<Long>>() }
 
     AppCard {
         Text("Owed to you", fontSize = 13.sp, color = muted())
@@ -382,21 +384,35 @@ fun PendingScreen(vm: MainVm) {
                     Text(Repo.money(owed), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(8.dp))
-                e.value.take(6).forEach { r ->
-                    Text("${Repo.shortDate(r.txnDate)} · ${Repo.nameOnly(r.merchant, aliases)} · ${Repo.money(r.amount - r.settled)}", fontSize = 14.sp)
+                val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
+                e.value.forEach { r ->
+                    Row(Modifier.fillMaxWidth().clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
+                        Text("${Repo.shortDate(r.txnDate)} · ${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
+                        Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
-                if (e.value.size > 6) Text("…and ${e.value.size - 6} more", fontSize = 13.sp, color = muted())
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { remindFor = e.key }) { Text("Remind") }
-                    OutlinedButton(onClick = { settleFor = e.key }) { Text("Mark paid") }
+                    OutlinedButton(onClick = { settleFor = e.key }) {
+                        Text(if (ticked.isEmpty()) "Mark all paid" else "Mark ${ticked.size} paid · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}")
+                    }
                 }
             }
         }
     }
     settleFor?.let { person ->
-        val owed = rows.filter { it.person == person }.sumOf { it.amount - it.settled }
-        SettleDialog(person, owed, onDismiss = { settleFor = null }) { amt, mode -> vm.settle(person, amt, mode); settleFor = null }
+        val mine = rows.filter { it.person == person }
+        val picked = (ticks[person]?.toSet() ?: emptySet()).intersect(mine.map { it.shareId }.toSet())
+        if (picked.isEmpty()) {
+            SettleDialog(person, mine.sumOf { it.amount - it.settled }, onDismiss = { settleFor = null }) { amt, mode -> vm.settle(person, amt, mode); settleFor = null }
+        } else {
+            PaidDialog(person, picked.size, Logic.dueOf(mine, picked), onDismiss = { settleFor = null }) { mode ->
+                vm.settleShares(person, picked, mode); ticks[person]?.clear(); settleFor = null
+            }
+        }
     }
     remindFor?.let { person ->
         ReminderDialog({ upi -> Reminder.build(person, rows.filter { it.person == person }, aliases, upi, System.currentTimeMillis()) }) { remindFor = null }
@@ -410,37 +426,47 @@ fun AllScreen(vm: MainVm) {
     val aliases by vm.aliases.collectAsState()
     val txns by vm.all.collectAsState()
     val shares by vm.shares.collectAsState()
-    var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("All") }
+    var f by remember { mutableStateOf(TxnFilter()) }
     var sheetFor by remember { mutableStateOf<Txn?>(null) }
+    val tags by vm.tags.collectAsState()
     val byTxn = shares.groupBy { it.txnId }
-    val q = query.trim()
-    val shown = txns.filter { t ->
-        val ss = byTxn[t.id] ?: emptyList()
-        val okFilter = when (filter) {
-            "Card" -> t.kind == "SPEND"
-            "UPI" -> t.kind.startsWith("UPI")
-            "Refunds" -> t.kind == "REFUND" || t.status == "REVERSED"
-            "Pending" -> ss.any { it.person != Repo.ME && it.settled < it.amount - 0.005 }
-            "To tag" -> t.status == "INBOX"
-            "Failed" -> t.status == "FAILED"
-            else -> true
-        }
-        okFilter && (q.isEmpty() || t.merchant.contains(q, true) || Repo.title(t.merchant, aliases).contains(q, true) || t.card.contains(q) ||
-            t.bank.contains(q, true) || t.category.contains(q, true) || ss.any { it.person.contains(q, true) })
-    }
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("All", "Card", "UPI", "Refunds", "Pending", "To tag", "Failed").forEach { f -> Pill(f, { filter = f }, selected = filter == f) }
-    }
+    val now = System.currentTimeMillis()
+    val shown = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) }
     OutlinedTextField(
-        value = query, onValueChange = { query = it }, singleLine = true,
-        label = { Text("Search merchant, person, tag or card") }, modifier = Modifier.fillMaxWidth()
+        value = f.query, onValueChange = { f = f.copy(query = it) }, singleLine = true,
+        placeholder = { Text("Search name, amount, tag, person or message") }, modifier = Modifier.fillMaxWidth()
     )
     Spacer(Modifier.height(6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterPill("Type", Filters.types, f.type) { f = f.copy(type = it) }
+        FilterPill("Date", Filters.ranges, f.range) { f = f.copy(range = it) }
+        FilterPill("Tag", listOf("Any", "Untagged") + tags, if (f.tagState == "Untagged") "Untagged" else f.tag.ifBlank { "Any" }) {
+            f = when (it) { "Any" -> f.copy(tagState = "Any", tag = ""); "Untagged" -> f.copy(tagState = "Untagged", tag = ""); else -> f.copy(tagState = "Any", tag = it) }
+        }
+        FilterPill("Status", Filters.statuses, f.status) { f = f.copy(status = it) }
+        if (f.active) Pill("Clear ✕", { f = TxnFilter() })
+    }
+    Spacer(Modifier.height(6.dp))
+    Text("${shown.size} transactions · ${Logic.money(shown.filter { it.kind == "SPEND" || it.kind == "UPI_OUT" }.sumOf { it.amount })} spent",
+        fontSize = 12.sp, color = muted())
+    Spacer(Modifier.height(4.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items(shown, key = { it.id }) { t -> TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases) { sheetFor = it } }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
+}
+
+/** A pill that opens a menu; highlighted when something other than "Any" is chosen. */
+@Composable
+private fun FilterPill(title: String, options: List<String>, selected: String, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val on = selected != options.first() && selected != "Any" && selected != "Any time"
+    Box {
+        Pill(if (on) selected else "$title ▾", { open = true }, selected = on)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { o -> DropdownMenuItem(text = { Text(o) }, onClick = { onPick(o); open = false }) }
+        }
+    }
 }
 
 @Composable

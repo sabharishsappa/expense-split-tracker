@@ -28,7 +28,7 @@ object Backup {
                 put(JSONObject().put("id", t.id).put("bank", t.bank).put("card", t.card).put("kind", t.kind)
                     .put("amount", t.amount).put("merchant", t.merchant).put("txnDate", t.txnDate).put("smsTime", t.smsTime)
                     .put("status", t.status).put("splitAdded", t.splitAdded).put("category", t.category)
-                    .put("refundOf", t.refundOf).put("note", t.note).put("auto", t.auto))
+                    .put("refundOf", t.refundOf).put("note", t.note).put("auto", t.auto).put("body", t.body))
             }
         })
         o.put("shares", JSONArray().apply {
@@ -66,7 +66,7 @@ object Backup {
                         amount = j.getDouble("amount"), merchant = j.getString("merchant"), txnDate = j.getLong("txnDate"),
                         smsTime = j.getLong("smsTime"), status = j.getString("status"), splitAdded = j.optBoolean("splitAdded"),
                         category = j.optString("category"), refundOf = j.optLong("refundOf"), note = j.optString("note"),
-                        auto = j.optBoolean("auto"))
+                        auto = j.optBoolean("auto"), body = j.optString("body"))
                 },
                 shares = arr("shares") { j ->
                     Share(id = j.getLong("id"), txnId = j.getLong("txnId"), person = j.getString("person"),

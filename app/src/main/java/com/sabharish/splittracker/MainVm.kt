@@ -77,7 +77,14 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun tagAllMine(list: List<Txn>) = viewModelScope.launch { Repo.tagAllMine(getApplication(), list) }
     fun untag(id: Long) = viewModelScope.launch { Repo.untag(getApplication(), id) }
     fun ignore(t: Txn) = viewModelScope.launch { Repo.ignore(getApplication(), t) }
-    fun setCategory(t: Txn, c: String) = viewModelScope.launch { Repo.setCategory(getApplication(), t, c) }
+    fun setCategory(t: Txn, c: String) = viewModelScope.launch {
+        val n = Repo.setCategory(getApplication(), t, c)
+        if (n > 0) status.value = "Tagged $c · also applied to $n similar from ${Logic.nameOnly(t.merchant, aliases.value)}"
+    }
+    val tagRules = dao.catRules().hot(emptyList())
+    fun removeTagRule(key: String) = viewModelScope.launch { Repo.removeTagRule(getApplication(), key) }
+    fun settleShares(person: String, ids: Set<Long>, mode: String) =
+        viewModelScope.launch { Repo.settleShares(getApplication(), person, ids, mode) }
     fun settle(person: String, amount: Double, mode: String) =
         viewModelScope.launch { Repo.settle(getApplication(), person, amount, mode) }
     fun repaidBy(t: Txn, person: String) = viewModelScope.launch { Repo.repaidBy(getApplication(), t, person) }
