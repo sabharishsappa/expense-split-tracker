@@ -164,3 +164,43 @@ class StatementLayoutsTest {
         assertEquals("2025-10-12", TestUtil.ymd(one("12/10/25 SHOP 10.00 D").date))
     }
 }
+
+class StatementLayoutsTest2 {
+    @Test fun yesBankCardHasMerchantCategoryColumn() {
+        val l = Statement.parse("""
+            02/10/2026                                                                                            Retail Outlet Services                  40.00 Dr
+            03/10/2026 UPI_GOVARDHAN CAFE IND - Ref No: RT262770381002310000917                                   Miscellaneous Stores                   770.00 Dr
+        """.trimIndent())
+        assertEquals(2, l.size)
+        assertEquals(listOf(40.0, 770.0), l.map { it.amount })
+        assertTrue(l.none { it.credit })
+    }
+
+    @Test fun iciciAccountStartsFromBroughtForwardBalance() {
+        val l = Statement.parse("""
+            DATE           MODE                      PARTICULARS                                   DEPOSITS               WITHDRAWALS                             BALANCE
+            01-10-2026                                B/F                                                                                                                       43,507.02
+            02-10-2026 MOBILE BANKING                                                                                                  43,507.00                           0.02
+            17-10-2026                                NEFT-HDFCH01340164956-UPSTOX SECURITIES PVT LTD                  294.52                                                      294.54
+            29-10-2026                                                                                                 7,000.00                                                     7,294.54
+            29-10-2026                                CCW/62201HHR/15870263/9336/Cardless Cash WDL/IMB                                                   7,000.00                       294.54
+            30-10-2026                                                                                                 1,30,141.00                                                 1,31,100.54
+        """.trimIndent())
+        assertEquals(5, l.size)
+        assertEquals(listOf(false, true, true, false, true), l.map { it.credit })
+        assertEquals(130141.0, l[4].amount, 0.001)
+    }
+
+    @Test fun federalAccountWithValueDateAndWholeRupees() {
+        val l = Statement.parse("""
+            Date                          Particulars                    Tran id                     Withdrawal         Deposits          Balance
+                                         Opening Balance                 OPNBAL                                                              24         CR
+            27/10/2026   27/10/2026    UPIOUT/666692342341/yo-      TFR    S40260308                         2                0                 22         CR
+            27/10/2026   27/10/2026   UPI IN/666692398444/youtub-   TFR    S40295151                         0                2                 24         CR
+        """.trimIndent())
+        assertEquals(2, l.size)
+        assertEquals(listOf(false, true), l.map { it.credit })
+        assertEquals(2.0, l[0].amount, 0.001)
+        assertEquals("UPIOUT/666692342341/yo-", l[0].desc)
+    }
+}

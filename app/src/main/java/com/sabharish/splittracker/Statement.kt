@@ -37,6 +37,7 @@ object Statement {
     private val dateRx = Regex("""^\s*(?:\d{1,4}\s+)?(\d{1,2}[/\-. ](?:\d{1,2}|[A-Za-z]{3})[/\-. ]\d{2,4})(?!\d)""")
     private val openingRx = Regex("""(?:Opening Balance|Balance on \d{2}-\d{2}-\d{2}:?)\D*?(-?[\d,]+\.\d{2})\s*(?:null.*)?$""")
     private val cardRx = Regex("""(\+)?\s*(?:(?<![A-Za-z0-9])C|₹|Rs\.?|`)?\s*($NUM)\s*(Cr|CR|Dr|DR|C|D)?\s*$""")
+    private val fedRx = Regex("""(\s+TFR\s+\S+)?\s+($NUM)\s+($NUM)\s+($NUM)\s+(?:CR|DR)\s*$""")
     private val plainRx = Regex("""(?<![\w.])-?($NUM)\s*$""")
     private val decimalTok = Regex("""-?\d[\d,]*\.\d{1,2}""")
     private val skipRx = Regex("""\b(total|statement|due|opening|closing|balance|previous|summary|limit|rewards?|points)\b""", RegexOption.IGNORE_CASE)
@@ -82,6 +83,23 @@ object Statement {
                 if (m2.range.first == 0 && parseDate(m2.groupValues[1]) != null) rest = rest.substring(m2.range.last + 1).trim()
             }
             rest = rest.replace(Regex("""\s+[lI|]$"""), "")
+
+            // brought-forward balance line (ICICI): not a transaction, just the starting balance
+            if (Regex("""^B/F\b""", RegexOption.IGNORE_CASE).containsMatchIn(rest)) {
+                Regex("""-?[\d,]+\.\d{2}""").findAll(rest).lastOrNull()?.let { prev = num(it.value) }
+                continue
+            }
+
+            // Federal account: ... withdrawal deposit balance CR  (whole rupees are printed without decimals)
+            val fed = fedRx.find(rest)
+            if (fed != null) {
+                val w = num(fed.groupValues[2]); val dep = num(fed.groupValues[3])
+                if (w != 0.0 || dep != 0.0) {
+                    out.add(StmtLine(date, clean(rest.substring(0, fed.range.first)), if (w != 0.0) w else dep, w == 0.0))
+                }
+                prev = num(fed.groupValues[4])
+                continue
+            }
 
             // plain CSV cells
             val cells = if (rest.count { it == ',' } >= 2 && !rest.contains(Regex("""\d,\d{3}"""))) rest.split(',').map { it.trim().trim('"') } else listOf(rest)
