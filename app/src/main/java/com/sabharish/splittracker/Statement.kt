@@ -38,6 +38,7 @@ object Statement {
     private val openingRx = Regex("""(?:Opening Balance|Balance on \d{2}-\d{2}-\d{2}:?)\D*?(-?[\d,]+\.\d{2})\s*(?:null.*)?$""")
     private val cardRx = Regex("""(\+)?\s*(?:(?<![A-Za-z0-9])C|₹|Rs\.?|`)?\s*($NUM)\s*(Cr|CR|Dr|DR|C|D)?\s*$""")
     private val fedRx = Regex("""(\s+TFR\s+\S+)?\s+($NUM)\s+($NUM)\s+($NUM)\s+(?:CR|DR)\s*$""")
+    private val serialRx = Regex("""^\d{10,}\s+""")
     private val plainRx = Regex("""(?<![\w.])-?($NUM)\s*$""")
     private val decimalTok = Regex("""-?\d[\d,]*\.\d{1,2}""")
     private val skipRx = Regex("""\b(total|statement|due|opening|closing|balance|previous|summary|limit|rewards?|points)\b""", RegexOption.IGNORE_CASE)
@@ -68,7 +69,8 @@ object Statement {
         val out = mutableListOf<StmtLine>()
         var prev: Double? = null
         val creditFirst = Regex("""Credit\s+Debit""").containsMatchIn(text)
-        for (raw in text.lines()) {
+        val all = text.lines()
+        for ((idx, raw) in all.withIndex()) {
             val line = raw.trim().trim('"')
             val d = dateRx.find(line)
             if (d == null) {
@@ -83,6 +85,23 @@ object Statement {
                 if (m2.range.first == 0 && parseDate(m2.groupValues[1]) != null) rest = rest.substring(m2.range.last + 1).trim()
             }
             rest = rest.replace(Regex("""\s+[lI|]$"""), "")
+
+            // ICICI card: "date  serial-no  merchant  points" with the amount on the same or a following line
+            if (serialRx.containsMatchIn(rest)) {
+                val block = mutableListOf(rest)
+                for (j in idx + 1..minOf(idx + 3, all.size - 1)) {
+                    if (dateRx.containsMatchIn(all[j])) break
+                    block.add(all[j].trim())
+                }
+                val amount = block.firstNotNullOfOrNull { b -> Regex("""(?<![\w.])(\d[\d,]*\.\d{2})(?![\w.])""").find(b)?.groupValues?.get(1) }
+                if (amount != null) {
+                    val points = Regex("""\s{2,}(-?\d+)(?=\s|$)""").find(rest)
+                    val credit = block.any { Regex("""\bCR\b""").containsMatchIn(it) } || points?.groupValues?.get(1)?.startsWith("-") == true
+                    val desc = rest.replace(serialRx, "").let { d -> points?.let { d.substring(0, d.indexOf(it.value).coerceAtLeast(0)) } ?: d }
+                    out.add(StmtLine(date, clean(desc), num(amount), credit))
+                }
+                continue
+            }
 
             // brought-forward balance line (ICICI): not a transaction, just the starting balance
             if (Regex("""^B/F\b""", RegexOption.IGNORE_CASE).containsMatchIn(rest)) {

@@ -220,3 +220,26 @@ class StatementLayoutsDbs {
         assertEquals("2026-02-08", TestUtil.ymd(l[0].date))
     }
 }
+
+class StatementLayoutsIcici {
+    @Test fun iciciCardAmountsOnSameOrFollowingLineAndReversalIsCredit() {
+        val l = Statement.parse("""
+            3747XXXXXXXX2000
+            25/09/2026              14235537572                PAYU*SWIGGY INSTAMART PRI Bangalore                               -19                                806.67
+                                                                                                                                                                  FCE.GG CR
+                                                         IN
+            26/09/2026              14235537575                PAYU*SWIGGY INSTAMART PRI Bangalore                               19                                           806.67
+                                                         IN
+            26/09/2026              14235539390                PAYU*SWIGGY INSTAMART PRI Bangalore                               21                                      X,GDC.GG
+                                                                                                                                                                     896.67
+                                                         IN
+            5241XXXXXXXX6007
+            09/10/2026              14333041091                Flipkart Internet Priv Bangalore IN                              1539                                  DC,FBC.GG
+                                                                                                                                                                    64130.00
+        """.trimIndent())
+        assertEquals(4, l.size)
+        assertEquals(listOf(806.67, 806.67, 896.67, 64130.0), l.map { it.amount })
+        assertEquals(listOf(true, false, false, false), l.map { it.credit })
+        assertEquals("PAYU*SWIGGY INSTAMART PRI Bangalore", l[0].desc)
+    }
+}
