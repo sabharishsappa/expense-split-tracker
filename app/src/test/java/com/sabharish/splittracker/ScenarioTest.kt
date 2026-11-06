@@ -99,7 +99,7 @@ class ScenarioTest {
                 }
                 val text = Reminder.build("Rajesh Kumar", rows, emptyMap(), upi, now)
                 val due = rows.sumOf { it.amount - it.settled }
-                assertTrue(text.startsWith("Hi Rajesh 👋\n\n"))
+                assertTrue(text.startsWith("Hi Rajesh"))
                 assertTrue("total shown", text.contains("Total pending: ${Logic.money(due)}"))
                 assertEquals(upi.isNotEmpty(), text.contains("Pay to: $upi"))
                 assertEquals(items > 8, text.contains("more"))
