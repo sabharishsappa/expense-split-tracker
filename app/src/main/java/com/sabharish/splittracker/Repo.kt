@@ -243,6 +243,29 @@ object Repo {
         return same.size
     }
 
+    suspend fun renameTag(ctx: Context, old: String, new: String) {
+        val dao = Db.get(ctx).dao(); dao.renameCategory(old, new); dao.renameCatRules(old, new)
+    }
+
+    /** Deleting a tag leaves its transactions untagged and forgets the merchants mapped to it. */
+    suspend fun deleteTag(ctx: Context, name: String) {
+        val dao = Db.get(ctx).dao(); dao.renameCategory(name, ""); dao.deleteCatRules(name)
+    }
+
+    /** Phone number for a contact name: one you typed before, else the one in your contacts. */
+    suspend fun phoneFor(ctx: Context, name: String): String = withContext(Dispatchers.IO) {
+        val saved = getPref(ctx, "phone|" + Logic.norm(name), "")
+        if (saved.isNotEmpty()) return@withContext saved
+        if (!hasPermission(ctx, Manifest.permission.READ_CONTACTS)) return@withContext ""
+        val c = ctx.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI, arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " = ?", arrayOf(name), null
+        ) ?: return@withContext ""
+        c.use { if (it.moveToFirst()) it.getString(0) ?: "" else "" }
+    }
+
+    fun savePhone(ctx: Context, name: String, number: String) = putPref(ctx, "phone|" + Logic.norm(name), number)
+
     suspend fun removeTagRule(ctx: Context, key: String) = Db.get(ctx).dao().deleteRule(key)
 
     suspend fun suggestion(ctx: Context, t: Txn): Rule? = Db.get(ctx).dao().rule(merchantKey(t.merchant, t.card))

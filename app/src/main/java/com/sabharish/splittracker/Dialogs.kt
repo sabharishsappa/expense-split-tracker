@@ -1,6 +1,7 @@
 package com.sabharish.splittracker
 
 import android.content.Context
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.rememberCoroutineScope
@@ -359,32 +360,64 @@ fun SettleDialog(person: String, owed: Double, onDismiss: () -> Unit, onSave: (D
 // Reminder preview: edit, copy or share
 // ---------------------------------------------------------------
 @Composable
-fun ReminderDialog(build: (String) -> String, onDismiss: () -> Unit) {
+fun ReminderDialog(person: String, build: (String) -> String, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val clip = LocalClipboardManager.current
     var upi by remember { mutableStateOf(Repo.getPref(ctx, "upi", "")) }
     var text by remember { mutableStateOf(build(upi)) }
+    var number by remember { mutableStateOf("") }
+    var changing by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(person) { number = Repo.phoneFor(ctx, person) }
+    val wa = Logic.waNumber(number)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reminder message") },
+        title = { Text("Remind $person") },
         text = {
             Column {
+                if (!changing && wa != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("WhatsApp: +$wa", Modifier.weight(1f), fontSize = 14.sp)
+                        TextButton(onClick = { changing = true }) { Text("Change") }
+                    }
+                } else {
+                    OutlinedTextField(value = number, onValueChange = { number = it }, singleLine = true,
+                        label = { Text(if (wa == null && number.isEmpty()) "No number found. Enter WhatsApp number" else "WhatsApp number") },
+                        modifier = Modifier.fillMaxWidth())
+                }
+                Spacer(Modifier.height(6.dp))
                 OutlinedTextField(value = upi, onValueChange = { upi = it; text = build(it.trim()) }, singleLine = true,
                     label = { Text("Your UPI ID (added to message)") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth().height(240.dp))
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth().height(200.dp))
             }
         },
         confirmButton = {
-            Button(onClick = { Repo.putPref(ctx, "upi", upi.trim()); share(ctx, text); onDismiss() }) { Text("Send…") }
+            Button(enabled = wa != null, onClick = {
+                Repo.putPref(ctx, "upi", upi.trim()); Repo.savePhone(ctx, person, number)
+                sendWhatsApp(ctx, wa!!, text); onDismiss()
+            }) { Text("WhatsApp") }
         },
         dismissButton = {
             Row {
                 TextButton(onClick = { Repo.putPref(ctx, "upi", upi.trim()); clip.setText(AnnotatedString(text)); onDismiss() }) { Text("Copy") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = { Repo.putPref(ctx, "upi", upi.trim()); share(ctx, text); onDismiss() }) { Text("Other app") }
             }
         }
     )
+}
+
+/** Opens the chat with that number, message filled in. Falls back to the browser link if WhatsApp isn't installed. */
+private fun sendWhatsApp(ctx: Context, number: String, text: String) {
+    val uri = Uri.parse("https://wa.me/$number?text=" + Uri.encode(text))
+    for (pkg in listOf("com.whatsapp", "com.whatsapp.w4b", null)) {
+        try {
+            val i = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (pkg != null) i.setPackage(pkg)
+            ctx.startActivity(i)
+            return
+        } catch (_: Exception) {
+        }
+    }
 }
 
 private fun share(ctx: Context, text: String) {
@@ -429,14 +462,21 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     label = { Text("My name words (to hide own transfers)") }, modifier = Modifier.fillMaxWidth())
                 Text("Comma separated. UPI payments to or from a name containing any of these are treated as your own transfers.", fontSize = 12.sp, color = muted())
                 Spacer(Modifier.height(14.dp))
-                Text("My tags", fontWeight = FontWeight.SemiBold)
+                Text("Tags", fontWeight = FontWeight.SemiBold)
+                Text("Tap a tag to rename, delete or hide it.", fontSize = 12.sp, color = muted())
                 val mine by vm.customTags.collectAsState()
+                val hidden by vm.hiddenTags.collectAsState()
                 var newTag by remember { mutableStateOf(false) }
+                var editing by remember { mutableStateOf<String?>(null) }
+                Spacer(Modifier.height(6.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    mine.forEach { c -> Pill("$c  ✕", { vm.removeTag(c) }) }
+                    (Categories.all.filter { it != "Other" } + mine).forEach { c ->
+                        Pill(if (c in hidden) "$c (hidden)" else "$c  ✎", { editing = c }, selected = c in mine)
+                    }
                     Pill("+ New tag", { newTag = true })
                 }
                 if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n); newTag = false }
+                editing?.let { t -> EditTagDialog(vm, t, t in mine, t in hidden) { editing = null } }
                 Spacer(Modifier.height(14.dp))
                 val rules by vm.tagRules.collectAsState()
                 Text("Remembered tags (${rules.size})", fontWeight = FontWeight.SemiBold)
@@ -530,6 +570,38 @@ fun PaidDialog(person: String, count: Int, amount: Double, onDismiss: () -> Unit
             }
         },
         confirmButton = { TextButton(onClick = { onSave(mode) }) { Text("✓") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** Rename or delete your own tag; built-in tags can only be hidden from the lists. */
+@Composable
+fun EditTagDialog(vm: MainVm, tag: String, custom: Boolean, hidden: Boolean, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf(tag) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tag) },
+        text = {
+            Column {
+                if (custom) {
+                    OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name") })
+                    Text("Renaming also updates every transaction and remembered merchant using this tag.", fontSize = 12.sp, color = muted())
+                    Spacer(Modifier.height(8.dp))
+                    if (confirmDelete) {
+                        Text("Delete \"$tag\"? Its transactions become untagged.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { vm.deleteTag(tag); onDismiss() }) { Text("Yes, delete") }
+                    } else TextButton(onClick = { confirmDelete = true }) { Text("Delete tag", color = MaterialTheme.colorScheme.error) }
+                } else {
+                    Text("Built-in tags can't be renamed. Hide it if you never use it; your old transactions keep it.", fontSize = 13.sp)
+                    TextButton(onClick = { vm.toggleHidden(tag); onDismiss() }) { Text(if (hidden) "Show in lists" else "Hide from lists") }
+                }
+            }
+        },
+        confirmButton = {
+            if (custom) TextButton(onClick = { if (name.trim() != tag) vm.renameTag(tag, name); onDismiss() }) { Text("✓") }
+            else TextButton(onClick = onDismiss) { Text("OK") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

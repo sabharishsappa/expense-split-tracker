@@ -121,7 +121,24 @@ object Logic {
     fun joinTags(tags: List<String>): String = tags.joinToString(",")
 
     /** Built-in tags with your own tags placed before "Other". */
-    fun allTags(custom: List<String>): List<String> = Categories.all.filter { it != "Other" } + custom + "Other"
+    fun allTags(custom: List<String>, hidden: List<String> = emptyList()): List<String> =
+        Categories.all.filter { it != "Other" && it !in hidden } + custom + "Other"
+
+    /** New list with [old] renamed, or null when the new name is empty or already used. */
+    fun renameTag(custom: List<String>, old: String, new: String): List<String>? {
+        val n = new.replace(",", " ").trim().take(24)
+        if (n.isEmpty() || custom.none { it.equals(old, true) }) return null
+        val taken = (Categories.all + custom.filter { !it.equals(old, true) }).map { it.lowercase(Locale.ROOT) }
+        if (n.lowercase(Locale.ROOT) in taken) return null
+        return custom.map { if (it.equals(old, true)) n else it }
+    }
+
+    /** WhatsApp wants country code + number, digits only. Indian 10-digit numbers get 91. */
+    fun waNumber(raw: String): String? {
+        var d = raw.filter { it.isDigit() }.trimStart('0')
+        if (d.length == 10) d = "91$d"
+        return if (d.length in 11..15) d else null
+    }
 }
 
 /** Decides which purchase a refund, reversal or failed-payment refund belongs to. */

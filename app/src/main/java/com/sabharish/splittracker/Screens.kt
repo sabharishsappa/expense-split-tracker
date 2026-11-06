@@ -428,7 +428,7 @@ fun PendingScreen(vm: MainVm) {
         }
     }
     remindFor?.let { person ->
-        ReminderDialog({ upi -> Reminder.build(person, rows.filter { it.person == person }, aliases, upi, System.currentTimeMillis()) }) { remindFor = null }
+        ReminderDialog(person, { upi -> Reminder.build(person, rows.filter { it.person == person }, aliases, upi, System.currentTimeMillis()) }) { remindFor = null }
     }
 }
 

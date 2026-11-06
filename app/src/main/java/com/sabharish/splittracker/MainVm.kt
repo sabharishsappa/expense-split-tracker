@@ -27,17 +27,30 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     val aliases = dao.aliases().map { list -> list.associate { it.ruleKey.removePrefix("alias|") to it.people } }.hot(emptyMap())
 
     val customTags = MutableStateFlow(Logic.parseTags(Repo.getPref(app, "tags", "")))
-    val tags: StateFlow<List<String>> = customTags.map { Logic.allTags(it) }.hot(Logic.allTags(emptyList()))
+    val hiddenTags = MutableStateFlow(Logic.parseTags(Repo.getPref(app, "hiddenTags", "")))
+    val tags: StateFlow<List<String>> = kotlinx.coroutines.flow.combine(customTags, hiddenTags) { c, h -> Logic.allTags(c, h) }
+        .hot(Logic.allTags(emptyList()))
+
+    fun renameTag(old: String, new: String) {
+        val after = Logic.renameTag(customTags.value, old, new) ?: run { status.value = "That name is empty or already used"; return }
+        customTags.value = after; Repo.putPref(getApplication(), "tags", Logic.joinTags(after))
+        viewModelScope.launch { Repo.renameTag(getApplication(), old, new.replace(",", " ").trim().take(24)) }
+    }
+    fun deleteTag(name: String) {
+        customTags.value = customTags.value.filter { !it.equals(name, true) }
+        Repo.putPref(getApplication(), "tags", Logic.joinTags(customTags.value))
+        viewModelScope.launch { Repo.deleteTag(getApplication(), name) }
+    }
+    fun toggleHidden(name: String) {
+        hiddenTags.value = if (name in hiddenTags.value) hiddenTags.value - name else hiddenTags.value + name
+        Repo.putPref(getApplication(), "hiddenTags", Logic.joinTags(hiddenTags.value))
+    }
 
     fun addTag(name: String): String? {
         val before = customTags.value
         val after = Logic.addTag(before, name)
         if (after != before) { customTags.value = after; Repo.putPref(getApplication(), "tags", Logic.joinTags(after)) }
         return after.lastOrNull()?.takeIf { it.equals(name.replace(",", " ").trim().take(24), true) }
-    }
-    fun removeTag(name: String) {
-        customTags.value = customTags.value - name
-        Repo.putPref(getApplication(), "tags", Logic.joinTags(customTags.value))
     }
 
     val accounts = kotlinx.coroutines.flow.combine(dao.all(), dao.acctRules()) { t, r -> Accounts.views(t, r) }.hot(emptyList())

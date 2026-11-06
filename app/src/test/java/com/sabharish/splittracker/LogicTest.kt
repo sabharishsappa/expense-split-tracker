@@ -160,3 +160,36 @@ class SimilarTest {
         assertTrue(Logic.similar(TestUtil.tx(1, "", 1.0, 1), listOf(TestUtil.tx(2, "", 1.0, 2))).isEmpty())
     }
 }
+
+class TagEditTest {
+    @Test fun renameKeepsOrderAndRejectsClashes() {
+        assertEquals(listOf("Gym", "Pet Care"), Logic.renameTag(listOf("Gym", "Pets"), "Pets", "Pet Care"))
+        assertEquals(listOf("Fitness"), Logic.renameTag(listOf("Gym"), "gym", " Fitness "))
+        assertNull(Logic.renameTag(listOf("Gym", "Pets"), "Pets", "gym"))       // already used
+        assertNull(Logic.renameTag(listOf("Gym"), "Gym", "Grocery"))            // built-in name
+        assertNull(Logic.renameTag(listOf("Gym"), "Gym", "   "))
+        assertNull(Logic.renameTag(listOf("Gym"), "Unknown", "X"))
+        assertEquals(listOf("Gym"), Logic.renameTag(listOf("Gym"), "Gym", "GYM"))   // only case changed
+    }
+
+    @Test fun hiddenBuiltInsLeaveTheListButOtherStays() {
+        val t = Logic.allTags(listOf("Gym"), listOf("Fuel", "Health", "Other"))
+        assertTrue("Fuel" !in t && "Health" !in t)
+        assertEquals("Other", t.last()); assertTrue("Gym" in t); assertTrue("Grocery" in t)
+    }
+}
+
+class WhatsAppNumberTest {
+    @Test fun indianNumbersGetCountryCode() {
+        assertEquals("919876543210", Logic.waNumber("98765 43210"))
+        assertEquals("919876543210", Logic.waNumber("098765 43210"))
+        assertEquals("919876543210", Logic.waNumber("+91 98765-43210"))
+        assertEquals("447911123456", Logic.waNumber("+44 7911 123456"))
+    }
+
+    @Test fun badNumbersAreRejected() {
+        assertNull(Logic.waNumber(""))
+        assertNull(Logic.waNumber("12345"))
+        assertNull(Logic.waNumber("abc"))
+    }
+}
