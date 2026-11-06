@@ -243,6 +243,26 @@ object Repo {
         return same.size
     }
 
+    /** Gives every selected spend the same tag, remembering it per merchant. */
+    suspend fun bulkCategory(ctx: Context, txns: List<Txn>, c: String) {
+        val dao = Db.get(ctx).dao()
+        for (t in txns) {
+            dao.setCategory(t.id, c)
+            if (c.isNotBlank()) dao.putRule(Rule(catKey(t.merchant), "CAT", c))
+        }
+    }
+
+    /** Splits every selected spend equally between [people] (one person = all theirs). Skips money-in rows. */
+    suspend fun bulkPeople(ctx: Context, txns: List<Txn>, people: List<String>): Int {
+        if (people.isEmpty()) return 0
+        val spends = txns.filter { it.kind == "SPEND" || it.kind == "UPI_OUT" }
+        for (t in spends) {
+            val shares = if (people.size == 1) listOf(NewShare(people[0], t.amount, people[0] == ME)) else equalShares(t.amount, people, false)
+            tag(ctx, t, shares, t.category, false, false)
+        }
+        return spends.size
+    }
+
     suspend fun renameTag(ctx: Context, old: String, new: String) {
         val dao = Db.get(ctx).dao(); dao.renameCategory(old, new); dao.renameCatRules(old, new)
     }

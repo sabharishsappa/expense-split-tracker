@@ -137,6 +137,44 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
     }
 }
 
+/** Compact row shown while selecting: tick, merchant, amount. */
+@Composable
+private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, onToggle: () -> Unit) {
+    AppCard {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onToggle), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = checked, onCheckedChange = { onToggle() })
+            Column(Modifier.weight(1f)) {
+                Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("${Repo.shortDate(t.txnDate)} · ${if (t.category.isBlank()) "no tag" else t.category}", fontSize = 12.sp, color = muted())
+            }
+            Text(Repo.money(t.amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** Actions for the ticked transactions: tag, people, mine, add similar ones. */
+@Composable
+private fun BulkBar(vm: MainVm, picked: List<Txn>, onSimilar: () -> Unit, onSelectAll: () -> Unit, onDone: () -> Unit) {
+    var tagMenu by remember { mutableStateOf(false) }
+    var people by remember { mutableStateOf(false) }
+    AppCard {
+        Text("${picked.size} selected · ${Repo.money(picked.sumOf { it.amount })}", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box {
+                Pill("Tag ▾", { if (picked.isNotEmpty()) tagMenu = true }, strong = picked.isNotEmpty())
+                TagMenu(vm, tagMenu, { tagMenu = false }) { vm.bulkCategory(picked, it); onDone() }
+            }
+            Pill("People…", { if (picked.isNotEmpty()) people = true }, strong = picked.isNotEmpty())
+            Pill("Mine", { if (picked.isNotEmpty()) { vm.bulkPeople(picked, listOf(Repo.ME)); onDone() } })
+            Pill("+ Similar", onSimilar)
+            Pill("All", onSelectAll)
+            Pill("Done ✕", onDone)
+        }
+    }
+    if (people) PeopleSelectDialog(vm, "Who were these for?", { people = false }) { vm.bulkPeople(picked, it); people = false; onDone() }
+}
+
 @Composable
 private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> Unit) {
     val recents by vm.recents.collectAsState()
@@ -148,12 +186,28 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         OutlinedButton(onClick = { vm.importHistory(365) }) { Text("Import last 12 months of messages") }
         return
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text("Tap Me or a name. More… to split.", fontSize = 13.sp, color = muted(), modifier = Modifier.weight(1f))
-        if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
+    val aliasesNow by vm.aliases.collectAsState()
+    val picked = remember { mutableStateListOf<Long>() }
+    var selecting by remember { mutableStateOf(false) }
+    val pickedTxns = items.filter { it.id in picked }
+    if (selecting) {
+        BulkBar(vm, pickedTxns,
+            onSimilar = { pickedTxns.forEach { p -> Logic.similar(p, items).forEach { if (it.id !in picked) picked.add(it.id) } } },
+            onSelectAll = { picked.clear(); picked.addAll(items.map { it.id }) },
+            onDone = { picked.clear(); selecting = false })
+        Spacer(Modifier.height(8.dp))
+    } else {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Tap names, then ✓. More… to split.", fontSize = 13.sp, color = muted(), modifier = Modifier.weight(1f))
+            TextButton(onClick = { selecting = true }) { Text("Select") }
+            if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
+        }
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(items, key = { it.id }) { t -> SpendCard(t, vm, recents, undoable) { sheetFor = it } }
+        items(items, key = { it.id }) { t ->
+            if (selecting) SelectRow(t, aliasesNow, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
+            else SpendCard(t, vm, recents, undoable, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }) { sheetFor = it }
+        }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }) }
     if (confirmAll) {
@@ -168,7 +222,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
 }
 
 @Composable
-private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onMore: (Txn) -> Unit) {
+private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onSimilar: () -> Unit = {}, onMore: (Txn) -> Unit) {
     val aliases by vm.aliases.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
     var catMenu by remember { mutableStateOf(false) }
@@ -183,6 +237,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
             Box {
                 IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                    DropdownMenuItem(text = { Text("Select all from this merchant") }, onClick = { moreMenu = false; onSimilar() })
                     DropdownMenuItem(text = { Text("Rename merchant") }, onClick = { moreMenu = false; rename = true })
                     DropdownMenuItem(text = { Text("Payment failed, expecting refund") }, onClick = { moreMenu = false; vm.markFailed(t) })
                     DropdownMenuItem(text = { Text("Skip, not a real spend") }, onClick = { moreMenu = false; vm.ignore(t) })
@@ -462,9 +517,22 @@ fun AllScreen(vm: MainVm) {
     Spacer(Modifier.height(6.dp))
     Text("${shown.size} transactions · ${Logic.money(shown.filter { it.kind == "SPEND" || it.kind == "UPI_OUT" }.sumOf { it.amount })} spent",
         fontSize = 12.sp, color = muted())
+    val picked = remember { mutableStateListOf<Long>() }
+    var selecting by remember { mutableStateOf(false) }
+    val pickedTxns = shown.filter { it.id in picked }
+    if (selecting) {
+        Spacer(Modifier.height(6.dp))
+        BulkBar(vm, pickedTxns,
+            onSimilar = { pickedTxns.forEach { p -> Logic.similar(p, shown).forEach { if (it.id !in picked) picked.add(it.id) } } },
+            onSelectAll = { picked.clear(); picked.addAll(shown.map { it.id }) },
+            onDone = { picked.clear(); selecting = false })
+    } else TextButton(onClick = { selecting = true }) { Text("Select several…") }
     Spacer(Modifier.height(4.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(shown, key = { it.id }) { t -> TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases) { sheetFor = it } }
+        items(shown, key = { it.id }) { t ->
+            if (selecting) SelectRow(t, aliases, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
+            else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases) { sheetFor = it }
+        }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
 }

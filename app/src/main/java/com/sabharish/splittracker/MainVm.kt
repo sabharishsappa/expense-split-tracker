@@ -57,6 +57,14 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun setBalance(key: String, name: String, balance: Double) =
         viewModelScope.launch { Repo.setAccountBalance(getApplication(), key, name, balance) }
 
+    fun bulkCategory(txns: List<Txn>, c: String) = viewModelScope.launch {
+        Repo.bulkCategory(getApplication(), txns, c); status.value = "Tagged ${txns.size} as $c"
+    }
+    fun bulkPeople(txns: List<Txn>, people: List<String>) = viewModelScope.launch {
+        val n = Repo.bulkPeople(getApplication(), txns, people)
+        status.value = if (n == 0) "Nothing to update (money-in rows can't be split)" else "Updated $n spends"
+    }
+
     fun addFromStatement(s: StmtSource, l: StmtLine) = viewModelScope.launch { Repo.addFromStatement(getApplication(), s, l) }
 
     val contacts = MutableStateFlow<List<String>>(emptyList())

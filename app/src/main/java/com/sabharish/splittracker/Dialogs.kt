@@ -605,3 +605,39 @@ fun EditTagDialog(vm: MainVm, tag: String, custom: Boolean, hidden: Boolean, onD
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+/** Pick one or more people; the result is split equally. "Me" counts as a person. */
+@Composable
+fun PeopleSelectDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onDone: (List<String>) -> Unit) {
+    val contacts by vm.contacts.collectAsState()
+    val recents by vm.recents.collectAsState()
+    val chosen = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    val pool = (listOf(Repo.ME) + recents + contacts).distinct()
+    val results = pool.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }.take(12)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true,
+                    label = { Text("Search or type a name") }, modifier = Modifier.fillMaxWidth())
+                if (q.isNotEmpty() && pool.none { it.equals(q, true) }) {
+                    Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth().clickable { chosen.add(q); query = "" }.padding(vertical = 10.dp))
+                }
+                (chosen.filter { it !in results } + results).forEach { n ->
+                    Row(Modifier.fillMaxWidth().clickable { if (n in chosen) chosen.remove(n) else chosen.add(n) }, verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = n in chosen, onCheckedChange = { if (it) chosen.add(n) else chosen.remove(n) })
+                        Text(if (n == Repo.ME) "Me" else n, fontSize = 16.sp)
+                    }
+                }
+                if (chosen.isNotEmpty()) Text(if (chosen.size == 1) "All of each spend goes to ${if (chosen[0] == Repo.ME) "you" else chosen[0]}" else "Each spend is split ${chosen.size} ways, equally",
+                    fontSize = 12.sp, color = muted(), modifier = Modifier.padding(top = 6.dp))
+            }
+        },
+        confirmButton = { TextButton(enabled = chosen.isNotEmpty(), onClick = { onDone(chosen.toList()) }) { Text("✓") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
