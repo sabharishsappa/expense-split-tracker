@@ -1,0 +1,475 @@
+package com.sabharish.splittracker
+
+import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+private val fullDate = SimpleDateFormat("d MMM yyyy", Locale.ENGLISH)
+fun fullDate(ms: Long): String = fullDate.format(Date(ms))
+
+fun kindLabel(kind: String) = when (kind) {
+    "SPEND" -> "Card"
+    "UPI_OUT" -> "UPI sent"
+    "UPI_IN" -> "UPI received"
+    "REFUND" -> "Refund"
+    "PAYMENT" -> "Card bill"
+    else -> kind
+}
+
+private fun firstNames(people: List<String>): List<String> {
+    val firsts = people.map { it.trim().substringBefore(" ") }
+    return people.mapIndexed { i, p -> if (firsts.count { it == firsts[i] } > 1) p else firsts[i] }
+}
+
+@Composable
+private fun AppCard(content: @Composable () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) { Column(Modifier.padding(14.dp)) { content() } }
+}
+
+// ======================= INBOX =======================
+
+@Composable
+fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
+    val spends by vm.inbox.collectAsState()
+    val money by vm.moneyIn.collectAsState()
+    var section by remember { mutableIntStateOf(0) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Pill("To tag · ${spends.size}", { section = 0 }, selected = section == 0)
+        Pill("Money in · ${money.size}", { section = 1 }, selected = section == 1)
+    }
+    Spacer(Modifier.height(10.dp))
+    if (section == 0) SpendList(vm, spends, undoable) else MoneyInList(vm, money)
+}
+
+@Composable
+private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> Unit) {
+    val recents by vm.recents.collectAsState()
+    var sheetFor by remember { mutableStateOf<Txn?>(null) }
+    var confirmAll by remember { mutableStateOf(false) }
+    if (items.isEmpty()) {
+        Text("All caught up. New card and UPI payments show up here automatically.", color = Muted)
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = { vm.importHistory(365) }) { Text("Import last 12 months of messages") }
+        return
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("Tap Me or a name. Use More to split.", fontSize = 12.sp, color = Muted, modifier = Modifier.weight(1f))
+        if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
+    }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(items, key = { it.id }) { t -> SpendCard(t, vm, recents, undoable) { sheetFor = it } }
+    }
+    sheetFor?.let { t ->
+        TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) })
+    }
+    if (confirmAll) {
+        AlertDialog(
+            onDismissRequest = { confirmAll = false },
+            title = { Text("Mark all ${items.size} as yours?") },
+            text = { Text("Every untagged item becomes your own spend. You can still change one later from the Transactions tab.") },
+            confirmButton = { TextButton(onClick = { vm.tagAllMine(items); confirmAll = false }) { Text("Mark all mine") } },
+            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onMore: (Txn) -> Unit) {
+    val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
+    var catMenu by remember { mutableStateOf(false) }
+    fun quick(shares: List<NewShare>, label: String) {
+        vm.tag(t, shares, t.category, false, false)
+        undoable(t.id, label)
+    }
+    AppCard {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) {
+                Text(t.merchant, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 12.sp, color = Muted)
+            }
+            Text(Repo.money(t.amount), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
+                DropdownMenu(expanded = catMenu, onDismissRequest = { catMenu = false }) {
+                    Categories.all.forEach { c ->
+                        DropdownMenuItem(text = { Text(c) }, onClick = { vm.setCategory(t, c); catMenu = false })
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { vm.ignore(t) }) { Text("Skip", color = Muted) }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text("Whose spend?", fontSize = 12.sp, color = Muted)
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill("Me", { quick(listOf(NewShare(Repo.ME, t.amount, true)), "Tagged as yours") }, strong = true)
+            val s = sug
+            var skip = emptyList<String>()
+            if (s != null && s.action == "PEOPLE") {
+                val names = s.people.split(",").filter { it.isNotBlank() }
+                skip = names
+                if (names.isNotEmpty()) {
+                    val label = firstNames(names.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
+                        if (names.contains(Repo.ME)) " & you" else ""
+                    Pill("As before: $label", {
+                        quick(Repo.equalShares(t.amount, names, false), "Tagged as before")
+                    })
+                }
+            }
+            val shown = recents.filter { it !in skip }.take(4)
+            val labels = firstNames(shown)
+            shown.forEachIndexed { i, p ->
+                Pill(labels[i], { quick(listOf(NewShare(p, t.amount, false)), "Tagged to $p") })
+            }
+            Pill("More…", { onMore(t) })
+        }
+    }
+}
+
+@Composable
+private fun MoneyInList(vm: MainVm, items: List<Txn>) {
+    val pending by vm.pending.collectAsState()
+    val recents by vm.recents.collectAsState()
+    val contacts by vm.contacts.collectAsState()
+    var pickFor by remember { mutableStateOf<Txn?>(null) }
+    var linkFor by remember { mutableStateOf<Txn?>(null) }
+    if (items.isEmpty()) {
+        Text("No money-in to review. UPI payments you receive, and refunds, appear here.", color = Muted)
+        return
+    }
+    val owed = pending.groupBy { it.person }.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.map { it.key }
+    val known = (owed + recents + contacts).distinct()
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(items, key = { it.id }) { t ->
+            MoneyCard(t, vm, owed, known, onPick = { pickFor = it }, onLink = { linkFor = it })
+        }
+    }
+    pickFor?.let { t ->
+        PersonPickerDialog(vm, "Repayment from…", onDismiss = { pickFor = null }, onPick = { vm.repaidBy(t, it); pickFor = null })
+    }
+    linkFor?.let { t -> LinkRefundDialog(vm, t) { linkFor = null } }
+}
+
+@Composable
+private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String>, onPick: (Txn) -> Unit, onLink: (Txn) -> Unit) {
+    var confirm by remember { mutableStateOf<String?>(null) }
+    AppCard {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) {
+                Text(if (t.kind == "REFUND") "Refund · ${t.merchant}" else "From ${t.merchant}", fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 12.sp, color = Muted)
+            }
+            Text("+" + Repo.money(t.amount), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Green)
+        }
+        Spacer(Modifier.height(10.dp))
+        if (t.kind == "UPI_IN") {
+            val match = Repo.bestMatch(t.merchant, known)
+            Text("Is someone paying you back?", fontSize = 12.sp, color = Muted)
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (match != null) Pill("Repayment from $match", { confirm = match }, strong = true)
+                val others = owed.filter { it != match }.take(5)
+                val labels = firstNames(others)
+                others.forEachIndexed { i, p -> Pill(labels[i], { confirm = p }) }
+                Pill("Someone else…", { onPick(t) })
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { onLink(t) }) { Text("It's a refund") }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = Muted) }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onLink(t) }) { Text("Link to purchase") }
+                OutlinedButton(onClick = { vm.keepAsRefund(t.id) }) { Text("Just keep") }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = Muted) }
+            }
+        }
+    }
+    confirm?.let { person ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text("Repayment from $person?") },
+            text = { Text("${Repo.money(t.amount)} will clear what $person owes you, oldest first.") },
+            confirmButton = { TextButton(onClick = { vm.repaidBy(t, person); confirm = null }) { Text("Yes, mark paid") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+// ======================= PENDING =======================
+
+@Composable
+fun PendingScreen(vm: MainVm) {
+    val ctx = LocalContext.current
+    val rows by vm.pending.collectAsState()
+    var settleFor by remember { mutableStateOf<String?>(null) }
+    var remindFor by remember { mutableStateOf<String?>(null) }
+    val grouped = rows.groupBy { it.person }
+    val total = rows.sumOf { it.amount - it.settled }
+
+    AppCard {
+        Text("Owed to you", fontSize = 12.sp, color = Muted)
+        Text(Repo.money(total), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = if (total > 0) Teal else Muted)
+        Text("${grouped.size} people · ${rows.size} items", fontSize = 12.sp, color = Muted)
+    }
+    Spacer(Modifier.height(10.dp))
+    if (rows.isEmpty()) Text("Nobody owes you anything right now.", color = Muted)
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(grouped.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.toList(), key = { it.key }) { e ->
+            val owed = e.value.sumOf { it.amount - it.settled }
+            val days = ((System.currentTimeMillis() - e.value.minOf { it.txnDate }) / 86_400_000L).toInt()
+            AppCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text(e.key, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Text("${e.value.size} items · oldest $days days", fontSize = 12.sp,
+                            color = if (days > 30) MaterialTheme.colorScheme.error else if (days > 14) Amber else Muted)
+                    }
+                    Text(Repo.money(owed), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(6.dp))
+                e.value.take(6).forEach { r ->
+                    Text("${Repo.shortDate(r.txnDate)} · ${r.merchant} · ${Repo.money(r.amount - r.settled)}", fontSize = 13.sp)
+                }
+                if (e.value.size > 6) Text("…and ${e.value.size - 6} more", fontSize = 12.sp, color = Muted)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { remindFor = e.key }) { Text("Remind") }
+                    OutlinedButton(onClick = { settleFor = e.key }) { Text("Mark paid") }
+                }
+            }
+        }
+    }
+    settleFor?.let { person ->
+        val owed = rows.filter { it.person == person }.sumOf { it.amount - it.settled }
+        SettleDialog(person, owed, onDismiss = { settleFor = null }) { amt, mode -> vm.settle(person, amt, mode); settleFor = null }
+    }
+    remindFor?.let { person ->
+        val text = Repo.reminderText(ctx, person, rows.filter { it.person == person })
+        ReminderDialog(text) { remindFor = null }
+    }
+}
+
+// ======================= ALL TRANSACTIONS =======================
+
+@Composable
+fun AllScreen(vm: MainVm) {
+    val txns by vm.all.collectAsState()
+    val shares by vm.shares.collectAsState()
+    var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf("All") }
+    val byTxn = shares.groupBy { it.txnId }
+    val q = query.trim()
+    val shown = txns.filter { t ->
+        val ss = byTxn[t.id] ?: emptyList()
+        val okFilter = when (filter) {
+            "Card" -> t.kind == "SPEND"
+            "UPI" -> t.kind.startsWith("UPI")
+            "Refunds" -> t.kind == "REFUND"
+            "Pending" -> ss.any { it.person != Repo.ME && it.settled < it.amount - 0.005 }
+            "To tag" -> t.status == "INBOX"
+            else -> true
+        }
+        okFilter && (q.isEmpty() || t.merchant.contains(q, true) || t.card.contains(q) || t.bank.contains(q, true) ||
+            t.category.contains(q, true) || ss.any { it.person.contains(q, true) })
+    }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("All", "Card", "UPI", "Refunds", "Pending", "To tag").forEach { f -> Pill(f, { filter = f }, selected = filter == f) }
+    }
+    OutlinedTextField(
+        value = query, onValueChange = { query = it }, singleLine = true,
+        label = { Text("Search merchant, person, tag or card") }, modifier = Modifier.fillMaxWidth()
+    )
+    Spacer(Modifier.height(6.dp))
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(shown, key = { it.id }) { t -> TxnRow(t, byTxn[t.id] ?: emptyList(), vm) }
+    }
+}
+
+@Composable
+private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm) {
+    var catMenu by remember { mutableStateOf(false) }
+    val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
+    val state = when (t.status) {
+        "INBOX" -> "Needs tagging"
+        "SELF" -> "Own transfer"
+        "IGNORED" -> "Skipped"
+        "REFUNDED" -> "Refunded"
+        "REPAID" -> "Repayment"
+        "BILLPAY" -> "Card bill payment"
+        else -> ""
+    }
+    AppCard {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(t.merchant, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text((if (incoming) "+" else "") + Repo.money(t.amount), fontWeight = FontWeight.Bold, color = if (incoming) Green else MaterialTheme.colorScheme.onSurface)
+        }
+        Text("${Repo.acct(t.bank, t.card)} · ${fullDate(t.txnDate)} · ${kindLabel(t.kind)}" + if (state.isNotEmpty()) " · $state" else "",
+            fontSize = 12.sp, color = if (t.status == "INBOX") Amber else Muted)
+        if (t.note.isNotBlank()) Text(t.note, fontSize = 12.sp, color = Muted)
+        if (t.kind == "SPEND" || t.kind == "UPI_OUT") {
+            Spacer(Modifier.height(4.dp))
+            Box {
+                Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
+                DropdownMenu(expanded = catMenu, onDismissRequest = { catMenu = false }) {
+                    Categories.all.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { vm.setCategory(t, c); catMenu = false }) }
+                }
+            }
+        }
+        ss.forEach { s ->
+            val label = if (s.person == Repo.ME) "You" else s.person
+            val st = if (s.person == Repo.ME) "your share" else if (s.settled >= s.amount - 0.005) "paid" else "owes ${Repo.money(s.amount - s.settled)}"
+            Text("$label · ${Repo.money(s.amount)} · $st", fontSize = 12.sp)
+        }
+        if (ss.any { it.person != Repo.ME }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = t.splitAdded, onCheckedChange = { vm.toggleSplitAdded(t) })
+                Text("Added to PhonePe Split", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+// ======================= SUMMARY =======================
+
+@Composable
+fun SummaryScreen(vm: MainVm) {
+    val rows by vm.summary.collectAsState()
+    var offset by remember { mutableIntStateOf(0) }
+    val cal = Calendar.getInstance().apply { add(Calendar.MONTH, offset) }
+    val ym = cal.get(Calendar.YEAR) * 12 + cal.get(Calendar.MONTH)
+    fun monthOf(ms: Long): Int {
+        val c = Calendar.getInstance(); c.timeInMillis = ms
+        return c.get(Calendar.YEAR) * 12 + c.get(Calendar.MONTH)
+    }
+    val label = SimpleDateFormat("MMMM yyyy", Locale.ENGLISH).format(cal.time)
+    val inMonth = rows.filter { monthOf(it.txnDate) == ym }
+    val mine = inMonth.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
+    val forOthers = inMonth.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
+    val receivable = rows.filter { it.person != Repo.ME }.sumOf { it.shareAmt - it.settled }.coerceAtLeast(0.0)
+    val byCat = inMonth.filter { it.person == Repo.ME }
+        .groupBy { it.category.ifBlank { "Untagged" } }
+        .mapValues { e -> e.value.sumOf { it.shareAmt } }
+        .entries.sortedByDescending { it.value }
+    val byCard = inMonth.groupBy { it.card }.entries.sortedByDescending { e -> e.value.sumOf { it.shareAmt } }
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
+                Text(label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                TextButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Text("Next ›") }
+            }
+        }
+        item {
+            AppCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("My spend", fontSize = 12.sp, color = Muted)
+                        Text(Repo.money(mine), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Paid for others", fontSize = 12.sp, color = Muted)
+                        Text(Repo.money(forOthers), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Still to recover (all time): ${Repo.money(receivable)}", fontSize = 13.sp, color = Teal, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (byCat.isNotEmpty()) {
+            item {
+                AppCard {
+                    Text("Where my money went", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    val top = byCat.first().value.coerceAtLeast(1.0)
+                    byCat.take(8).forEach { e ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(e.key, fontSize = 13.sp)
+                            Text(Repo.money(e.value), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Box(
+                            Modifier.padding(top = 2.dp, bottom = 8.dp)
+                                .fillMaxWidth((e.value / top).toFloat().coerceIn(0.03f, 1f))
+                                .height(6.dp)
+                                .background(Teal, RoundedCornerShape(3.dp))
+                        )
+                    }
+                }
+            }
+        }
+        if (byCard.isNotEmpty()) {
+            item {
+                AppCard {
+                    Text("By card / account", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    byCard.forEach { e ->
+                        val m = e.value.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
+                        val o = e.value.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
+                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("••${e.key}", fontSize = 13.sp)
+                            Text("mine ${Repo.money(m)} · others ${Repo.money(o)}", fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+        if (inMonth.isEmpty()) item { Text("Nothing tagged for this month yet.", color = Muted) }
+    }
+}

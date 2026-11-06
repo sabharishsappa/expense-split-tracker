@@ -11,20 +11,29 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * kind:   SPEND (card) | UPI_OUT | UPI_IN | REFUND | PAYMENT (card bill payment)
+ * status: INBOX | TAGGED | IGNORED | REFUND | REFUNDED | BILLPAY | SELF | REPAID
+ */
 @Entity(tableName = "txn")
 data class Txn(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val bank: String,
-    val card: String,
-    val kind: String,          // SPEND | REFUND | PAYMENT
+    val card: String,          // card last 4, or bank account last digits for UPI
+    val kind: String,
     val amount: Double,
-    val merchant: String,
+    val merchant: String,      // merchant, or the other party for UPI
     val txnDate: Long,
     val smsTime: Long,
-    val status: String,        // INBOX | TAGGED | IGNORED | REFUND | BILLPAY
-    val splitAdded: Boolean = false
+    val status: String,
+    val splitAdded: Boolean = false,
+    val category: String = "",
+    val refundOf: Long = 0,
+    val note: String = ""
 )
 
 @Entity(tableName = "share", indices = [Index("txnId"), Index("person")])
@@ -48,8 +57,8 @@ data class Settlement(
 @Entity(tableName = "rule")
 data class Rule(
     @PrimaryKey val ruleKey: String,
-    val action: String,        // MINE | PEOPLE
-    val people: String
+    val action: String,        // MINE | PEOPLE | CAT
+    val people: String         // PEOPLE: comma list (may include "Me"); CAT: the category
 )
 
 data class PendingRow(
@@ -66,7 +75,7 @@ data class PendingRow(
 data class SummaryRow(
     val card: String,
     val txnDate: Long,
-    val total: Double,
+    val category: String,
     val person: String,
     val shareAmt: Double,
     val settled: Double
@@ -85,20 +94,47 @@ interface AppDao {
     @Query("SELECT COUNT(*) FROM txn WHERE kind = :kind AND amount = :amount AND card = :card AND merchant = :merchant AND smsTime BETWEEN :from AND :to")
     suspend fun near(kind: String, amount: Double, card: String, merchant: String, from: Long, to: Long): Int
 
+    @Query("SELECT * FROM txn WHERE id = :id")
+    suspend fun get(id: Long): Txn?
+
     @Query("UPDATE txn SET status = :status WHERE id = :id")
     suspend fun setStatus(id: Long, status: String)
+
+    @Query("UPDATE txn SET status = :status, note = :note WHERE id = :id")
+    suspend fun setStatusNote(id: Long, status: String, note: String)
+
+    @Query("UPDATE txn SET refundOf = :orig, status = :status, note = :note WHERE id = :id")
+    suspend fun setRefund(id: Long, orig: Long, status: String, note: String)
+
+    @Query("UPDATE txn SET category = :c WHERE id = :id")
+    suspend fun setCategory(id: Long, c: String)
 
     @Query("UPDATE txn SET splitAdded = :v WHERE id = :id")
     suspend fun setSplitAdded(id: Long, v: Boolean)
 
-    @Query("SELECT * FROM txn WHERE status = 'INBOX' AND kind = 'SPEND' ORDER BY txnDate DESC")
+    @Query("DELETE FROM share WHERE txnId = :txnId")
+    suspend fun deleteShares(txnId: Long)
+
+    @Query("SELECT * FROM share WHERE txnId = :txnId")
+    suspend fun sharesFor(txnId: Long): List<Share>
+
+    @Query("UPDATE share SET amount = :amount WHERE id = :id")
+    suspend fun setShareAmount(id: Long, amount: Double)
+
+    @Query("SELECT * FROM txn WHERE status = 'INBOX' AND kind IN ('SPEND','UPI_OUT') ORDER BY txnDate DESC, id DESC")
     fun inbox(): Flow<List<Txn>>
+
+    @Query("SELECT * FROM txn WHERE status = 'INBOX' AND kind IN ('UPI_IN','REFUND') ORDER BY txnDate DESC, id DESC")
+    fun moneyIn(): Flow<List<Txn>>
 
     @Query("SELECT * FROM txn ORDER BY txnDate DESC, id DESC")
     fun all(): Flow<List<Txn>>
 
     @Query("SELECT * FROM share")
     fun shares(): Flow<List<Share>>
+
+    @Query("SELECT person FROM share WHERE person != 'Me' GROUP BY person ORDER BY MAX(id) DESC LIMIT 8")
+    fun recentPeople(): Flow<List<String>>
 
     @Query("SELECT s.id AS shareId, s.txnId AS txnId, s.person AS person, s.amount AS amount, s.settled AS settled, t.merchant AS merchant, t.card AS card, t.txnDate AS txnDate FROM share s JOIN txn t ON t.id = s.txnId WHERE s.person != 'Me' AND s.settled < s.amount - 0.005 ORDER BY t.txnDate ASC")
     fun pending(): Flow<List<PendingRow>>
@@ -109,21 +145,37 @@ interface AppDao {
     @Query("UPDATE share SET settled = :v WHERE id = :id")
     suspend fun setSettled(id: Long, v: Double)
 
-    @Query("SELECT t.card AS card, t.txnDate AS txnDate, t.amount AS total, s.person AS person, s.amount AS shareAmt, s.settled AS settled FROM txn t JOIN share s ON s.txnId = t.id WHERE t.kind = 'SPEND'")
+    @Query("SELECT t.card AS card, t.txnDate AS txnDate, t.category AS category, s.person AS person, s.amount AS shareAmt, s.settled AS settled FROM txn t JOIN share s ON s.txnId = t.id WHERE t.kind IN ('SPEND','UPI_OUT')")
     fun summary(): Flow<List<SummaryRow>>
 
-    @Query("SELECT * FROM settlement ORDER BY date DESC")
-    fun settlements(): Flow<List<Settlement>>
+    @Query("SELECT * FROM txn WHERE kind IN ('SPEND','UPI_OUT') AND amount BETWEEN :lo AND :hi AND smsTime BETWEEN :from AND :to AND status != 'REFUNDED' AND id NOT IN (SELECT refundOf FROM txn WHERE refundOf > 0) ORDER BY smsTime DESC LIMIT 5")
+    suspend fun refundCandidates(lo: Double, hi: Double, from: Long, to: Long): List<Txn>
+
+    @Query("SELECT * FROM txn WHERE kind IN ('SPEND','UPI_OUT') AND status != 'SELF' ORDER BY txnDate DESC LIMIT 80")
+    suspend fun recentSpends(): List<Txn>
+
+    @Query("SELECT * FROM txn WHERE category = '' AND kind IN ('SPEND','UPI_OUT')")
+    suspend fun uncategorised(): List<Txn>
 }
 
-@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class], version = 1, exportSchema = false)
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE txn ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE txn ADD COLUMN refundOf INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE txn ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class], version = 2, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): AppDao
 
     companion object {
         @Volatile private var inst: Db? = null
         fun get(ctx: Context): Db = inst ?: synchronized(this) {
-            inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "splittracker.db").build().also { inst = it }
+            inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "splittracker.db")
+                .addMigrations(MIGRATION_1_2)
+                .build().also { inst = it }
         }
     }
 }

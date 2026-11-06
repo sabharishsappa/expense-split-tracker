@@ -46,12 +46,26 @@ object SmsParser {
         rule("ICICI","PAYMENT","""Payment of INR %AMT% has been received on your ICICI Bank Credit Card Account \w*?(?<card>\d{4}) on (?<date>[\w\-]+)"""),
         rule("INDUSIND","PAYMENT","""thank you for your Payment of INR %AMT% towards your IndusInd Bank Credit Card on (?<date>[\d/]+)"""),
         rule("YES","PAYMENT","""payment of Rs\.?%AMT% is received towards your YES BANK Credit Card ending (?<card>\d{4})"""),
-        rule("HDFC","PAYMENT","""Online Payment of Rs\.?%AMT% vide Ref# \w+ was credited to your card ending (?<card>\d{4}) On (?<date>[\w/]+)_""")
+        rule("HDFC","PAYMENT","""Online Payment of Rs\.?%AMT% vide Ref# \w+ was credited to your card ending (?<card>\d{4}) On (?<date>[\w/]+)_"""),
+        // ---- UPI / bank account: money sent ----
+        rule("SBI","UPI_OUT","""Dear UPI user A/C X(?<card>\d{4}) debited by %AMT% on date (?<date>\d{2}[A-Za-z]{3}\d{2}) trf to (?<merchant>.+?) Refno"""),
+        rule("ICICI","UPI_OUT","""ICICI Bank Acct X+(?<card>\d{3,4}) debited for Rs %AMT% on (?<date>[\w\-]+); (?<merchant>.+?) credited\. ?UPI"""),
+        rule("ICICI","UPI_OUT","""ICICI Bank Acct X+(?<card>\d{3,4}) debited with INR %AMT% on (?<date>[\w\-]+)\. Acct (?<merchant>X+\d+) credited"""),
+        rule("KOTAK","UPI_OUT","""Sent Rs\.?%AMT% from Kotak Bank A(?:C|/c) X(?<card>\d{4}) to (?<merchant>\S+) on (?<date>[\d\-]+)\."""),
+        rule("FEDERAL","UPI_OUT","""Rs\.? ?%AMT% sent via UPI on (?<date>[\d\-]+) at [\d:]+ to (?<merchant>.+?)\.Ref"""),
+        rule("FEDERAL","UPI_OUT","""Debited Rs\.? ?%AMT% from a/c X(?<card>\d{4}) on (?<date>\d{2}[A-Za-z]{3}\d{2}) [\d:]+ via UPI to (?<merchant>.+?)\. Ref"""),
+        rule("FEDERAL","UPI_OUT","""Rs\.? ?%AMT% debited via UPI on (?<date>[\d\-]+) [\d:]+ to VPA (?<merchant>\S+?)\.Ref"""),
+        // ---- UPI / bank account: money received ----
+        rule("SBI","REFUND","""ur A/c ?X(?<card>\d{4}) credited with Rs\.?%AMT% on (?<date>\d{2}[A-Za-z]{3}\d{2}) against reversal of txn"""),
+        rule("SBI","UPI_IN","""A/c ?X(?<card>\d{4})-? ?credited by Rs\.?%AMT% on (?<date>\d{2}[A-Za-z]{3}\d{2}) transfer from (?<merchant>.+?) Ref"""),
+        rule("SBI","UPI_IN","""ur A/c ?X(?<card>\d{4}) credited by Rs\.?%AMT% on (?<date>\d{2}[A-Za-z]{3}\d{2}) by \(Ref"""),
+        rule("ICICI","UPI_IN","""Acct X+(?<card>\d{3,4}) is credited with Rs %AMT% on (?<date>[\w\-]+) from (?<merchant>.+?)\. UPI"""),
+        rule("KOTAK","UPI_IN","""Received Rs\.?%AMT% in your Kotak Bank AC X?(?<card>\d{4}) from (?<merchant>\S+(?: \S+)*?) on (?<date>[\d\-]+)\.\s?UPI""")
     )
 
     private val dateFormats = listOf(
         "dd/MM/yy", "dd-MM-yy", "dd-MM-yyyy", "dd/MM/yyyy",
-        "dd-MMM-yy", "dd-MMM-yyyy", "dd/MMM/yyyy", "yyyy-MM-dd"
+        "dd-MMM-yy", "dd-MMM-yyyy", "dd/MMM/yyyy", "yyyy-MM-dd", "ddMMMyy", "ddMMMyyyy"
     )
 
     private fun parseDate(s: String?): Long? {
@@ -71,6 +85,24 @@ object SmsParser {
     private fun group(m: java.util.regex.Matcher, name: String): String? =
         try { m.group(name) } catch (_: Exception) { null }
 
+    /** UPI handles (name@bank) become readable names; ALL CAPS names become Title Case. */
+    fun cleanName(raw: String): String {
+        var n = raw.trim().trimEnd('.', ',')
+        if (n.contains("@")) {
+            val local = n.substringBefore("@")
+            n = when {
+                local.startsWith("paytmqr", true) || local.startsWith("paytm-", true) -> "Paytm merchant"
+                local.startsWith("q", true) && local.length > 8 && local.drop(1).all { it.isDigit() } -> "UPI merchant"
+                Regex("^\\d{10}$").matches(local) -> "UPI $local"
+                else -> local
+            }
+        }
+        if (n.none { it.isDigit() } && n == n.uppercase() && n.any { it.isLetter() }) {
+            n = n.lowercase().split(" ").joinToString(" ") { w -> w.replaceFirstChar { c -> c.uppercase() } }
+        }
+        return n
+    }
+
     fun parse(body: String?): Parsed? {
         if (body.isNullOrBlank()) return null
         val b = body.replace(Regex("\\s+"), " ").trim()
@@ -80,7 +112,14 @@ object SmsParser {
             if (m.find()) {
                 val amt = (group(m, "amt") ?: continue).replace(",", "").toDoubleOrNull() ?: continue
                 val card = group(m, "card") ?: r.bank
-                val merchant = (group(m, "merchant") ?: if (r.kind == "PAYMENT") "Card bill payment" else "Unknown").trim()
+                val rawName = group(m, "merchant")
+                val merchant = when {
+                    rawName != null -> if (r.kind.startsWith("UPI")) cleanName(rawName) else rawName.trim()
+                    r.kind == "PAYMENT" -> "Card bill payment"
+                    r.kind == "REFUND" -> "UPI reversal"
+                    r.kind == "UPI_IN" -> "Unknown sender"
+                    else -> "Unknown"
+                }
                 return Parsed(r.bank, r.kind, amt, card, merchant, parseDate(group(m, "date")))
             }
         }
