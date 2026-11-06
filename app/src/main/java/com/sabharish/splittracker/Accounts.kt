@@ -88,7 +88,7 @@ data class BalanceHit(val bank: String, val last: String, val balance: Double)
  */
 object BalanceSms {
     private val bal = Regex("""(?:avl\.? ?bal(?:ance)?|available bal(?:ance)?|current bal(?:ance)?|clear bal(?:ance)?)\s*(?:is|:|-)?\s*(?:rs\.?|inr)?\s*:?\s*([\d,]+(?:\.\d+)?)""", RegexOption.IGNORE_CASE)
-    private val acct = Regex("""(?:a/?c|acct|account)\s*(?:no\.?)?\s*(?:ending)?\s*[X*x]*\s*(\d{4})\b""", RegexOption.IGNORE_CASE)
+    private val acct = Regex("""(?:a/?c|acct|account)\s*(?:no\.?)?\s*(?:ending)?\s*[X*x]*\s*(\d{4,})\b""", RegexOption.IGNORE_CASE)
     private val banks = listOf("SBI" to "SBI", "ICICI" to "ICICI", "HDFC" to "HDFC", "KOTAK" to "KOTAK", "FEDERAL" to "FEDERAL",
         "DBS" to "DBS", "YES BANK" to "YES", "INDUSIND" to "INDUSIND", "UNION BANK" to "UNION", "BOI" to "BOI", "AXIS" to "AXIS")
 
