@@ -22,13 +22,10 @@ import java.util.Locale
 data class NewShare(val person: String, val amount: Double, val paid: Boolean)
 
 object Repo {
-    const val ME = "Me"
+    const val ME = Logic.ME
 
     // ---------- formatting ----------
-    fun money(v: Double): String {
-        val whole = Math.abs(v - Math.round(v)) < 0.005
-        return "₹" + String.format(Locale("en", "IN"), if (whole) "%,.0f" else "%,.2f", v)
-    }
+    fun money(v: Double): String = Logic.money(v)
 
     private val shortDate = SimpleDateFormat("d MMM", Locale.ENGLISH)
     fun shortDate(ms: Long): String = shortDate.format(Date(ms))
@@ -45,21 +42,14 @@ object Repo {
     }
 
     // ---------- keys ----------
-    private fun norm(s: String) = s.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+    private fun norm(s: String) = Logic.norm(s)
     /** Remembered choices are per merchant (any card or account). */
     fun merchantKey(merchant: String, @Suppress("UNUSED_PARAMETER") card: String) = "m|" + norm(merchant)
     fun catKey(merchant: String) = "cat|" + norm(merchant)
     fun aliasKey(raw: String) = "alias|" + norm(raw)
 
-    /** Friendly name used everywhere in the UI. Shows both names so the merchant stays recognisable. */
-    fun title(raw: String, aliases: Map<String, String>): String {
-        val a = aliases[norm(raw)] ?: Categories.builtinAlias(raw)
-        return if (a == null || a.equals(raw, true)) raw else "$a · $raw"
-    }
-
-    /** Short name for messages to other people. */
-    fun nameOnly(raw: String, aliases: Map<String, String>): String =
-        aliases[norm(raw)] ?: Categories.builtinAlias(raw) ?: raw
+    fun title(raw: String, aliases: Map<String, String>): String = Logic.title(raw, aliases)
+    fun nameOnly(raw: String, aliases: Map<String, String>): String = Logic.nameOnly(raw, aliases)
 
     // ---------- preferences ----------
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("st", Context.MODE_PRIVATE)
@@ -123,32 +113,15 @@ object Repo {
     }
 
     // ---------- refunds and failed payments ----------
-    private fun alnum4(s: String) = norm(s).take(4)
-
-    /** Purchases that could be the one this refund/reversal belongs to, best guess first. */
-    private suspend fun candidates(dao: AppDao, refund: Txn): List<Txn> {
-        val days = if (refund.merchant == "UPI reversal") 15L else 120L
+    /** Purchases that could be the one this refund belongs to (amount equal, shortly before it). */
+    private suspend fun rawCandidates(dao: AppDao, refund: Txn): List<Txn> {
+        val days = if (RefundMatcher.isUpiReversal(refund)) 15L else 120L
         val from = refund.smsTime - days * 86_400_000L
-        val c = dao.refundCandidates(refund.amount - 0.011, refund.amount + 0.011, from, refund.smsTime)
-        val reversal = refund.merchant == "UPI reversal"
-        return c.sortedWith(
-            compareByDescending<Txn> { it.status == "FAILED" }
-                .thenByDescending { reversal || alnum4(it.merchant) == alnum4(refund.merchant) }
-                .thenByDescending { it.smsTime }
-        )
+        return dao.refundCandidates(refund.amount - 0.011, refund.amount + 0.011, from, refund.smsTime)
     }
 
-    /** Returns the best match and whether it is certain enough to close the books without asking. */
-    private suspend fun findOriginal(dao: AppDao, refund: Txn): Pair<Txn, Boolean>? {
-        val c = candidates(dao, refund)
-        if (c.isEmpty()) return null
-        val failed = c.filter { it.status == "FAILED" }
-        if (failed.size == 1) return failed[0] to true
-        val reversal = refund.merchant == "UPI reversal"
-        val matches = if (reversal) c else c.filter { alnum4(it.merchant) == alnum4(refund.merchant) }
-        if (failed.isEmpty() && matches.size == 1) return matches[0] to true
-        return c[0] to false
-    }
+    private suspend fun findOriginal(dao: AppDao, refund: Txn): Pair<Txn, Boolean>? =
+        RefundMatcher.find(refund, rawCandidates(dao, refund))
 
     suspend fun suggestOriginal(ctx: Context, refund: Txn): Txn? = findOriginal(Db.get(ctx).dao(), refund)?.first
 
@@ -193,31 +166,10 @@ object Repo {
     }
 
     // ---------- tagging ----------
-    fun equalShares(total: Double, names: List<String>, paidOthers: Boolean): List<NewShare> {
-        val ordered = names.filter { it == ME } + names.filter { it != ME }
-        val n = ordered.size
-        if (n == 0) return emptyList()
-        val per = Math.floor(total / n * 100) / 100
-        var left = total
-        return ordered.mapIndexed { i, p ->
-            val a = if (i == n - 1) Math.round(left * 100) / 100.0 else per
-            left -= a
-            NewShare(p, a, p == ME || paidOthers)
-        }
-    }
+    fun equalShares(total: Double, names: List<String>, paidOthers: Boolean) = Logic.equalShares(total, names, paidOthers)
 
-    /** Shares proportional to weights (percentages or parts). Rounding remainder goes to the last person. */
-    fun weightedShares(total: Double, names: List<String>, weights: List<Double>, paidOthers: Boolean): List<NewShare>? {
-        if (names.isEmpty() || names.size != weights.size || weights.any { it < 0 }) return null
-        val sum = weights.sum()
-        if (sum <= 0) return null
-        var left = total
-        return names.mapIndexed { i, p ->
-            val a = if (i == names.size - 1) Math.round(left * 100) / 100.0 else Math.floor(total * weights[i] / sum * 100) / 100
-            left -= a
-            NewShare(p, a, p == ME || paidOthers)
-        }
-    }
+    fun weightedShares(total: Double, names: List<String>, weights: List<Double>, paidOthers: Boolean) =
+        Logic.weightedShares(total, names, weights, paidOthers)
 
     suspend fun setAlias(ctx: Context, raw: String, name: String) {
         val dao = Db.get(ctx).dao()
@@ -308,42 +260,11 @@ object Repo {
         }
     }
 
-    /** Best matching known person for a UPI sender name (e.g. "KURUVA KOUSHIK" ~ "Koushik K"). */
-    fun bestMatch(name: String, people: List<String>): String? {
-        fun toks(s: String) = s.lowercase(Locale.ROOT).split(Regex("[^a-z]+")).filter { it.length >= 3 }
-        val nt = toks(name)
-        if (nt.isEmpty()) return null
-        var best: String? = null
-        var bestScore = 0
-        for (p in people) {
-            val pt = toks(p)
-            val score = nt.count { a ->
-                pt.any { b -> a == b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) }
-            }
-            if (score > bestScore) { bestScore = score; best = p }
-        }
-        return best
-    }
+    fun bestMatch(name: String, people: List<String>): String? = Logic.bestMatch(name, people)
 
     // ---------- reminder text ----------
-    fun reminderText(ctx: Context, person: String, rows: List<PendingRow>, aliases: Map<String, String>): String {
-        val sorted = rows.sortedBy { it.txnDate }
-        val total = sorted.sumOf { it.amount - it.settled }
-        val days = ((System.currentTimeMillis() - sorted.first().txnDate) / 86_400_000L).toInt()
-        val first = person.trim().substringBefore(" ")
-        val intro = when {
-            days <= 14 -> "Hi $first 👋\nA quick reminder about the spends I covered for you:"
-            days <= 30 -> "Hi $first,\nGentle reminder about the spends I covered for you:"
-            else -> "Hi $first,\nFollowing up on the spends I covered for you. This has been pending for over a month:"
-        }
-        val shown = sorted.take(8)
-        val lines = shown.joinToString("\n") { "• ${shortDate(it.txnDate)} · ${nameOnly(it.merchant, aliases)} · ${money(it.amount - it.settled)}" }
-        val more = if (sorted.size > shown.size) "\n…and ${sorted.size - shown.size} more" else ""
-        val upi = getPref(ctx, "upi", "").trim()
-        val pay = if (upi.isNotEmpty()) "\nUPI: $upi" else ""
-        val close = if (days > 30) "\nCould you please clear it this week? Thank you!" else "\nThank you!"
-        return "$intro\n\n$lines$more\n\nTotal pending: ${money(total)}$pay$close"
-    }
+    fun reminderText(ctx: Context, person: String, rows: List<PendingRow>, aliases: Map<String, String>): String =
+        Reminder.build(person, rows, aliases, getPref(ctx, "upi", ""), System.currentTimeMillis())
 
     // ---------- system access ----------
     fun hasPermission(ctx: Context, perm: String) =

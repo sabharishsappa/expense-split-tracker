@@ -70,7 +70,9 @@ data class PendingRow(
     val settled: Double,
     val merchant: String,
     val card: String,
-    val txnDate: Long
+    val txnDate: Long,
+    val txnTotal: Double = 0.0,   // the whole bill
+    val parts: Int = 1            // people sharing the bill (you included)
 )
 
 data class SummaryRow(
@@ -155,7 +157,7 @@ interface AppDao {
     @Query("SELECT person FROM share WHERE person != 'Me' GROUP BY person ORDER BY MAX(id) DESC LIMIT 8")
     fun recentPeople(): Flow<List<String>>
 
-    @Query("SELECT s.id AS shareId, s.txnId AS txnId, s.person AS person, s.amount AS amount, s.settled AS settled, t.merchant AS merchant, t.card AS card, t.txnDate AS txnDate FROM share s JOIN txn t ON t.id = s.txnId WHERE s.person != 'Me' AND s.settled < s.amount - 0.005 ORDER BY t.txnDate ASC")
+    @Query("SELECT s.id AS shareId, s.txnId AS txnId, s.person AS person, s.amount AS amount, s.settled AS settled, t.merchant AS merchant, t.card AS card, t.txnDate AS txnDate, t.amount AS txnTotal, (SELECT COUNT(*) FROM share x WHERE x.txnId = t.id AND x.amount > 0.004) AS parts FROM share s JOIN txn t ON t.id = s.txnId WHERE s.person != 'Me' AND s.settled < s.amount - 0.005 ORDER BY t.txnDate ASC")
     fun pending(): Flow<List<PendingRow>>
 
     @Query("SELECT s.* FROM share s JOIN txn t ON t.id = s.txnId WHERE s.person = :p AND s.settled < s.amount - 0.005 ORDER BY t.txnDate ASC")

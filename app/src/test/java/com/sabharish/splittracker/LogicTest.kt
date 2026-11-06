@@ -1,0 +1,119 @@
+package com.sabharish.splittracker
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LogicTest {
+    private val me = Logic.ME
+
+    // ---------- money ----------
+    @Test fun moneyFormatting() {
+        assertEquals("₹640", Logic.money(640.0))
+        assertEquals("₹37.50", Logic.money(37.5))
+        assertEquals("₹1,234.50", Logic.money(1234.5))
+        assertEquals("₹1,00,000", Logic.money(100000.0))
+        assertEquals("₹12,34,567.89", Logic.money(1234567.89))
+        assertEquals("₹0", Logic.money(0.0))
+        assertEquals("-₹250", Logic.money(-250.0))
+    }
+
+    // ---------- equal split ----------
+    @Test fun equalSplitPutsMeFirstAndFixesRounding() {
+        val s = Logic.equalShares(100.0, listOf("A", me, "B"), false)
+        assertEquals(listOf(me, "A", "B"), s.map { it.person })
+        assertEquals(33.33, s[0].amount, 0.001)
+        assertEquals(33.33, s[1].amount, 0.001)
+        assertEquals(33.34, s[2].amount, 0.001)
+        assertEquals(100.0, s.sumOf { it.amount }, 0.001)
+    }
+
+    @Test fun equalSplitPaidFlags() {
+        val s = Logic.equalShares(90.0, listOf(me, "A", "B"), false)
+        assertEquals(listOf(true, false, false), s.map { it.paid })
+        val paid = Logic.equalShares(90.0, listOf(me, "A", "B"), true)
+        assertTrue(paid.all { it.paid })
+    }
+
+    @Test fun fivePersonSplitIsExact() {
+        val s = Logic.equalShares(187.5, listOf(me, "A", "B", "C", "D"), false)
+        assertTrue(s.all { Math.abs(it.amount - 37.5) < 0.001 })
+    }
+
+    @Test fun equalSplitOfNobodyIsEmpty() {
+        assertTrue(Logic.equalShares(50.0, emptyList(), false).isEmpty())
+    }
+
+    // ---------- percent / parts ----------
+    @Test fun percentSplit() {
+        val s = Logic.weightedShares(250.0, listOf(me, "A"), listOf(60.0, 40.0), false)!!
+        assertEquals(150.0, s[0].amount, 0.001)
+        assertEquals(100.0, s[1].amount, 0.001)
+    }
+
+    @Test fun partsSplitGivesRemainderToLast() {
+        val s = Logic.weightedShares(100.0, listOf(me, "A"), listOf(2.0, 1.0), false)!!
+        assertEquals(66.66, s[0].amount, 0.001)
+        assertEquals(33.34, s[1].amount, 0.001)
+        assertEquals(100.0, s.sumOf { it.amount }, 0.001)
+    }
+
+    @Test fun weightedSplitRejectsBadInput() {
+        assertNull(Logic.weightedShares(100.0, listOf(me, "A"), listOf(1.0), false))
+        assertNull(Logic.weightedShares(100.0, listOf(me, "A"), listOf(0.0, 0.0), false))
+        assertNull(Logic.weightedShares(100.0, listOf(me, "A"), listOf(-1.0, 2.0), false))
+        assertNull(Logic.weightedShares(100.0, emptyList(), emptyList(), false))
+    }
+
+    // ---------- selection summary (text beside the tick button) ----------
+    @Test fun selectionSummaries() {
+        assertEquals("Pick who this was for", Logic.selectionSummary(100.0, emptyList()))
+        assertEquals("Mine", Logic.selectionSummary(100.0, listOf(me)))
+        assertEquals("Rajesh owes ₹500", Logic.selectionSummary(500.0, listOf("Rajesh")))
+        assertEquals("Split 3 ways · ₹33.33 each", Logic.selectionSummary(100.0, listOf(me, "A", "B")))
+        assertEquals("Split 2 ways · ₹50 each", Logic.selectionSummary(100.0, listOf("A", "B")))
+    }
+
+    // ---------- UPI sender -> person ----------
+    @Test fun bestMatchFindsReorderedNames() {
+        val people = listOf("Rahul Sharma", "Koushik Kuruva")
+        assertEquals("Koushik Kuruva", Logic.bestMatch("KURUVA KOUSHIK", people))
+        assertEquals("Koushik Kuruva", Logic.bestMatch("KOUSHIK K", people))
+        assertNull(Logic.bestMatch("Unknown Person", people))
+        assertNull(Logic.bestMatch("", people))
+    }
+
+    // ---------- merchant names ----------
+    @Test fun titleShowsBothNames() {
+        assertEquals("CRED · RAZDREAMPLUGPAYTECHSOL", Logic.title("RAZDREAMPLUGPAYTECHSOL", emptyMap()))
+        assertEquals("CRED", Logic.nameOnly("RAZDREAMPLUGPAYTECHSOL", emptyMap()))
+        val aliases = mapOf(Logic.norm("Swiggy Instamart") to "Instamart")
+        assertEquals("Instamart · Swiggy Instamart", Logic.title("Swiggy Instamart", aliases))
+        assertEquals("Instamart", Logic.nameOnly("Swiggy Instamart", aliases))
+        assertEquals("Namma Irani", Logic.title("Namma Irani", emptyMap()))
+    }
+
+    @Test fun userAliasBeatsBuiltinAlias() {
+        val aliases = mapOf(Logic.norm("RAZDREAMPLUGPAYTECHSOL") to "Rent")
+        assertEquals("Rent · RAZDREAMPLUGPAYTECHSOL", Logic.title("RAZDREAMPLUGPAYTECHSOL", aliases))
+    }
+
+    // ---------- custom tags ----------
+    @Test fun addTagRules() {
+        assertEquals(listOf("Gym"), Logic.addTag(emptyList(), "  Gym  "))
+        assertEquals(listOf("Gym"), Logic.addTag(listOf("Gym"), "gym"))          // duplicate, any case
+        assertEquals(emptyList<String>(), Logic.addTag(emptyList(), "grocery"))    // built-in
+        assertEquals(emptyList<String>(), Logic.addTag(emptyList(), "   "))
+        assertEquals(listOf("Pets Vet"), Logic.addTag(emptyList(), "Pets,Vet"))  // commas removed
+        assertEquals(24, Logic.addTag(emptyList(), "x".repeat(40))[0].length)
+    }
+
+    @Test fun allTagsKeepsOtherLast() {
+        val tags = Logic.allTags(listOf("Gym", "Pets"))
+        assertEquals("Other", tags.last())
+        assertTrue(tags.indexOf("Gym") < tags.indexOf("Other"))
+        assertTrue(tags.contains("Grocery"))
+        assertEquals(tags.size, tags.distinct().size)
+    }
+}
