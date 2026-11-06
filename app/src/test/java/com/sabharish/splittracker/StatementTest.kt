@@ -204,3 +204,19 @@ class StatementLayoutsTest2 {
         assertEquals("UPIOUT/666692342341/yo-", l[0].desc)
     }
 }
+
+class StatementLayoutsDbs {
+    @Test fun dbsAccountWithValueDateAndOpeningBalance() {
+        val l = Statement.parse("""
+            Transaction Date    Value Date            Details of transaction                 Debit         Credit        Balance
+                                             Opening Balance                                                                   605.78
+             08-Feb-2026       08-Feb-2026   UPI~118361944702~sabharish.sappa@okhdfc                          1,000.00        1,605.78
+                                             bank~SAPPA
+             08-Feb-2026       08-Feb-2026   Purchase-603916722984-080226                       1,538.32                           67.46
+        """.trimIndent())
+        assertEquals(2, l.size)
+        assertEquals(listOf(true, false), l.map { it.credit })
+        assertEquals(listOf(1000.0, 1538.32), l.map { it.amount })
+        assertEquals("2026-02-08", TestUtil.ymd(l[0].date))
+    }
+}
