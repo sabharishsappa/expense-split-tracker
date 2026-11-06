@@ -522,8 +522,8 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                         var newTag by remember { mutableStateOf(false) }
                         var editing by remember { mutableStateOf<String?>(null) }
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            (Categories.all.filter { it != "Other" } + mine).forEach { c ->
-                                Pill(if (c in hidden) "$c (hidden)" else c, { editing = c }, selected = c in mine, compact = true)
+                            (vm.tags.collectAsState().value.filter { it != "Other" } + hidden).distinct().forEach { c ->
+                                Pill(if (c in hidden) "$c (hidden)" else c, { editing = c }, compact = true)
                             }
                             Pill("+ New", { newTag = true }, compact = true)
                         }

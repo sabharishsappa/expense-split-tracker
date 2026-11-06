@@ -2,6 +2,8 @@ package com.sabharish.splittracker
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -75,9 +77,10 @@ private fun firstNames(people: List<String>): List<String> {
 private fun daysSince(ms: Long) = ((System.currentTimeMillis() - ms) / 86_400_000L).toInt()
 
 @Composable
-private fun AppCard(content: @Composable () -> Unit) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun AppCard(onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth(),
+        if (onLongClick != null) Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).combinedClickable(onClick = {}, onLongClick = onLongClick) else Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -237,15 +240,15 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         Spacer(Modifier.height(8.dp))
     } else {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Tap names, then ✓. More… to split.", fontSize = 13.sp, color = muted(), modifier = Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
             TextButton(onClick = { selecting = true }) { Text("Select") }
             if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
         }
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliasesNow, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else SpendCard(t, vm, recents, undoable, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }) { tx, chosen -> sheetFor = tx to chosen }
+            else SpendCard(t, vm, recents, undoable, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen }
         }
     }
     sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen) }
@@ -261,7 +264,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
 }
 
 @Composable
-private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onSimilar: () -> Unit = {}, onMore: (Txn, List<String>) -> Unit) {
+private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onSimilar: () -> Unit = {}, onSelect: () -> Unit = {}, onMore: (Txn, List<String>) -> Unit) {
     val aliases by vm.aliases.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
     var catMenu by remember { mutableStateOf(false) }
@@ -271,7 +274,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
         vm.tag(t, shares, t.category, false, false)
         undoable(t.id, label)
     }
-    AppCard {
+    AppCard(onLongClick = onSelect) {
         TxnHeader(t, aliases) {
             Box {
                 IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
@@ -337,7 +340,7 @@ private fun MoneyInList(vm: MainVm, items: List<Txn>) {
     }
     val owed = pending.groupBy { it.person }.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.map { it.key }
     val known = (owed + recents + contacts).distinct()
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t -> MoneyCard(t, vm, owed, known, onPick = { pickFor = it }, onLink = { linkFor = it }) }
     }
     pickFor?.let { t ->
@@ -413,7 +416,7 @@ private fun AutoList(vm: MainVm, items: List<Txn>) {
     }
     Text("Counted as yours automatically. Change any that were for someone else.", fontSize = 13.sp, color = muted())
     Spacer(Modifier.height(6.dp))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
             AppCard {
                 TxnHeader(t, aliases)
@@ -438,7 +441,7 @@ private fun FailedList(vm: MainVm, items: List<Txn>) {
     }
     Text("Waiting for the bank to reverse these. They close automatically when the refund arrives.", fontSize = 13.sp, color = muted())
     Spacer(Modifier.height(6.dp))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
             val d = daysSince(t.txnDate)
             AppCard {
@@ -475,7 +478,7 @@ fun PendingScreen(vm: MainVm) {
     }
     Spacer(Modifier.height(12.dp))
     if (rows.isEmpty()) Text("Nobody owes you anything right now.", color = muted(), fontSize = 15.sp)
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(grouped.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.toList(), key = { it.key }) { e ->
             val owed = e.value.sumOf { it.amount - it.settled }
             val days = daysSince(e.value.minOf { it.txnDate })
@@ -566,7 +569,7 @@ fun AllScreen(vm: MainVm) {
             onDone = { picked.clear(); selecting = false })
     } else TextButton(onClick = { selecting = true }) { Text("Select several…") }
     Spacer(Modifier.height(4.dp))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(shown, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliases, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
             else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases) { sheetFor = it }
@@ -665,7 +668,7 @@ fun SummaryScreen(vm: MainVm) {
         .entries.sortedByDescending { it.value }
     val byCard = inMonth.groupBy { it.card }.entries.sortedByDescending { e -> e.value.sumOf { it.shareAmt } }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }

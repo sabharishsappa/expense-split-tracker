@@ -65,7 +65,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             dismissButton = { TextButton(onClick = { payingBill = null }) { Text("Close") } }
         )
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         item {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))

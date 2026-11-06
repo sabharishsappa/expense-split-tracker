@@ -253,3 +253,26 @@ class BulkSummaryTest {
     @Test fun oneOther() = org.junit.Assert.assertEquals("1 bill · ₹100 → all Ravi's", Logic.bulkSummary(1, 100.0, "", listOf("Ravi")))
     @Test fun tagAndSplit() = org.junit.Assert.assertEquals("4 bills · ₹1,000 → tag Trip, split Me + Ravi", Logic.bulkSummary(4, 1000.0, "Trip", listOf("Me", "Ravi")))
 }
+
+class TagOrderTest {
+    @Test fun mostUsedFirstOtherLast() {
+        val r = Logic.orderByUse(listOf("Food", "Travel", "Gym", "Other"), mapOf("Gym" to 9, "food" to 3))
+        org.junit.Assert.assertEquals(listOf("Gym", "Food", "Travel", "Other"), r)
+    }
+    @Test fun tiesKeepOriginalOrder() = org.junit.Assert.assertEquals(listOf("A", "B", "C"), Logic.orderByUse(listOf("A", "B", "C"), emptyMap()))
+    @Test fun newCustomTagWithUseMovesUp() =
+        org.junit.Assert.assertEquals("Pets", Logic.orderByUse(Logic.allTags(listOf("Pets")), mapOf("Pets" to 5)).first())
+}
+
+class ReminderTagTest {
+    private val now = TestUtil.ms(2026, 11, 6)
+    @Test fun reminderShowsTagAndMerchant() {
+        val row = TestUtil.pending("Ravi", "SWIGGY", 250.0, TestUtil.ms(2026, 11, 3)).copy(category = "Food")
+        val msg = Reminder.build("Ravi", listOf(row), emptyMap(), "", now)
+        org.junit.Assert.assertTrue(msg, msg.contains("Food · "))
+    }
+    @Test fun noTagNoPrefix() {
+        val row = TestUtil.pending("Ravi", "SWIGGY", 250.0, TestUtil.ms(2026, 11, 3))
+        org.junit.Assert.assertFalse(Reminder.build("Ravi", listOf(row), emptyMap(), "", now).contains("Food"))
+    }
+}

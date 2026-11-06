@@ -159,6 +159,14 @@ object Logic {
     fun allTags(custom: List<String>, hidden: List<String> = emptyList()): List<String> =
         Categories.all.filter { it != "Other" && it !in hidden } + custom + "Other"
 
+    /** Most-used tags first (ties keep their original order); "Other" always last. */
+    fun orderByUse(tags: List<String>, counts: Map<String, Int>): List<String> {
+        val lower = counts.mapKeys { it.key.lowercase(Locale.ROOT) }
+        val body = tags.filter { it != "Other" }
+        val sorted = body.withIndex().sortedWith(compareByDescending<IndexedValue<String>> { lower[it.value.lowercase(Locale.ROOT)] ?: 0 }.thenBy { it.index }).map { it.value }
+        return sorted + tags.filter { it == "Other" }
+    }
+
     /** New list with [old] renamed, or null when the new name is empty or already used. */
     fun renameTag(custom: List<String>, old: String, new: String): List<String>? {
         val n = new.replace(",", " ").trim().take(24)
@@ -219,7 +227,8 @@ object Reminder {
         }
         val shown = sorted.take(8)
         val lines = shown.joinToString("\n") { r ->
-            val name = Logic.nameOnly(r.merchant, aliases)
+            val shop = Logic.nameOnly(r.merchant, aliases)
+            val name = if (r.category.isNotBlank() && !r.category.equals("Other", true)) "${r.category} · $shop" else shop
             val date = Logic.shortDate(r.txnDate)
             if (r.parts > 1) {
                 val paid = if (r.settled > 0.004) " (paid ${Logic.money(r.settled)}, due ${Logic.money(r.amount - r.settled)})" else ""
