@@ -131,11 +131,11 @@ interface AppDao {
     @Query("SELECT * FROM txn WHERE kind = :kind AND status = 'INBOX' AND amount BETWEEN :lo AND :hi AND smsTime BETWEEN :from AND :to")
     suspend fun transferCandidates(kind: String, lo: Double, hi: Double, from: Long, to: Long): List<Txn>
 
-    @Query("UPDATE txn SET category = :new WHERE category = :old COLLATE NOCASE")
-    suspend fun renameCategory(old: String, new: String)
+    @Query("UPDATE txn SET category = :newName WHERE category = :oldName COLLATE NOCASE")
+    suspend fun renameCategory(oldName: String, newName: String)
 
-    @Query("UPDATE rule SET people = :new WHERE action = 'CAT' AND people = :old COLLATE NOCASE")
-    suspend fun renameCatRules(old: String, new: String)
+    @Query("UPDATE rule SET people = :newName WHERE action = 'CAT' AND people = :oldName COLLATE NOCASE")
+    suspend fun renameCatRules(oldName: String, newName: String)
 
     @Query("DELETE FROM rule WHERE action = 'CAT' AND people = :name COLLATE NOCASE")
     suspend fun deleteCatRules(name: String)
