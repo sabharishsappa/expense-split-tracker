@@ -169,7 +169,7 @@ class TagEditTest {
         assertNull(Logic.renameTag(listOf("Gym"), "Gym", "Grocery"))            // built-in name
         assertNull(Logic.renameTag(listOf("Gym"), "Gym", "   "))
         assertNull(Logic.renameTag(listOf("Gym"), "Unknown", "X"))
-        assertEquals(listOf("Gym"), Logic.renameTag(listOf("Gym"), "Gym", "GYM"))   // only case changed
+        assertEquals(listOf("GYM"), Logic.renameTag(listOf("Gym"), "Gym", "GYM"))   // only the case changed
     }
 
     @Test fun hiddenBuiltInsLeaveTheListButOtherStays() {
