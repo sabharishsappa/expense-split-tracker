@@ -399,8 +399,7 @@ fun PendingScreen(vm: MainVm) {
         SettleDialog(person, owed, onDismiss = { settleFor = null }) { amt, mode -> vm.settle(person, amt, mode); settleFor = null }
     }
     remindFor?.let { person ->
-        val text = Repo.reminderText(ctx, person, rows.filter { it.person == person }, aliases)
-        ReminderDialog(text) { remindFor = null }
+        ReminderDialog({ upi -> Reminder.build(person, rows.filter { it.person == person }, aliases, upi, System.currentTimeMillis()) }) { remindFor = null }
     }
 }
 

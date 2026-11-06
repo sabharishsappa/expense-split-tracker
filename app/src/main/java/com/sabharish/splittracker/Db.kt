@@ -86,6 +86,18 @@ data class SummaryRow(
 
 @Dao
 interface AppDao {
+    @Query("SELECT * FROM txn") suspend fun allTxnsList(): List<Txn>
+    @Query("SELECT * FROM share") suspend fun allSharesList(): List<Share>
+    @Query("SELECT * FROM settlement") suspend fun allSettlementsList(): List<Settlement>
+    @Query("SELECT * FROM rule") suspend fun allRulesList(): List<Rule>
+    @Query("DELETE FROM txn") suspend fun wipeTxns()
+    @Query("DELETE FROM share") suspend fun wipeShares()
+    @Query("DELETE FROM settlement") suspend fun wipeSettlements()
+    @Query("DELETE FROM rule") suspend fun wipeRules()
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreTxn(t: Txn)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreShare(s: Share)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreSettlement(s: Settlement)
+
     @Insert suspend fun insert(t: Txn): Long
     @Insert suspend fun insertShare(s: Share): Long
     @Insert suspend fun insertSettlement(s: Settlement)

@@ -52,6 +52,19 @@ class MainVm(app: Application) : AndroidViewModel(app) {
         if (!quiet || n > 0) status.value = if (n > 0) "Imported $n new transactions" else "No new transactions found"
     }
 
+    val lastBackup = MutableStateFlow(Repo.getPref(app, "lastBackup", "0").toLongOrNull() ?: 0L)
+
+    suspend fun backupText(): String { val t = Repo.exportBackup(getApplication()); lastBackup.value = System.currentTimeMillis(); return t }
+
+    fun restore(text: String) = viewModelScope.launch {
+        val n = Repo.restoreBackup(getApplication(), text)
+        if (n >= 0) {
+            customTags.value = Logic.parseTags(Repo.getPref(getApplication(), "tags", ""))
+            ThemeState.mode = Repo.getPref(getApplication(), "theme", ThemeState.mode)
+        }
+        status.value = if (n >= 0) "Restored $n transactions" else "That file is not a Split Tracker backup"
+    }
+
     fun clearStatus() { status.value = "" }
 
     fun tag(t: Txn, shares: List<NewShare>, category: String, remember: Boolean, splitAdded: Boolean) =

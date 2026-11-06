@@ -266,6 +266,28 @@ object Repo {
     fun reminderText(ctx: Context, person: String, rows: List<PendingRow>, aliases: Map<String, String>): String =
         Reminder.build(person, rows, aliases, getPref(ctx, "upi", ""), System.currentTimeMillis())
 
+    // ---------- backup ----------
+    suspend fun exportBackup(ctx: Context): String {
+        val dao = Db.get(ctx).dao()
+        val prefs = Backup.PREF_KEYS.associateWith { getPref(ctx, it, "") }.filterValues { it.isNotEmpty() }
+        val json = Backup.toJson(BackupData(dao.allTxnsList(), dao.allSharesList(), dao.allSettlementsList(), dao.allRulesList(), prefs), System.currentTimeMillis())
+        putPref(ctx, "lastBackup", System.currentTimeMillis().toString())
+        return json
+    }
+
+    /** Replaces everything with the backup. Returns the number of transactions restored, or -1 if the file is not a backup. */
+    suspend fun restoreBackup(ctx: Context, text: String): Int {
+        val d = Backup.fromJson(text) ?: return -1
+        val dao = Db.get(ctx).dao()
+        dao.wipeShares(); dao.wipeSettlements(); dao.wipeRules(); dao.wipeTxns()
+        d.txns.forEach { dao.restoreTxn(it) }
+        d.shares.forEach { dao.restoreShare(it) }
+        d.settlements.forEach { dao.restoreSettlement(it) }
+        d.rules.forEach { dao.putRule(it) }
+        d.prefs.forEach { (k, v) -> putPref(ctx, k, v) }
+        return d.txns.size
+    }
+
     // ---------- system access ----------
     fun hasPermission(ctx: Context, perm: String) =
         ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED

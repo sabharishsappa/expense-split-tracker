@@ -1,6 +1,12 @@
 package com.sabharish.splittracker
 
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -353,22 +359,28 @@ fun SettleDialog(person: String, owed: Double, onDismiss: () -> Unit, onSave: (D
 // Reminder preview: edit, copy or share
 // ---------------------------------------------------------------
 @Composable
-fun ReminderDialog(initial: String, onDismiss: () -> Unit) {
+fun ReminderDialog(build: (String) -> String, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val clip = LocalClipboardManager.current
-    var text by remember { mutableStateOf(initial) }
+    var upi by remember { mutableStateOf(Repo.getPref(ctx, "upi", "")) }
+    var text by remember { mutableStateOf(build(upi)) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Reminder message") },
         text = {
-            OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth().height(260.dp))
+            Column {
+                OutlinedTextField(value = upi, onValueChange = { upi = it; text = build(it.trim()) }, singleLine = true,
+                    label = { Text("Your UPI ID (added to message)") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth().height(240.dp))
+            }
         },
         confirmButton = {
-            Button(onClick = { share(ctx, text); onDismiss() }) { Text("Send…") }
+            Button(onClick = { Repo.putPref(ctx, "upi", upi.trim()); share(ctx, text); onDismiss() }) { Text("Send…") }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { clip.setText(AnnotatedString(text)); onDismiss() }) { Text("Copy") }
+                TextButton(onClick = { Repo.putPref(ctx, "upi", upi.trim()); clip.setText(AnnotatedString(text)); onDismiss() }) { Text("Copy") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         }
@@ -388,6 +400,23 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     var upi by remember { mutableStateOf(Repo.getPref(ctx, "upi", "")) }
     var names by remember { mutableStateOf(Repo.getPref(ctx, "selfnames", "sabharish")) }
+    val scope = rememberCoroutineScope()
+    val last by vm.lastBackup.collectAsState()
+    var note by remember { mutableStateOf("") }
+    val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            val text = vm.backupText()
+            withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } }
+            note = "Backup saved"
+        }
+    }
+    val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val text = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" }
+            vm.restore(text)
+            onDismiss()
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
@@ -416,6 +445,16 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                         Pill(label, { ThemeState.mode = m; Repo.putPref(ctx, "theme", m) }, selected = ThemeState.mode == m)
                     }
                 }
+                Spacer(Modifier.height(14.dp))
+                Text("Backup", fontWeight = FontWeight.SemiBold)
+                Text(if (last > 0) "Last backup: ${Repo.shortDate(last)}" else "No backup yet", fontSize = 12.sp, color = muted())
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { saveFile.launch("SplitTracker-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
+                    OutlinedButton(onClick = { openFile.launch(arrayOf("*/*")) }) { Text("Restore") }
+                }
+                if (note.isNotEmpty()) Text(note, fontSize = 12.sp, color = teal())
+                Text("Saves everything: transactions, tags, people, rules, settings. Restore replaces what is on this phone.", fontSize = 12.sp, color = muted())
                 Spacer(Modifier.height(14.dp))
                 Text("Import older messages", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
