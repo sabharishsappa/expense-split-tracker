@@ -368,6 +368,16 @@ object Repo {
             txnDate = l.date, smsTime = l.date, status = "INBOX", note = "Added from statement"))
     }
 
+    // ---------- entries made by hand ----------
+    /** A spend that has no SMS (cash, another app). Starts untagged so the normal split page can finish it. */
+    suspend fun addManual(ctx: Context, title: String, amount: Double): Txn {
+        val dao = Db.get(ctx).dao(); val now = System.currentTimeMillis()
+        val t = Txn(bank = "CASH", card = "", kind = "UPI_OUT", amount = amount, merchant = title.trim().ifEmpty { "Added by me" },
+            txnDate = now, smsTime = now, status = "INBOX", note = "Added by hand")
+        return t.copy(id = dao.insert(t))
+    }
+    suspend fun deleteManual(ctx: Context, id: Long) = Db.get(ctx).dao().deleteTxnIfInbox(id)
+
     // ---------- cash lent ----------
     /** Money you handed over (cash or otherwise) that someone should give back. Shows under Owed as "Lent". */
     suspend fun addLent(ctx: Context, person: String, amount: Double, note: String = "") {

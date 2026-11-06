@@ -146,6 +146,7 @@ interface AppDao {
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'cat|%' ORDER BY ruleKey")
     fun catRules(): Flow<List<Rule>>
 
+    @Query("DELETE FROM txn WHERE id = :id AND status = 'INBOX' AND bank = 'CASH'") suspend fun deleteTxnIfInbox(id: Long)
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'")
     fun acctRules(): Flow<List<Rule>>
 

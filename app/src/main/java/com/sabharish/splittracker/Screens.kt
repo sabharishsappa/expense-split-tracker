@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -82,11 +83,15 @@ private fun daysSince(ms: Long) = ((System.currentTimeMillis() - ms) / 86_400_00
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun AppCard(onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Card(
-        if (onLongClick != null || onClick != null) Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick) else Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) { Column(Modifier.padding(16.dp)) { content() } }
+    ) {
+        Column(
+            (if (onLongClick != null || onClick != null) Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick) else Modifier).padding(16.dp)
+        ) { content() }
+    }
 }
 
 /** Merchant (with its friendly name) on the left, amount on the right, one detail line below. */
@@ -458,8 +463,10 @@ fun PendingScreen(vm: MainVm, q: String) {
     val aliases by vm.aliases.collectAsState()
     val allRows by vm.pending.collectAsState()
     val rows = if (q.isBlank()) allRows else allRows.filter { it.person.contains(q.trim(), true) || Repo.nameOnly(it.merchant, aliases).contains(q.trim(), true) || it.category.contains(q.trim(), true) }
-    var lentFor by remember { mutableStateOf<String?>(null) }
-    var pickLent by remember { mutableStateOf(false) }
+    var addSplit by remember { mutableStateOf(false) }
+    var manual by remember { mutableStateOf<Txn?>(null) }
+    var manualSaved by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var settleFor by remember { mutableStateOf<String?>(null) }
     var remindFor by remember { mutableStateOf<String?>(null) }
     val grouped = remember(rows) { rows.groupBy { it.person } }
@@ -475,7 +482,7 @@ fun PendingScreen(vm: MainVm, q: String) {
         val lent = Logic.lentTotal(rows)
         if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = teal())
         Spacer(Modifier.height(6.dp))
-        OutlinedButton(onClick = { pickLent = true }) { Text("+ I lent money") }
+        OutlinedButton(onClick = { addSplit = true }) { Text("+ Add a split") }
     }
     Spacer(Modifier.height(12.dp))
     if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
@@ -517,17 +524,35 @@ fun PendingScreen(vm: MainVm, q: String) {
             }
         }
     }
-    if (pickLent) PersonPickerDialog(vm, "Who did you lend to?", { pickLent = false }) { lentFor = it; pickLent = false }
-    lentFor?.let { person ->
+    if (addSplit) {
         var amt by remember { mutableStateOf("") }
+        var what by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { lentFor = null },
-            title = { Text("Lent to $person") },
-            text = { OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount ₹") },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)) },
-            confirmButton = { TextButton(enabled = (amt.toDoubleOrNull() ?: 0.0) > 0, onClick = { vm.addLent(person, amt.toDouble()); lentFor = null }) { Text("Add") } },
-            dismissButton = { TextButton(onClick = { lentFor = null }) { Text("Cancel") } }
+            onDismissRequest = { addSplit = false },
+            title = { Text("Add a split") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("For money you paid that isn't in your messages, like cash.", fontSize = 13.sp, color = muted())
+                    OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount ₹") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                    OutlinedTextField(value = what, onValueChange = { what = it }, singleLine = true, label = { Text("What was it for?") })
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = (amt.replace(",", "").toDoubleOrNull() ?: 0.0) > 0, onClick = {
+                    val v = amt.replace(",", "").toDouble(); val w = what
+                    addSplit = false
+                    scope.launch { manualSaved = false; manual = Repo.addManual(ctx, w, v) }
+                }) { Text("Next") }
+            },
+            dismissButton = { TextButton(onClick = { addSplit = false }) { Text("Cancel") } }
         )
+    }
+    manual?.let { t ->
+        TagSheet(vm, t, onDismiss = {
+            if (!manualSaved) scope.launch { Repo.deleteManual(ctx, t.id) }
+            manual = null
+        }, onSaved = { manualSaved = true })
     }
     settleFor?.let { person ->
         val mine = rows.filter { it.person == person }
