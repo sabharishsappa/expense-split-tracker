@@ -1,5 +1,6 @@
 package com.sabharish.splittracker
 
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -89,5 +90,18 @@ fun Pill(
         contentAlignment = Alignment.Center
     ) {
         Text(text, color = if (on) scheme.onPrimary else scheme.onSurface, fontSize = 15.sp)
+    }
+}
+
+/** Round initial avatar with a stable colour per name. */
+@Composable
+fun Avatar(name: String, size: Int = 40) {
+    val palette = listOf(0xFF0F766E, 0xFF7C3AED, 0xFFB45309, 0xFF0369A1, 0xFFBE185D, 0xFF4D7C0F)
+    val c = Color(palette[Math.abs(name.hashCode()) % palette.size])
+    androidx.compose.foundation.layout.Box(
+        Modifier.size(size.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c.copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(name.trim().take(1).uppercase(), color = c, fontSize = (size * 0.42).sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     }
 }

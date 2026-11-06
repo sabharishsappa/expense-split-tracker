@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -108,19 +109,21 @@ fun App(vm: MainVm) {
         }
     }
 
-    val titles = listOf("To review", "Pending", "Transactions", "Summary")
+    val titles = listOf("Home", "To review", "Pending", "Transactions", "Summary")
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
-                    icon = { Icon(Icons.Default.Email, null) }, label = { Text("Inbox ${spends.size + money.size}") })
+                    icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
                 NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.Person, null) }, label = { Text("Pending") })
+                    icon = { Icon(Icons.Default.Email, null) }, label = { Text(if (spends.size + money.size > 0) "Inbox ${spends.size + money.size}" else "Inbox") })
                 NavigationBarItem(selected = tab == 2, onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.List, null) }, label = { Text("All") })
+                    icon = { Icon(Icons.Default.Person, null) }, label = { Text("Pending") })
                 NavigationBarItem(selected = tab == 3, onClick = { tab = 3 },
+                    icon = { Icon(Icons.Default.List, null) }, label = { Text("All") })
+                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 },
                     icon = { Icon(Icons.Default.DateRange, null) }, label = { Text("Summary") })
             }
         }
@@ -133,9 +136,10 @@ fun App(vm: MainVm) {
             }
             Spacer(Modifier.height(6.dp))
             when (tab) {
-                0 -> InboxScreen(vm, undoable)
-                1 -> PendingScreen(vm)
-                2 -> AllScreen(vm)
+                0 -> HomeScreen(vm) { tab = it }
+                1 -> InboxScreen(vm, undoable)
+                2 -> PendingScreen(vm)
+                3 -> AllScreen(vm)
                 else -> SummaryScreen(vm)
             }
         }
