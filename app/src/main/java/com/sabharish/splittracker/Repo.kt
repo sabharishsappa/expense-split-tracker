@@ -305,6 +305,14 @@ object Repo {
     fun reminderText(ctx: Context, person: String, rows: List<PendingRow>, aliases: Map<String, String>): String =
         Reminder.build(person, rows, aliases, getPref(ctx, "upi", ""), System.currentTimeMillis())
 
+    // ---------- statements ----------
+    /** Adds a statement line the app never saw, as an untagged spend. */
+    suspend fun addFromStatement(ctx: Context, s: StmtSource, l: StmtLine) {
+        val kind = if (s.isCard) "SPEND" else "UPI_OUT"
+        Db.get(ctx).dao().insert(Txn(bank = s.bank, card = s.last, kind = kind, amount = l.amount, merchant = Logic.title(l.desc.take(40), emptyMap()),
+            txnDate = l.date, smsTime = l.date, status = "INBOX", note = "Added from statement"))
+    }
+
     // ---------- accounts ----------
     suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double) {
         val bank = key.substringBefore("|"); val last = key.substringAfter("|")

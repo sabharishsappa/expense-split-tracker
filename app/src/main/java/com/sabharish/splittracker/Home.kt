@@ -1,6 +1,9 @@
 package com.sabharish.splittracker
 
 import androidx.compose.foundation.background
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +50,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
     val owed = pending.filter { it.person != Repo.ME }.groupBy { it.person }
         .mapValues { e -> e.value.sumOf { it.amount - it.settled } }.filterValues { it > 0.004 }
     val accounts by vm.accounts.collectAsState()
+    var checking by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<AccountView?>(null) }
     val total = owed.values.sum()
     val toReview = spends.size + money.size
@@ -119,6 +123,17 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             }
             item { Text("Moves between your own accounts are spotted automatically and kept out of your spends.", fontSize = 12.sp, color = muted()) }
         }
+        item {
+            Card(
+                Modifier.fillMaxWidth().clickable { checking = true }, shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Check a statement", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Upload a card or bank statement and see what's missing or extra", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+        }
         if (owed.isNotEmpty()) {
             item { Text("Who owes you", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.padding(top = 4.dp)) }
             owed.entries.sortedByDescending { it.value }.take(6).forEach { (p, amt) ->
@@ -138,6 +153,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             }
         }
     }
+    if (checking) StatementFlow(vm) { checking = false }
     editing?.let { a -> BalanceDialog(a, { editing = null }) { n, b -> vm.setBalance(a.key, n, b); editing = null } }
 }
 
@@ -187,5 +203,85 @@ private fun ClarityRing(fraction: Float) {
             drawArc(bar, -90f, 360f * fraction, false, style = stroke)
         }
         Text("${(fraction * 100).toInt()}%", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val all by vm.all.collectAsState()
+    val sources = remember(all.size) { Statement.sources(all) }
+    var source by remember { mutableStateOf<StmtSource?>(null) }
+    var password by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    var result by remember { mutableStateOf<Recon?>(null) }
+    var added by remember { mutableStateOf(setOf<StmtLine>()) }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val s = source
+        if (uri != null && s != null) scope.launch {
+            message = "Reading…"
+            try {
+                val text = StatementReader.readText(ctx, uri, password)
+                val lines = Statement.parse(text)
+                if (lines.isEmpty()) message = "I couldn't find any transactions in that file. If it is a PDF, send me a sample so I can tune the reader."
+                else { result = Statement.reconcile(lines, Statement.txnsFor(s, all)); message = "" }
+            } catch (e: StatementReader.NeedsPassword) {
+                message = "Could not open it. If the PDF has a password, enter it above and choose the file again."
+            } catch (e: Exception) { message = "Could not read that file." }
+        }
+    }
+    val r = result
+    if (r == null) {
+        AlertDialog(
+            onDismissRequest = onDone,
+            title = { Text("Check a statement") },
+            text = {
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    Text("1. Which card or account?", fontWeight = FontWeight.SemiBold)
+                    if (sources.isEmpty()) Text("Nothing to check yet. Statements can be checked once some transactions are in.", fontSize = 13.sp, color = muted())
+                    sources.forEach { s -> Pill(s.label, { source = s }, selected = source == s, modifier = Modifier.padding(top = 6.dp)) }
+                    Spacer(Modifier.height(12.dp))
+                    Text("2. PDF password (if any)", fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(value = password, onValueChange = { password = it }, singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    Text("Used only to open the file on this phone. It is not saved.", fontSize = 12.sp, color = muted())
+                    if (message.isNotEmpty()) { Spacer(Modifier.height(8.dp)); Text(message, fontSize = 13.sp, color = amber()) }
+                }
+            },
+            confirmButton = { TextButton(enabled = source != null, onClick = { pick.launch(arrayOf("*/*")) }) { Text("Choose file") } },
+            dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } }
+        )
+    } else {
+        val s = source!!
+        AlertDialog(
+            onDismissRequest = onDone,
+            title = { Text("${r.matched} of ${r.lines} lines match") },
+            text = {
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    if (r.missing.isEmpty() && r.extra.isEmpty()) Text("Everything lines up 🎉")
+                    if (r.missing.isNotEmpty()) {
+                        Text("On the statement, not in the app (${r.missing.size})", fontWeight = FontWeight.SemiBold)
+                        r.missing.forEach { l ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("${Logic.shortDate(l.date)} · ${l.desc.take(28)} · ${Logic.money(l.amount)}${if (l.credit) " (credit)" else ""}", Modifier.weight(1f), fontSize = 13.sp)
+                                if (!l.credit) {
+                                    if (l in added) Text("Added", fontSize = 12.sp, color = green())
+                                    else TextButton(onClick = { vm.addFromStatement(s, l); added = added + l }) { Text("Add") }
+                                }
+                            }
+                        }
+                        Text("Added lines land in your Inbox to tag.", fontSize = 12.sp, color = muted())
+                    }
+                    if (r.extra.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text("In the app, not on the statement (${r.extra.size})", fontWeight = FontWeight.SemiBold)
+                        r.extra.forEach { t -> Text("${Logic.shortDate(t.txnDate)} · ${t.merchant.take(28)} · ${Logic.money(t.amount)}", fontSize = 13.sp) }
+                        Text("These may be pending on the bank side, or from another card.", fontSize = 12.sp, color = muted())
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = onDone) { Text("✓") } }
+        )
     }
 }

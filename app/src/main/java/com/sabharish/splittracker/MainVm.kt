@@ -44,6 +44,8 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun setBalance(key: String, name: String, balance: Double) =
         viewModelScope.launch { Repo.setAccountBalance(getApplication(), key, name, balance) }
 
+    fun addFromStatement(s: StmtSource, l: StmtLine) = viewModelScope.launch { Repo.addFromStatement(getApplication(), s, l) }
+
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 
