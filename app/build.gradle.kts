@@ -16,9 +16,23 @@ android {
         versionName = "1.0"
     }
 
+    // One fixed signing key, so every new build installs over the previous one
+    signingConfigs {
+        create("fixed") {
+            storeFile = file("fixed.keystore")
+            storePassword = "splittracker"
+            keyAlias = "splittracker"
+            keyPassword = "splittracker"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("fixed")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("fixed")
         }
     }
     compileOptions {
