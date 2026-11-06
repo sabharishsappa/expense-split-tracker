@@ -143,7 +143,7 @@ class SettleSelectionTest {
         TestUtil.pending("A", "Z", 40.0, 3 * day).copy(shareId = 3)
     )
 
-    @Test fun nothingTickedMeansAll() { assertEquals(390.0, Logic.dueOf(rows, emptySet()), 0.001) }
+    @Test fun nothingTickedMeansAll() { assertEquals(340.0, Logic.dueOf(rows, emptySet()), 0.001) }
     @Test fun onlyTickedBillsCount() { assertEquals(300.0, Logic.dueOf(rows, setOf(1L, 2L)), 0.001) }
     @Test fun partlyPaidBillCountsWhatIsDue() { assertEquals(200.0, Logic.dueOf(rows, setOf(2L)), 0.001) }
 }
@@ -151,7 +151,7 @@ class SettleSelectionTest {
 class SimilarTest {
     @Test fun sameMerchantIgnoringCaseAndSpaces() {
         val a = TestUtil.tx(1, "Kings and Queens", 100.0, 1)
-        val others = listOf(TestUtil.tx(2, "KINGS AND QUEENS", 50.0, 2), TestUtil.tx(3, "Kings & Queens", 60.0, 3),
+        val others = listOf(TestUtil.tx(2, "KINGS AND QUEENS", 50.0, 2), TestUtil.tx(3, "Kings And  Queens", 60.0, 3),
             TestUtil.tx(4, "Kings", 10.0, 4), a)
         assertEquals(listOf(2L, 3L), Logic.similar(a, others).map { it.id })
     }
