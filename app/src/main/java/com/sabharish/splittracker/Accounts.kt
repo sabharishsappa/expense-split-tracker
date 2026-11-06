@@ -97,7 +97,7 @@ object BalanceSms {
         val b = body.replace(Regex("\\s+"), " ")
         if (Regex("credit card|card ending|spent on", RegexOption.IGNORE_CASE).containsMatchIn(b)) return null
         val amount = bal.find(b)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: return null
-        val last = acct.find(b)?.groupValues?.get(1) ?: return null
+        val last = acct.find(b)?.groupValues?.get(1)?.takeLast(4) ?: return null
         val up = b.uppercase()
         val bank = banks.firstOrNull { up.contains(it.first) }?.second ?: return null
         return BalanceHit(bank, last, amount)
