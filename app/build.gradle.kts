@@ -12,8 +12,9 @@ android {
         applicationId = "com.sabharish.splittracker"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Rises with every GitHub build, so each one counts as an update
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
     // One fixed signing key, so every new build installs over the previous one
