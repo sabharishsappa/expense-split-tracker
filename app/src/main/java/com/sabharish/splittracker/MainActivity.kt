@@ -109,7 +109,7 @@ fun App(vm: MainVm) {
         }
     }
 
-    val titles = listOf("Home", "To review", "Pending", "Transactions", "Summary")
+    val titles = listOf("Today", "Inbox", "Owed to you", "Transactions", "Summary")
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },

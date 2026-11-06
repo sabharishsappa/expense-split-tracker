@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -63,6 +65,31 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                     if (owed.isEmpty()) "All settled 🎉" else "${owed.size} ${if (owed.size == 1) "person" else "people"} · tap to see details",
                     color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp
                 )
+            }
+        }
+        item {
+            val all by vm.all.collectAsState()
+            val now = System.currentTimeMillis()
+            val clarity = Habit.clarity(all, Habit.monthStart(now))
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            var streak by remember { mutableStateOf(Habit.decode(Repo.getPref(ctx, "streak", ""))) }
+            androidx.compose.runtime.LaunchedEffect(spends.size, money.size, all.size) {
+                if (all.isNotEmpty()) {
+                    val next = Habit.update(streak, System.currentTimeMillis(), spends.isEmpty() && money.isEmpty())
+                    if (next != streak) { streak = next; Repo.putPref(ctx, "streak", Habit.encode(next)) }
+                }
+            }
+            val days = Habit.shown(streak, now)
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ClarityRing(clarity ?: 1f)
+                    Spacer(Modifier.padding(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("This month's clarity", fontSize = 13.sp, color = muted())
+                        Text(Habit.clarityLine(((clarity ?: 1f) * 100).toInt(), spends.size), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (days > 0) "🔥 $days-day inbox-zero streak" else "Clear your inbox today to start a streak", fontSize = 13.sp, color = if (days > 0) amber() else muted())
+                    }
+                }
             }
         }
         item {
@@ -147,4 +174,18 @@ private fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String
         confirmButton = { TextButton(onClick = { amount.replace(",", "").toDoubleOrNull()?.let { onSave(name, it) } }) { Text("✓") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+@Composable
+private fun ClarityRing(fraction: Float) {
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val bar = MaterialTheme.colorScheme.primary
+    androidx.compose.foundation.layout.Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = 9.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            drawArc(track, -90f, 360f, false, style = stroke)
+            drawArc(bar, -90f, 360f * fraction, false, style = stroke)
+        }
+        Text("${(fraction * 100).toInt()}%", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    }
 }

@@ -109,15 +109,28 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
     val auto by vm.autoTagged.collectAsState()
     val failed by vm.failed.collectAsState()
     var section by remember { mutableIntStateOf(0) }
+    var via by remember { mutableStateOf("All") }
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Pill("To tag · ${spends.size}", { section = 0 }, selected = section == 0)
-        Pill("Money in · ${money.size}", { section = 1 }, selected = section == 1)
-        Pill("Auto · ${auto.size}", { section = 2 }, selected = section == 2)
-        Pill("Failed · ${failed.size}", { section = 3 }, selected = section == 3)
+        Pill("Spent · ${spends.size}", { section = 0 }, selected = section == 0)
+        Pill("Received · ${money.size}", { section = 1 }, selected = section == 1)
+        Pill("Auto-sorted · ${auto.size}", { section = 2 }, selected = section == 2)
+        if (failed.isNotEmpty() || section == 3) Pill("Refund watch · ${failed.size}", { section = 3 }, selected = section == 3)
     }
     Spacer(Modifier.height(10.dp))
     when (section) {
-        0 -> SpendList(vm, spends, undoable)
+        0 -> {
+            val cards = spends.count { it.kind == "SPEND" }
+            val upi = spends.size - cards
+            if (cards > 0 && upi > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill("All", { via = "All" }, selected = via == "All")
+                    Pill("Card · $cards", { via = "Card" }, selected = via == "Card")
+                    Pill("UPI · $upi", { via = "UPI" }, selected = via == "UPI")
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            SpendList(vm, when (via) { "Card" -> spends.filter { it.kind == "SPEND" }; "UPI" -> spends.filter { it.kind != "SPEND" }; else -> spends }, undoable)
+        }
         1 -> MoneyInList(vm, money)
         2 -> AutoList(vm, auto)
         else -> FailedList(vm, failed)
@@ -130,7 +143,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     var sheetFor by remember { mutableStateOf<Txn?>(null) }
     var confirmAll by remember { mutableStateOf(false) }
     if (items.isEmpty()) {
-        Text("All caught up. New card and UPI payments show up here automatically.", color = muted(), fontSize = 15.sp)
+        Text("Inbox zero ✨ New card and UPI payments appear here on their own.", color = muted(), fontSize = 15.sp)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { vm.importHistory(365) }) { Text("Import last 12 months of messages") }
         return
