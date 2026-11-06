@@ -114,11 +114,18 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
     val aliasMap by vm.aliases.collectAsState()
     fun List<Txn>.search() = if (q.isBlank()) this else filter { Filters.textMatches(it, emptyList(), aliasMap, q) }
     val spends = allSpends.search(); val money = allMoney.search(); val auto = allAuto.search(); val failed = allFailed.search()
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Pill("Spent · ${spends.size}", { section = 0 }, selected = section == 0)
-        Pill("Received · ${money.size}", { section = 1 }, selected = section == 1)
-        Pill("Auto-sorted · ${auto.size}", { section = 2 }, selected = section == 2)
-        if (failed.isNotEmpty() || section == 3) Pill("Refund watch · ${failed.size}", { section = 3 }, selected = section == 3)
+    val tabs = buildList {
+        add("Spent" to spends.size); add("Received" to money.size); add("Auto" to auto.size)
+        if (failed.isNotEmpty() || section == 3) add("Refunds" to failed.size)
+    }
+    androidx.compose.material3.ScrollableTabRow(
+        selectedTabIndex = section.coerceAtMost(tabs.size - 1), edgePadding = 0.dp,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent
+    ) {
+        tabs.forEachIndexed { i, (name, n) ->
+            androidx.compose.material3.Tab(selected = section == i, onClick = { section = i },
+                text = { Text(if (n > 0) "$name · $n" else name, fontSize = 14.sp) })
+        }
     }
     Spacer(Modifier.height(8.dp))
     OutlinedTextField(
@@ -134,11 +141,9 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
             val cards = spends.count { it.kind == "SPEND" }
             val upi = spends.size - cards
             if (cards > 0 && upi > 0) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill("All", { via = "All" }, selected = via == "All", compact = true)
-                    Pill("Card · $cards", { via = "Card" }, selected = via == "Card", compact = true)
-                    Pill("UPI · $upi", { via = "UPI" }, selected = via == "UPI", compact = true)
-                }
+                Segmented(listOf("All", "Card · $cards", "UPI · $upi"),
+                    when (via) { "Card" -> "Card · $cards"; "UPI" -> "UPI · $upi"; else -> "All" },
+                    { via = it.substringBefore(" ") })
                 Spacer(Modifier.height(10.dp))
             }
             SpendList(vm, when (via) { "Card" -> spends.filter { it.kind == "SPEND" }; "UPI" -> spends.filter { it.kind != "SPEND" }; else -> spends }, undoable)
@@ -164,33 +169,54 @@ private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, on
     }
 }
 
-/** Actions for the ticked transactions: tag, people, mine, add similar ones. */
+/** Staged group edit: choose a tag and/or people once, then one ✓ applies it to every ticked bill. */
 @Composable
 private fun BulkBar(vm: MainVm, picked: List<Txn>, onSimilar: () -> Unit, onSelectAll: () -> Unit, onDone: () -> Unit) {
+    val recents by vm.recents.collectAsState()
     var tagMenu by remember { mutableStateOf(false) }
-    var people by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }
+    var tag by remember { mutableStateOf("") }
+    val people = remember { mutableStateListOf<String>() }
+    val chips = (listOf(Repo.ME) + recents.take(3) + people.filter { it != Repo.ME && it !in recents.take(3) }).distinct()
+    val summary = Logic.bulkSummary(picked.size, picked.sumOf { it.amount }, tag, people.toList())
+    val ready = picked.isNotEmpty() && (tag.isNotBlank() || people.isNotEmpty())
     AppCard {
-        Text("${picked.size} selected · ${Repo.money(picked.sumOf { it.amount })}", fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${picked.size} selected", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = onSimilar) { Text("+ Similar") }
+            TextButton(onClick = onSelectAll) { Text("All") }
+            TextButton(onClick = onDone) { Text("Cancel") }
+        }
+        Text("Tag", fontSize = 12.sp, color = muted())
+        Spacer(Modifier.height(4.dp))
+        Box {
+            Pill(if (tag.isBlank()) "Choose tag ▾" else "$tag ▾", { tagMenu = true }, selected = tag.isNotBlank(), compact = true)
+            TagMenu(vm, tagMenu, { tagMenu = false }) { tag = it; tagMenu = false }
+        }
         Spacer(Modifier.height(8.dp))
+        Text("Whose?", fontSize = 12.sp, color = muted())
+        Spacer(Modifier.height(4.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box {
-                Pill("Tag ▾", { if (picked.isNotEmpty()) tagMenu = true }, strong = picked.isNotEmpty(), compact = true)
-                TagMenu(vm, tagMenu, { tagMenu = false }) { vm.bulkCategory(picked, it); onDone() }
+            Logic.selectedFirst(chips, people.toList()).forEach { p ->
+                Pill(if (p == Repo.ME) "Me" else p.substringBefore(" "), { if (p in people) people.remove(p) else people.add(p) }, selected = p in people, compact = true)
             }
-            Pill("People…", { if (picked.isNotEmpty()) people = true }, strong = picked.isNotEmpty(), compact = true)
-            Pill("Mine", { if (picked.isNotEmpty()) { vm.bulkPeople(picked, listOf(Repo.ME)); onDone() } }, compact = true)
-            Pill("+ Similar", onSimilar, compact = true)
-            Pill("All", onSelectAll, compact = true)
-            Pill("Done ✕", onDone, compact = true)
+            Pill("More…", { more = true }, compact = true)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(summary, Modifier.weight(1f), fontSize = 14.sp, color = if (ready) MaterialTheme.colorScheme.onSurface else muted())
+            FilledIconButton(enabled = ready, modifier = Modifier.size(48.dp), onClick = { vm.bulkApply(picked, tag, people.toList()); onDone() }) {
+                Icon(Icons.Default.Check, contentDescription = "Apply to all")
+            }
         }
     }
-    if (people) PeopleSelectDialog(vm, "Who were these for?", { people = false }) { vm.bulkPeople(picked, it); people = false; onDone() }
+    if (more) PeopleSelectDialog(vm, "Who were these for?", { more = false }) { chosen -> chosen.forEach { if (it !in people) people.add(it) }; more = false }
 }
 
 @Composable
 private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> Unit) {
     val recents by vm.recents.collectAsState()
-    var sheetFor by remember { mutableStateOf<Txn?>(null) }
+    var sheetFor by remember { mutableStateOf<Pair<Txn, List<String>>?>(null) }
     var confirmAll by remember { mutableStateOf(false) }
     if (items.isEmpty()) {
         Text("Inbox zero ✨ New card and UPI payments appear here on their own.", color = muted(), fontSize = 15.sp)
@@ -219,10 +245,10 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(items, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliasesNow, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else SpendCard(t, vm, recents, undoable, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }) { sheetFor = it }
+            else SpendCard(t, vm, recents, undoable, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }) { tx, chosen -> sheetFor = tx to chosen }
         }
     }
-    sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }) }
+    sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen) }
     if (confirmAll) {
         AlertDialog(
             onDismissRequest = { confirmAll = false },
@@ -235,7 +261,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
 }
 
 @Composable
-private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onSimilar: () -> Unit = {}, onMore: (Txn) -> Unit) {
+private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onSimilar: () -> Unit = {}, onMore: (Txn, List<String>) -> Unit) {
     val aliases by vm.aliases.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
     var catMenu by remember { mutableStateOf(false) }
@@ -280,7 +306,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
                 Pill("As before: $label", { sel.clear(); sel.addAll(asBefore) })
             }
             ordered.filter { it !in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }) }
-            Pill("More…", { onMore(t) })
+            Pill("More…", { onMore(t, sel.toList()) })
         }
         if (sel.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))

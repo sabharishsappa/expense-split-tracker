@@ -7,6 +7,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -110,5 +111,28 @@ fun Avatar(name: String, size: Int = 40) {
         contentAlignment = Alignment.Center
     ) {
         Text(name.trim().take(1).uppercase(), color = c, fontSize = (size * 0.42).sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+    }
+}
+
+
+/** A joined, equal-width choice control for a *filter* inside a page (the page tabs above stay underlined). */
+@Composable
+fun Segmented(options: List<String>, selected: String, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    androidx.compose.foundation.layout.Row(
+        modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(scheme.surfaceVariant).padding(3.dp)
+    ) {
+        options.forEach { o ->
+            val on = o == selected
+            Box(
+                Modifier.weight(1f).heightIn(min = 36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    .background(if (on) scheme.surface else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable { onPick(o) },
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Text(o, fontSize = 13.sp, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
+                    color = if (on) scheme.onSurface else scheme.onSurfaceVariant)
+            }
+        }
     }
 }

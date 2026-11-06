@@ -258,6 +258,12 @@ object Repo {
         }
     }
 
+    /** One go: optional tag and optional people for every ticked bill. Returns how many spends got people. */
+    suspend fun bulkApply(ctx: Context, txns: List<Txn>, tag: String, people: List<String>): Int {
+        if (tag.isNotBlank()) bulkCategory(ctx, txns, tag)
+        return if (people.isNotEmpty()) bulkPeople(ctx, txns.map { if (tag.isNotBlank()) it.copy(category = tag) else it }, people) else 0
+    }
+
     /** Splits every selected spend equally between [people] (one person = all theirs). Skips money-in rows. */
     suspend fun bulkPeople(ctx: Context, txns: List<Txn>, people: List<String>): Int {
         if (people.isEmpty()) return 0

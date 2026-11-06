@@ -62,6 +62,10 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun bulkCategory(txns: List<Txn>, c: String) = viewModelScope.launch(safe) {
         Repo.bulkCategory(getApplication(), txns, c); status.value = "Tagged ${txns.size} as $c"
     }
+    fun bulkApply(txns: List<Txn>, tag: String, people: List<String>) = viewModelScope.launch(safe) {
+        Repo.bulkApply(getApplication(), txns, tag, people)
+        status.value = "Updated ${txns.size} ${if (txns.size == 1) "bill" else "bills"}"
+    }
     fun bulkPeople(txns: List<Txn>, people: List<String>) = viewModelScope.launch(safe) {
         val n = Repo.bulkPeople(getApplication(), txns, people)
         status.value = if (n == 0) "Nothing to update (money-in rows can't be split)" else "Updated $n spends"

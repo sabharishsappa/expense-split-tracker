@@ -244,3 +244,12 @@ class EditSplitTest {
         assertEquals(listOf("X", "A"), Logic.selectedFirst(listOf("A"), listOf("X")))
     }
 }
+
+class BulkSummaryTest {
+    @Test fun nothingTicked() = org.junit.Assert.assertEquals("Tick the bills to change", Logic.bulkSummary(0, 0.0, "", emptyList()))
+    @Test fun nothingChosen() = org.junit.Assert.assertEquals("Pick a tag and/or who these were for", Logic.bulkSummary(3, 300.0, "", emptyList()))
+    @Test fun tagOnly() = org.junit.Assert.assertEquals("2 bills · ₹300 → tag Food", Logic.bulkSummary(2, 300.0, "Food", emptyList()))
+    @Test fun mineOnly() = org.junit.Assert.assertEquals("1 bill · ₹100 → all mine", Logic.bulkSummary(1, 100.0, "", listOf("Me")))
+    @Test fun oneOther() = org.junit.Assert.assertEquals("1 bill · ₹100 → all Ravi's", Logic.bulkSummary(1, 100.0, "", listOf("Ravi")))
+    @Test fun tagAndSplit() = org.junit.Assert.assertEquals("4 bills · ₹1,000 → tag Trip, split Me + Ravi", Logic.bulkSummary(4, 1000.0, "Trip", listOf("Me", "Ravi")))
+}

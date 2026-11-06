@@ -68,6 +68,18 @@ object Logic {
         return "Split ${selected.size} ways · ${money(per)} each"
     }
 
+    /** One line describing what the single ✓ will do to every ticked bill. */
+    fun bulkSummary(count: Int, total: Double, tag: String, people: List<String>): String {
+        if (count == 0) return "Tick the bills to change"
+        if (tag.isBlank() && people.isEmpty()) return "Pick a tag and/or who these were for"
+        val parts = ArrayList<String>()
+        if (tag.isNotBlank()) parts.add("tag $tag")
+        if (people.isNotEmpty()) parts.add(
+            if (people.size == 1) (if (people[0] == ME) "all mine" else "all ${people[0]}'s")
+            else "split ${people.joinToString(" + ") { if (it == ME) "Me" else it }}")
+        return "$count ${if (count == 1) "bill" else "bills"} · ${money(total)} → ${parts.joinToString(", ")}"
+    }
+
     // ---------- names ----------
 
     /** Best matching known person for a UPI sender name (e.g. "KURUVA KOUSHIK" ~ "Koushik Kuruva"). */

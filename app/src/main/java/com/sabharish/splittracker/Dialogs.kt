@@ -64,13 +64,13 @@ import androidx.compose.ui.window.DialogProperties
 // Full-screen "who was this for?" sheet
 // ---------------------------------------------------------------
 @Composable
-fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Unit) {
+fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Unit, initial: List<String> = emptyList()) {
     val contacts by vm.contacts.collectAsState()
     val recents by vm.recents.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
 
     var category by remember { mutableStateOf(t.category) }
-    val picked = remember { mutableStateListOf<String>() }
+    val picked = remember { mutableStateListOf<String>().also { it.addAll(initial) } }
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var splitMode by remember { mutableStateOf("EQUAL") }   // EQUAL | PERCENT | PARTS | AMOUNT
@@ -187,7 +187,7 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                         val names = s.people.split(",").filter { it.isNotBlank() }
                         Pill("As before: " + names.joinToString(", ") { if (it == Repo.ME) "You" else it }, {
                             picked.clear(); picked.addAll(names); refill()
-                        }, strong = true)
+                        }, selected = picked.toList() == names, strong = picked.toList() == names)
                         Spacer(Modifier.height(8.dp))
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
