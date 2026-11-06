@@ -117,6 +117,29 @@ object Logic {
         return if (n.isEmpty()) emptyList() else others.filter { it.id != t.id && norm(it.merchant) == n }
     }
 
+    /** Chosen items first (in the order chosen), then everything else in its usual order. */
+    fun selectedFirst(all: List<String>, selected: List<String>): List<String> =
+        selected.distinct() + all.filter { it !in selected }
+
+    data class ExistingSplit(val people: List<String>, val mode: String, val amounts: Map<String, Double>, val allPaid: Boolean)
+
+    /** Turns saved shares back into what the split screen shows, so a saved split can be edited. */
+    fun splitFromExisting(total: Double, shares: List<Share>): ExistingSplit? {
+        val live = shares.filter { it.amount > 0.004 }
+        if (live.isEmpty()) return null
+        val people = (live.filter { it.person == ME } + live.filter { it.person != ME }).map { it.person }
+        val amounts = live.associate { it.person to it.amount }
+        val eq = equalShares(total, people, false)
+        val isEqual = eq.all { Math.abs(it.amount - (amounts[it.person] ?: -1.0)) <= 0.011 }
+        val others = live.filter { it.person != ME }
+        val allPaid = others.isNotEmpty() && others.all { it.settled >= it.amount - 0.005 }
+        return ExistingSplit(people, if (isEqual) "EQUAL" else "AMOUNT", amounts, allPaid)
+    }
+
+    /** When a split is edited, money already received from someone is kept (up to their new share). */
+    fun carrySettled(old: List<Share>, new: List<NewShare>): List<Double> =
+        new.map { s -> if (s.paid) s.amount else minOf(old.firstOrNull { it.person == s.person }?.settled ?: 0.0, s.amount) }
+
     fun parseTags(s: String): List<String> = s.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     fun joinTags(tags: List<String>): String = tags.joinToString(",")
 

@@ -69,6 +69,11 @@ class MainActivity : ComponentActivity() {
         setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) } }
     }
 
+    override fun onStop() {
+        super.onStop()
+        Epoch.value++
+    }
+
     override fun onResume() {
         super.onResume()
         vm.loadContacts()
@@ -109,6 +114,7 @@ fun App(vm: MainVm) {
         }
     }
 
+    androidx.activity.compose.BackHandler(enabled = tab != 0) { tab = 0 }
     val titles = listOf("Today", "Inbox", "Owed to you", "Transactions", "Summary")
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

@@ -104,19 +104,31 @@ private fun TxnHeader(t: Txn, aliases: Map<String, String>, incoming: Boolean = 
 
 @Composable
 fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
-    val spends by vm.inbox.collectAsState()
-    val money by vm.moneyIn.collectAsState()
-    val auto by vm.autoTagged.collectAsState()
-    val failed by vm.failed.collectAsState()
+    val allSpends by vm.inbox.collectAsState()
+    val allMoney by vm.moneyIn.collectAsState()
+    val allAuto by vm.autoTagged.collectAsState()
+    val allFailed by vm.failed.collectAsState()
     var section by remember { mutableIntStateOf(0) }
     var via by remember { mutableStateOf("All") }
+    var q by remember(Epoch.value) { mutableStateOf("") }
+    val aliasMap by vm.aliases.collectAsState()
+    fun List<Txn>.search() = if (q.isBlank()) this else filter { Filters.textMatches(it, emptyList(), aliasMap, q) }
+    val spends = allSpends.search(); val money = allMoney.search(); val auto = allAuto.search(); val failed = allFailed.search()
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Pill("Spent · ${spends.size}", { section = 0 }, selected = section == 0)
         Pill("Received · ${money.size}", { section = 1 }, selected = section == 1)
         Pill("Auto-sorted · ${auto.size}", { section = 2 }, selected = section == 2)
         if (failed.isNotEmpty() || section == 3) Pill("Refund watch · ${failed.size}", { section = 3 }, selected = section == 3)
     }
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = q, onValueChange = { q = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("Search name, amount or message") },
+        trailingIcon = { if (q.isNotEmpty()) TextButton(onClick = { q = "" }) { Text("✕") } }
+    )
+    Spacer(Modifier.height(8.dp))
+    if (q.isNotBlank() && spends.isEmpty() && money.isEmpty() && auto.isEmpty() && failed.isEmpty())
+        Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 15.sp)
     when (section) {
         0 -> {
             val cards = spends.count { it.kind == "SPEND" }
@@ -187,8 +199,9 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         return
     }
     val aliasesNow by vm.aliases.collectAsState()
-    val picked = remember { mutableStateListOf<Long>() }
-    var selecting by remember { mutableStateOf(false) }
+    val picked = remember(Epoch.value) { mutableStateListOf<Long>() }
+    var selecting by remember(Epoch.value) { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = selecting) { picked.clear(); selecting = false }
     val pickedTxns = items.filter { it.id in picked }
     if (selecting) {
         BulkBar(vm, pickedTxns,
@@ -252,23 +265,21 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
         Spacer(Modifier.height(12.dp))
         Text("Whose spend? Tap one or more", fontSize = 13.sp, color = muted())
         Spacer(Modifier.height(6.dp))
-        val sel = remember { mutableStateListOf<String>() }
+        val sel = remember(Epoch.value) { mutableStateListOf<String>() }
         fun toggle(p: String) { if (p in sel) sel.remove(p) else sel.add(p) }
+        val s = sug
+        val asBefore = if (s != null && s.action == "PEOPLE") s.people.split(",").filter { it.isNotBlank() } else emptyList()
+        val chips = (listOf(Repo.ME) + recents.filter { it !in asBefore }.take(4) + sel.filter { it != Repo.ME && it !in recents }).distinct()
+        val ordered = Logic.selectedFirst(chips, sel.toList())
+        val labelOf = chips.zip(firstNames(chips)).toMap().mapValues { if (it.key == Repo.ME) "Me" else it.value }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Me", { toggle(Repo.ME) }, selected = Repo.ME in sel)
-            val s = sug
-            var asBefore = emptyList<String>()
-            if (s != null && s.action == "PEOPLE") {
-                asBefore = s.people.split(",").filter { it.isNotBlank() }
-                if (asBefore.isNotEmpty()) {
-                    val label = firstNames(asBefore.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
-                        if (asBefore.contains(Repo.ME)) " & you" else ""
-                    Pill("As before: $label", { sel.clear(); sel.addAll(asBefore) })
-                }
+            ordered.filter { it in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }, selected = true) }
+            if (asBefore.isNotEmpty() && sel.toList() != asBefore) {
+                val label = firstNames(asBefore.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
+                    if (asBefore.contains(Repo.ME)) " & you" else ""
+                Pill("As before: $label", { sel.clear(); sel.addAll(asBefore) })
             }
-            val shown = (recents.filter { it !in asBefore }.take(4) + sel.filter { it != Repo.ME && it !in recents }).distinct()
-            val labels = firstNames(shown)
-            shown.forEachIndexed { i, p -> Pill(labels[i], { toggle(p) }, selected = p in sel) }
+            ordered.filter { it !in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }) }
             Pill("More…", { onMore(t) })
         }
         if (sel.isNotEmpty()) {
@@ -429,7 +440,7 @@ fun PendingScreen(vm: MainVm) {
     var remindFor by remember { mutableStateOf<String?>(null) }
     val grouped = rows.groupBy { it.person }
     val total = rows.sumOf { it.amount - it.settled }
-    val ticks = remember { mutableMapOf<String, androidx.compose.runtime.snapshots.SnapshotStateList<Long>>() }
+    val ticks = remember(Epoch.value) { mutableMapOf<String, androidx.compose.runtime.snapshots.SnapshotStateList<Long>>() }
 
     AppCard {
         Text("Owed to you", fontSize = 13.sp, color = muted())
@@ -517,8 +528,9 @@ fun AllScreen(vm: MainVm) {
     Spacer(Modifier.height(6.dp))
     Text("${shown.size} transactions · ${Logic.money(shown.filter { it.kind == "SPEND" || it.kind == "UPI_OUT" }.sumOf { it.amount })} spent",
         fontSize = 12.sp, color = muted())
-    val picked = remember { mutableStateListOf<Long>() }
-    var selecting by remember { mutableStateOf(false) }
+    val picked = remember(Epoch.value) { mutableStateListOf<Long>() }
+    var selecting by remember(Epoch.value) { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = selecting) { picked.clear(); selecting = false }
     val pickedTxns = shown.filter { it.id in picked }
     if (selecting) {
         Spacer(Modifier.height(6.dp))

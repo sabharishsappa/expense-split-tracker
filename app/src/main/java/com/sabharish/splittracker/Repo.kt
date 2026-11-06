@@ -200,9 +200,10 @@ object Repo {
     suspend fun tag(ctx: Context, t: Txn, shares: List<NewShare>, category: String, remember: Boolean, splitAdded: Boolean) {
         val db = Db.get(ctx); val dao = db.dao()
         db.withTransaction {
+            val settledNow = Logic.carrySettled(dao.sharesFor(t.id), shares)
             dao.deleteShares(t.id)
-            for (s in shares) {
-                dao.insertShare(Share(txnId = t.id, person = s.person, amount = s.amount, settled = if (s.paid) s.amount else 0.0))
+            shares.forEachIndexed { i, s ->
+                dao.insertShare(Share(txnId = t.id, person = s.person, amount = s.amount, settled = settledNow[i]))
             }
             dao.setStatus(t.id, "TAGGED")
             dao.setAuto(t.id, false)

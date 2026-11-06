@@ -11,6 +11,13 @@ import kotlinx.coroutines.withContext
 import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -110,6 +117,24 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
         }
     }
 
+    // Editing a saved split: start from what was saved
+    val existing by produceState<List<Share>>(emptyList(), t.id) { value = vm.sharesFor(t.id) }
+    var loaded by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(existing) {
+        if (!loaded && existing.isNotEmpty()) {
+            loaded = true
+            Logic.splitFromExisting(t.amount, existing)?.let { ex ->
+                picked.clear(); picked.addAll(ex.people)
+                alreadyPaid = ex.allPaid
+                splitMode = ex.mode
+                splitAdded = t.splitAdded
+                rememberRule = false
+                refill()
+                if (ex.mode == "AMOUNT") ex.people.forEach { vals[it] = fmt(ex.amounts[it] ?: 0.0) }
+            }
+        }
+    }
+
     val shares = build()
     val owedToYou = (shares ?: emptyList()).filter { it.person != Repo.ME && !it.paid }.sumOf { it.amount }
     val othersInvolved = picked.any { it != Repo.ME }
@@ -123,15 +148,24 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(Repo.money(t.amount), fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 13.sp, color = muted())
-                        TextButton(onClick = { rename = true }) { Text("Rename merchant") }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                    Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
+                        Text(Repo.money(t.amount), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                     }
-                    TextButton(onClick = onDismiss) { Text("Close") }
+                    FilledIconButton(
+                        enabled = shares != null, modifier = Modifier.size(52.dp),
+                        onClick = {
+                            val sh = build() ?: return@FilledIconButton
+                            vm.tag(t, sh, category, rememberRule, splitAdded && othersInvolved)
+                            onSaved(if (!othersInvolved) "Tagged as yours" else "Saved")
+                            onDismiss()
+                        }
+                    ) { Icon(Icons.Default.Check, contentDescription = "Save") }
                 }
+                TextButton(onClick = { rename = true }) { Text("Rename merchant") }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Spacer(Modifier.height(14.dp))
                     Text("Tag", fontWeight = FontWeight.SemiBold)
@@ -139,7 +173,7 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val tagList by vm.tags.collectAsState()
                         var newTag by remember { mutableStateOf(false) }
-                        tagList.forEach { c -> Pill(c, { category = if (category == c) "" else c }, selected = category == c) }
+                        Logic.selectedFirst(tagList, listOf(category).filter { it.isNotBlank() }).forEach { c -> Pill(c, { category = if (category == c) "" else c }, selected = category == c) }
                         Pill("+ New", { newTag = true })
                         if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n)?.let { category = it }; newTag = false }
                     }
@@ -157,7 +191,7 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                         Spacer(Modifier.height(8.dp))
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        peopleChips.forEach { p -> Pill(if (p == Repo.ME) "Me" else p, { toggle(p) }, selected = picked.contains(p)) }
+                        Logic.selectedFirst(peopleChips, picked.toList()).forEach { p -> Pill(if (p == Repo.ME) "Me" else p, { toggle(p) }, selected = picked.contains(p)) }
                         Pill(if (showSearch) "Hide contacts" else "+ Contacts", { showSearch = !showSearch })
                     }
                     if (showSearch) {
@@ -169,11 +203,11 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                         )
                         if (q.isNotEmpty() && contacts.none { it.equals(q, true) }) {
                             Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.fillMaxWidth().clickable { add(q); query = "" }.padding(vertical = 10.dp))
+                                modifier = Modifier.fillMaxWidth().clickable { add(q); query = ""; showSearch = false }.padding(vertical = 10.dp))
                         }
                         results.forEach { name ->
                             Text(name, modifier = Modifier.fillMaxWidth().clickable {
-                                add(name); query = ""
+                                add(name); query = ""; showSearch = false
                             }.padding(vertical = 10.dp))
                         }
                     }
@@ -234,16 +268,6 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                         Text("Remember for ${t.merchant}")
                     }
                 }
-                Button(
-                    enabled = shares != null,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    onClick = {
-                        val sh = build() ?: return@Button
-                        vm.tag(t, sh, category, rememberRule, splitAdded && othersInvolved)
-                        onSaved(if (!othersInvolved) "Tagged as yours" else "Saved")
-                        onDismiss()
-                    }
-                ) { Text("Save", fontSize = 16.sp) }
             }
         }
     }
@@ -497,6 +521,17 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(14.dp))
+                var crash by remember { mutableStateOf(CrashLog.read(ctx)) }
+                val clipboard = LocalClipboardManager.current
+                if (crash.isNotEmpty()) {
+                    Text("The app crashed last time", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                    Text(crash.take(700), fontSize = 10.sp, color = muted())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(crash)); note = "Crash report copied" }) { Text("Copy report") }
+                        OutlinedButton(onClick = { CrashLog.clear(ctx); crash = "" }) { Text("Clear") }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
                 Text("Backup", fontWeight = FontWeight.SemiBold)
                 Text(if (last > 0) "Last backup: ${Repo.shortDate(last)}" else "No backup yet", fontSize = 12.sp, color = muted())
                 Spacer(Modifier.height(6.dp))

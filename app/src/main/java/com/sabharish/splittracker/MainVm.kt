@@ -122,6 +122,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun toggleSplitAdded(t: Txn) = viewModelScope.launch { dao.setSplitAdded(t.id, !t.splitAdded) }
 
     suspend fun suggestRefund(t: Txn): Txn? = Repo.suggestOriginal(getApplication(), t)
+    suspend fun sharesFor(id: Long): List<Share> = dao.sharesFor(id)
     suspend fun suggestion(t: Txn): Rule? = Repo.suggestion(getApplication(), t)
     suspend fun recentSpends(refundAmount: Double): List<Txn> = Repo.recentSpends(getApplication(), refundAmount)
 }

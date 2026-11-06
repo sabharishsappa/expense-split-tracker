@@ -1,6 +1,7 @@
 package com.sabharish.splittracker
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -191,5 +192,55 @@ class WhatsAppNumberTest {
         assertNull(Logic.waNumber(""))
         assertNull(Logic.waNumber("12345"))
         assertNull(Logic.waNumber("abc"))
+    }
+}
+
+class EditSplitTest {
+    private fun sh(p: String, a: Double, s: Double = 0.0) = Share(0, 1, p, a, s)
+
+    @Test fun equalSplitIsRecognised() {
+        val ex = Logic.splitFromExisting(100.0, listOf(sh("Rajesh", 50.0), sh(Logic.ME, 50.0, 50.0)))!!
+        assertEquals(listOf(Logic.ME, "Rajesh"), ex.people)
+        assertEquals("EQUAL", ex.mode)
+        assertFalse(ex.allPaid)
+    }
+
+    @Test fun unevenSplitComesBackAsAmounts() {
+        val ex = Logic.splitFromExisting(100.0, listOf(sh(Logic.ME, 70.0, 70.0), sh("A", 30.0)))!!
+        assertEquals("AMOUNT", ex.mode); assertEquals(30.0, ex.amounts["A"]!!, 0.001)
+    }
+
+    @Test fun threeWayRoundingStillCountsAsEqual() {
+        val ex = Logic.splitFromExisting(100.0, listOf(sh(Logic.ME, 33.33, 33.33), sh("A", 33.33), sh("B", 33.34)))!!
+        assertEquals("EQUAL", ex.mode)
+    }
+
+    @Test fun everyoneHavingPaidIsRemembered() {
+        assertTrue(Logic.splitFromExisting(100.0, listOf(sh(Logic.ME, 50.0, 50.0), sh("A", 50.0, 50.0)))!!.allPaid)
+        assertFalse(Logic.splitFromExisting(100.0, listOf(sh(Logic.ME, 100.0, 100.0)))!!.allPaid)   // only me: nobody to have paid
+    }
+
+    @Test fun sharesShrunkToZeroByRefundAreDropped() {
+        val ex = Logic.splitFromExisting(100.0, listOf(sh(Logic.ME, 0.0), sh("A", 100.0)))!!
+        assertEquals(listOf("A"), ex.people)
+        assertNull(Logic.splitFromExisting(100.0, listOf(sh("A", 0.0))))
+        assertNull(Logic.splitFromExisting(100.0, emptyList()))
+    }
+
+    @Test fun partPaymentsSurviveAnEdit() {
+        val old = listOf(sh("A", 100.0, 40.0), sh("B", 100.0, 100.0))
+        val new = listOf(NewShare("A", 80.0, false), NewShare("B", 50.0, false), NewShare("C", 70.0, false))
+        assertEquals(listOf(40.0, 50.0, 0.0), Logic.carrySettled(old, new))      // B capped at the new, smaller share
+    }
+
+    @Test fun markedAlreadyPaidCountsAsFullyPaid() {
+        assertEquals(listOf(80.0), Logic.carrySettled(emptyList(), listOf(NewShare("A", 80.0, true))))
+    }
+
+    @Test fun selectedItemsComeFirst() {
+        assertEquals(listOf("C", "A", "B", "D"), Logic.selectedFirst(listOf("A", "B", "C", "D"), listOf("C")))
+        assertEquals(listOf("B", "A", "C"), Logic.selectedFirst(listOf("A", "B", "C"), listOf("B", "A")))
+        assertEquals(listOf("A", "B"), Logic.selectedFirst(listOf("A", "B"), emptyList()))
+        assertEquals(listOf("X", "A"), Logic.selectedFirst(listOf("A"), listOf("X")))
     }
 }
