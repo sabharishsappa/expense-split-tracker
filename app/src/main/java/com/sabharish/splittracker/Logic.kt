@@ -107,6 +107,9 @@ object Logic {
         return if (n.lowercase(Locale.ROOT) in taken) existing else existing + n
     }
 
+    fun parseTags(s: String): List<String> = s.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    fun joinTags(tags: List<String>): String = tags.joinToString(",")
+
     /** Built-in tags with your own tags placed before "Other". */
     fun allTags(custom: List<String>): List<String> = Categories.all.filter { it != "Other" } + custom + "Other"
 }

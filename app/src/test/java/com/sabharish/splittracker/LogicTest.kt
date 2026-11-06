@@ -117,3 +117,20 @@ class LogicTest {
         assertEquals(tags.size, tags.distinct().size)
     }
 }
+
+class TagStorageTest {
+    @Test fun parseAndJoinRoundTrip() {
+        val tags = listOf("Gym", "Pet Care")
+        assertEquals(tags, Logic.parseTags(Logic.joinTags(tags)))
+        assertEquals(emptyList<String>(), Logic.parseTags(""))
+        assertEquals(listOf("A", "B"), Logic.parseTags(" A, ,B "))
+    }
+
+    @Test fun selectionWithOnePersonIsNotASplit() {
+        assertEquals("Meera owes ₹120", Logic.selectionSummary(120.0, listOf("Meera")))
+    }
+
+    @Test fun fourWaySplitWithMe() {
+        assertEquals("Split 4 ways · ₹250 each", Logic.selectionSummary(1000.0, listOf(Logic.ME, "A", "B", "C")))
+    }
+}

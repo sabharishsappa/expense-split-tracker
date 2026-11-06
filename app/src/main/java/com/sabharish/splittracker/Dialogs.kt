@@ -17,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -128,7 +130,11 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                     Text("Tag", fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Categories.all.forEach { c -> Pill(c, { category = if (category == c) "" else c }, selected = category == c) }
+                        val tagList by vm.tags.collectAsState()
+                        var newTag by remember { mutableStateOf(false) }
+                        tagList.forEach { c -> Pill(c, { category = if (category == c) "" else c }, selected = category == c) }
+                        Pill("+ New", { newTag = true })
+                        if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n)?.let { category = it }; newTag = false }
                     }
 
                     Spacer(Modifier.height(18.dp))
@@ -394,6 +400,15 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     label = { Text("My name words (to hide own transfers)") }, modifier = Modifier.fillMaxWidth())
                 Text("Comma separated. UPI payments to or from a name containing any of these are treated as your own transfers.", fontSize = 12.sp, color = muted())
                 Spacer(Modifier.height(14.dp))
+                Text("My tags", fontWeight = FontWeight.SemiBold)
+                val mine by vm.customTags.collectAsState()
+                var newTag by remember { mutableStateOf(false) }
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    mine.forEach { c -> Pill("$c  ✕", { vm.removeTag(c) }) }
+                    Pill("+ New tag", { newTag = true })
+                }
+                if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n); newTag = false }
+                Spacer(Modifier.height(14.dp))
                 Text("Appearance", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -420,4 +435,29 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+/** Small dialog to create your own tag. */
+@Composable
+fun NewTagDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New tag") },
+        text = { OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("e.g. Gym, Pets, Rent") }) },
+        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onCreate(name) }) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** Tag picker menu: built-in and custom tags, plus "+ New tag". */
+@Composable
+fun TagMenu(vm: MainVm, expanded: Boolean, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    val tags by vm.tags.collectAsState()
+    var newTag by remember { mutableStateOf(false) }
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        tags.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { onPick(c); onDismiss() }) }
+        DropdownMenuItem(text = { Text("+ New tag…", color = MaterialTheme.colorScheme.primary) }, onClick = { newTag = true })
+    }
+    if (newTag) NewTagDialog({ newTag = false }) { n -> vm.addTag(n)?.let { onPick(it) }; newTag = false; onDismiss() }
 }

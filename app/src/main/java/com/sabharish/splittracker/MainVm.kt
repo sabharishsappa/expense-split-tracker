@@ -26,6 +26,20 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     val failed = dao.failed().hot(emptyList())
     val aliases = dao.aliases().map { list -> list.associate { it.ruleKey.removePrefix("alias|") to it.people } }.hot(emptyMap())
 
+    val customTags = MutableStateFlow(Logic.parseTags(Repo.getPref(app, "tags", "")))
+    val tags: StateFlow<List<String>> = customTags.map { Logic.allTags(it) }.hot(Logic.allTags(emptyList()))
+
+    fun addTag(name: String): String? {
+        val before = customTags.value
+        val after = Logic.addTag(before, name)
+        if (after != before) { customTags.value = after; Repo.putPref(getApplication(), "tags", Logic.joinTags(after)) }
+        return after.lastOrNull()?.takeIf { it.equals(name.replace(",", " ").trim().take(24), true) }
+    }
+    fun removeTag(name: String) {
+        customTags.value = customTags.value - name
+        Repo.putPref(getApplication(), "tags", Logic.joinTags(customTags.value))
+    }
+
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 

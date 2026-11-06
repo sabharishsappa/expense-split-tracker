@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -174,30 +178,41 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
         Spacer(Modifier.height(10.dp))
         Box {
             Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
-            DropdownMenu(expanded = catMenu, onDismissRequest = { catMenu = false }) {
-                Categories.all.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { vm.setCategory(t, c); catMenu = false }) }
-            }
+            TagMenu(vm, catMenu, { catMenu = false }) { vm.setCategory(t, it) }
         }
         Spacer(Modifier.height(12.dp))
-        Text("Whose spend?", fontSize = 13.sp, color = muted())
+        Text("Whose spend? Tap one or more", fontSize = 13.sp, color = muted())
         Spacer(Modifier.height(6.dp))
+        val sel = remember { mutableStateListOf<String>() }
+        fun toggle(p: String) { if (p in sel) sel.remove(p) else sel.add(p) }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Me", { quick(listOf(NewShare(Repo.ME, t.amount, true)), "Tagged as yours") }, strong = true)
+            Pill("Me", { toggle(Repo.ME) }, selected = Repo.ME in sel)
             val s = sug
-            var skip = emptyList<String>()
+            var asBefore = emptyList<String>()
             if (s != null && s.action == "PEOPLE") {
-                val names = s.people.split(",").filter { it.isNotBlank() }
-                skip = names
-                if (names.isNotEmpty()) {
-                    val label = firstNames(names.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
-                        if (names.contains(Repo.ME)) " & you" else ""
-                    Pill("As before: $label", { quick(Repo.equalShares(t.amount, names, false), "Tagged as before") })
+                asBefore = s.people.split(",").filter { it.isNotBlank() }
+                if (asBefore.isNotEmpty()) {
+                    val label = firstNames(asBefore.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
+                        if (asBefore.contains(Repo.ME)) " & you" else ""
+                    Pill("As before: $label", { sel.clear(); sel.addAll(asBefore) })
                 }
             }
-            val shown = recents.filter { it !in skip }.take(4)
+            val shown = (recents.filter { it !in asBefore }.take(4) + sel.filter { it != Repo.ME && it !in recents }).distinct()
             val labels = firstNames(shown)
-            shown.forEachIndexed { i, p -> Pill(labels[i], { quick(listOf(NewShare(p, t.amount, false)), "Tagged to $p") }) }
+            shown.forEachIndexed { i, p -> Pill(labels[i], { toggle(p) }, selected = p in sel) }
             Pill("More…", { onMore(t) })
+        }
+        if (sel.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(Logic.selectionSummary(t.amount, sel.toList()), Modifier.weight(1f), fontSize = 15.sp)
+                FilledIconButton(onClick = {
+                    val people = sel.toList()
+                    val shares = if (people.size == 1) listOf(NewShare(people[0], t.amount, people[0] == Repo.ME))
+                    else Repo.equalShares(t.amount, people, false)
+                    quick(shares, if (people == listOf(Repo.ME)) "Tagged as yours" else "Tagged")
+                }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Check, contentDescription = "Save") }
+            }
         }
     }
     if (rename) AliasDialog(t.merchant, aliases[Repo.aliasKey(t.merchant).removePrefix("alias|")] ?: "", { rename = false }) { vm.setAlias(t.merchant, it); rename = false }
@@ -463,9 +478,7 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
             Spacer(Modifier.height(6.dp))
             Box {
                 Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
-                DropdownMenu(expanded = catMenu, onDismissRequest = { catMenu = false }) {
-                    Categories.all.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { vm.setCategory(t, c); catMenu = false }) }
-                }
+                TagMenu(vm, catMenu, { catMenu = false }) { vm.setCategory(t, it) }
             }
         }
         val live = ss.filter { it.amount > 0.004 }
