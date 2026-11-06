@@ -9,7 +9,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.sabharish.splittracker"
+        applicationId = "com.sabharish.splittracker.app"
         minSdk = 26
         targetSdk = 34
         // Rises with every GitHub build, so each one counts as an update
