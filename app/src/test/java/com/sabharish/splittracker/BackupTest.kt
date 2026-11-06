@@ -51,3 +51,15 @@ class BackupTest {
         assertTrue(Backup.PREF_KEYS.containsAll(listOf("upi", "selfnames", "tags", "theme")))
     }
 }
+
+class BackupBillsTest {
+    @Test fun billsSurviveBackup() {
+        val b = Bill(5, "ICICI", "6007", 1234.5, 100.0, 1000L, 900L, true)
+        val back = Backup.fromJson(Backup.toJson(BackupData(emptyList(), emptyList(), emptyList(), emptyList(), emptyMap(), listOf(b)), 1L))!!
+        org.junit.Assert.assertEquals(listOf(b), back.bills)
+    }
+    @Test fun oldBackupWithoutBillsStillLoads() {
+        val back = Backup.fromJson("""{"app":"SplitTracker","version":1,"txns":[],"shares":[],"settlements":[],"rules":[],"prefs":{}}""")!!
+        org.junit.Assert.assertTrue(back.bills.isEmpty())
+    }
+}

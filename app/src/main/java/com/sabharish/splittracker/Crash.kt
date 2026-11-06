@@ -24,5 +24,9 @@ class App : Application() {
 object CrashLog {
     const val FILE = "last_crash.txt"
     fun read(ctx: Context): String = try { File(ctx.filesDir, FILE).takeIf { it.exists() }?.readText() ?: "" } catch (_: Exception) { "" }
+    /** Keeps the error of a problem we recovered from, so it can still be read in Settings. */
+    fun record(ctx: Context, error: Throwable) {
+        try { File(ctx.filesDir, FILE).writeText("${Date()}\n(handled)\n${Log.getStackTraceString(error)}") } catch (_: Throwable) {}
+    }
     fun clear(ctx: Context) { try { File(ctx.filesDir, FILE).delete() } catch (_: Exception) {} }
 }

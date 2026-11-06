@@ -195,7 +195,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     if (items.isEmpty()) {
         Text("Inbox zero ✨ New card and UPI payments appear here on their own.", color = muted(), fontSize = 15.sp)
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = { vm.importHistory(365) }) { Text("Import last 12 months of messages") }
+        OutlinedButton(onClick = { vm.importDays(365) }) { Text("Import last 12 months of messages") }
         return
     }
     val aliasesNow by vm.aliases.collectAsState()

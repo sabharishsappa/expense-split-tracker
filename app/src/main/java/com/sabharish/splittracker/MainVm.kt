@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 
 class MainVm(app: Application) : AndroidViewModel(app) {
     private val dao = Db.get(app).dao()
+    /** Any failure inside a background job is recorded instead of crashing the app. */
+    private val safe = kotlinx.coroutines.CoroutineExceptionHandler { _, e -> CrashLog.record(getApplication(), e); status.value = "Something went wrong — details in Settings" }
     private fun <T> Flow<T>.hot(init: T): StateFlow<T> = stateIn(viewModelScope, SharingStarted.Eagerly, init)
 
     val inbox = dao.inbox().hot(emptyList())
@@ -34,12 +36,12 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun renameTag(old: String, new: String) {
         val after = Logic.renameTag(customTags.value, old, new) ?: run { status.value = "That name is empty or already used"; return }
         customTags.value = after; Repo.putPref(getApplication(), "tags", Logic.joinTags(after))
-        viewModelScope.launch { Repo.renameTag(getApplication(), old, new.replace(",", " ").trim().take(24)) }
+        viewModelScope.launch(safe) { Repo.renameTag(getApplication(), old, new.replace(",", " ").trim().take(24)) }
     }
     fun deleteTag(name: String) {
         customTags.value = customTags.value.filter { !it.equals(name, true) }
         Repo.putPref(getApplication(), "tags", Logic.joinTags(customTags.value))
-        viewModelScope.launch { Repo.deleteTag(getApplication(), name) }
+        viewModelScope.launch(safe) { Repo.deleteTag(getApplication(), name) }
     }
     fun toggleHidden(name: String) {
         hiddenTags.value = if (name in hiddenTags.value) hiddenTags.value - name else hiddenTags.value + name
@@ -55,27 +57,31 @@ class MainVm(app: Application) : AndroidViewModel(app) {
 
     val accounts = kotlinx.coroutines.flow.combine(dao.all(), dao.acctRules()) { t, r -> Accounts.views(t, r) }.hot(emptyList())
     fun setBalance(key: String, name: String, balance: Double) =
-        viewModelScope.launch { Repo.setAccountBalance(getApplication(), key, name, balance) }
+        viewModelScope.launch(safe) { Repo.setAccountBalance(getApplication(), key, name, balance) }
 
-    fun bulkCategory(txns: List<Txn>, c: String) = viewModelScope.launch {
+    fun bulkCategory(txns: List<Txn>, c: String) = viewModelScope.launch(safe) {
         Repo.bulkCategory(getApplication(), txns, c); status.value = "Tagged ${txns.size} as $c"
     }
-    fun bulkPeople(txns: List<Txn>, people: List<String>) = viewModelScope.launch {
+    fun bulkPeople(txns: List<Txn>, people: List<String>) = viewModelScope.launch(safe) {
         val n = Repo.bulkPeople(getApplication(), txns, people)
         status.value = if (n == 0) "Nothing to update (money-in rows can't be split)" else "Updated $n spends"
     }
 
-    fun addFromStatement(s: StmtSource, l: StmtLine) = viewModelScope.launch { Repo.addFromStatement(getApplication(), s, l) }
+    fun addFromStatement(s: StmtSource, l: StmtLine) = viewModelScope.launch(safe) { Repo.addFromStatement(getApplication(), s, l) }
 
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 
-    init { viewModelScope.launch { Repo.backfillCategories(getApplication()) } }
+    init { viewModelScope.launch(safe) { Repo.backfillCategories(getApplication()) } }
 
-    fun loadContacts() = viewModelScope.launch { contacts.value = Repo.loadContacts(getApplication()) }
+    fun loadContacts() = viewModelScope.launch(safe) { contacts.value = Repo.loadContacts(getApplication()) }
 
-    fun importHistory(days: Int, quiet: Boolean = false) = viewModelScope.launch {
-        val n = Repo.importInbox(getApplication(), days)
+    val dueBills = dao.dueBills().hot(emptyList())
+    fun billPaid(id: Long, paid: Boolean = true) = viewModelScope.launch(safe) { Repo.setBillPaid(getApplication(), id, paid) }
+
+    fun importDays(days: Int) = importHistory(System.currentTimeMillis() - days * Bills.DAY)
+    fun importHistory(since: Long, quiet: Boolean = false) = viewModelScope.launch(safe) {
+        val n = Repo.importInbox(getApplication(), since)
         if (!quiet || n > 0) status.value = if (n > 0) "Imported $n new transactions" else "No new transactions found"
     }
 
@@ -83,7 +89,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
 
     suspend fun backupText(): String { val t = Repo.exportBackup(getApplication()); lastBackup.value = System.currentTimeMillis(); return t }
 
-    fun restore(text: String) = viewModelScope.launch {
+    fun restore(text: String) = viewModelScope.launch(safe) {
         val n = Repo.restoreBackup(getApplication(), text)
         if (n >= 0) {
             customTags.value = Logic.parseTags(Repo.getPref(getApplication(), "tags", ""))
@@ -95,31 +101,31 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun clearStatus() { status.value = "" }
 
     fun tag(t: Txn, shares: List<NewShare>, category: String, remember: Boolean, splitAdded: Boolean) =
-        viewModelScope.launch { Repo.tag(getApplication(), t, shares, category, remember, splitAdded) }
+        viewModelScope.launch(safe) { Repo.tag(getApplication(), t, shares, category, remember, splitAdded) }
 
-    fun tagAllMine(list: List<Txn>) = viewModelScope.launch { Repo.tagAllMine(getApplication(), list) }
-    fun untag(id: Long) = viewModelScope.launch { Repo.untag(getApplication(), id) }
-    fun ignore(t: Txn) = viewModelScope.launch { Repo.ignore(getApplication(), t) }
-    fun setCategory(t: Txn, c: String) = viewModelScope.launch {
+    fun tagAllMine(list: List<Txn>) = viewModelScope.launch(safe) { Repo.tagAllMine(getApplication(), list) }
+    fun untag(id: Long) = viewModelScope.launch(safe) { Repo.untag(getApplication(), id) }
+    fun ignore(t: Txn) = viewModelScope.launch(safe) { Repo.ignore(getApplication(), t) }
+    fun setCategory(t: Txn, c: String) = viewModelScope.launch(safe) {
         val n = Repo.setCategory(getApplication(), t, c)
         if (n > 0) status.value = "Tagged $c · also applied to $n similar from ${Logic.nameOnly(t.merchant, aliases.value)}"
     }
     val tagRules = dao.catRules().hot(emptyList())
-    fun removeTagRule(key: String) = viewModelScope.launch { Repo.removeTagRule(getApplication(), key) }
+    fun removeTagRule(key: String) = viewModelScope.launch(safe) { Repo.removeTagRule(getApplication(), key) }
     fun settleShares(person: String, ids: Set<Long>, mode: String) =
-        viewModelScope.launch { Repo.settleShares(getApplication(), person, ids, mode) }
+        viewModelScope.launch(safe) { Repo.settleShares(getApplication(), person, ids, mode) }
     fun settle(person: String, amount: Double, mode: String) =
-        viewModelScope.launch { Repo.settle(getApplication(), person, amount, mode) }
-    fun repaidBy(t: Txn, person: String) = viewModelScope.launch { Repo.repaidBy(getApplication(), t, person) }
-    fun linkRefund(refundId: Long, originalId: Long) = viewModelScope.launch { Repo.linkRefund(getApplication(), refundId, originalId) }
-    fun keepAsRefund(id: Long) = viewModelScope.launch { Repo.keepAsRefund(getApplication(), id) }
-    fun markFailed(t: Txn) = viewModelScope.launch {
+        viewModelScope.launch(safe) { Repo.settle(getApplication(), person, amount, mode) }
+    fun repaidBy(t: Txn, person: String) = viewModelScope.launch(safe) { Repo.repaidBy(getApplication(), t, person) }
+    fun linkRefund(refundId: Long, originalId: Long) = viewModelScope.launch(safe) { Repo.linkRefund(getApplication(), refundId, originalId) }
+    fun keepAsRefund(id: Long) = viewModelScope.launch(safe) { Repo.keepAsRefund(getApplication(), id) }
+    fun markFailed(t: Txn) = viewModelScope.launch(safe) {
         val closed = Repo.markFailed(getApplication(), t)
         status.value = if (closed) "Marked failed. A matching refund was already received, so it is closed." else "Marked failed. It closes automatically when the refund arrives."
     }
-    fun unfail(id: Long) = viewModelScope.launch { Repo.unfail(getApplication(), id) }
-    fun setAlias(raw: String, name: String) = viewModelScope.launch { Repo.setAlias(getApplication(), raw, name) }
-    fun toggleSplitAdded(t: Txn) = viewModelScope.launch { dao.setSplitAdded(t.id, !t.splitAdded) }
+    fun unfail(id: Long) = viewModelScope.launch(safe) { Repo.unfail(getApplication(), id) }
+    fun setAlias(raw: String, name: String) = viewModelScope.launch(safe) { Repo.setAlias(getApplication(), raw, name) }
+    fun toggleSplitAdded(t: Txn) = viewModelScope.launch(safe) { dao.setSplitAdded(t.id, !t.splitAdded) }
 
     suspend fun suggestRefund(t: Txn): Txn? = Repo.suggestOriginal(getApplication(), t)
     suspend fun sharesFor(id: Long): List<Share> = dao.sharesFor(id)

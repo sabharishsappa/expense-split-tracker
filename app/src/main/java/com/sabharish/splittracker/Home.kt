@@ -50,10 +50,21 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
     val owed = pending.filter { it.person != Repo.ME }.groupBy { it.person }
         .mapValues { e -> e.value.sumOf { it.amount - it.settled } }.filterValues { it > 0.004 }
     val accounts by vm.accounts.collectAsState()
+    val bills by vm.dueBills.collectAsState()
+    var payingBill by remember { mutableStateOf<Bill?>(null) }
     var checking by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<AccountView?>(null) }
     val total = owed.values.sum()
     val toReview = spends.size + money.size
+    payingBill?.let { b ->
+        AlertDialog(
+            onDismissRequest = { payingBill = null },
+            title = { Text("${Repo.bankName(b.bank)} ••${b.card}") },
+            text = { Text("Total ${Logic.money(b.total)}${if (b.minDue > 0) " · minimum ${Logic.money(b.minDue)}" else ""}\nDue ${Repo.shortDate(b.dueDate)}\n\nPaid already? Payments made by SMS are matched automatically; mark it here if you paid another way.") },
+            confirmButton = { TextButton(onClick = { vm.billPaid(b.id); payingBill = null }) { Text("Mark as paid") } },
+            dismissButton = { TextButton(onClick = { payingBill = null }) { Text("Close") } }
+        )
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column(
@@ -71,6 +82,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                 )
             }
         }
+        if (bills.isNotEmpty()) item { BillsCard(bills) { b -> payingBill = b } }
         item {
             val all by vm.all.collectAsState()
             val now = System.currentTimeMillis()
@@ -283,5 +295,39 @@ private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
             },
             confirmButton = { TextButton(onClick = onDone) { Text("✓") } }
         )
+    }
+}
+
+
+/** Card statements waiting to be paid, most urgent first. */
+@Composable
+private fun BillsCard(bills: List<Bill>, onTap: (Bill) -> Unit) {
+    val now = System.currentTimeMillis()
+    val total = bills.sumOf { it.total }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("You need to pay", fontSize = 13.sp, color = muted())
+                Text(Logic.money(total), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            }
+            Text("${bills.size} ${if (bills.size == 1) "bill" else "bills"}", fontSize = 13.sp, color = muted())
+        }
+        bills.forEach { b ->
+            val days = Bills.daysLeft(b.dueDate, now)
+            val c = when (Bills.urgency(days)) { "OVERDUE" -> MaterialTheme.colorScheme.error; "SOON" -> amber(); else -> green() }
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { onTap(b) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("${Repo.bankName(b.bank)} ••${b.card}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (b.minDue > 0) "Minimum ${Logic.money(b.minDue)}" else "Full amount", fontSize = 12.sp, color = muted())
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(Logic.money(b.total), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${Repo.shortDate(b.dueDate)} · ${Bills.dueLine(days)}", fontSize = 12.sp, color = c)
+                }
+            }
+        }
     }
 }

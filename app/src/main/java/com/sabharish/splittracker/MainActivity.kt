@@ -84,8 +84,11 @@ class MainActivity : ComponentActivity() {
     private fun catchUp() {
         if (!Repo.hasPermission(this, Manifest.permission.READ_SMS)) return
         val sp = getSharedPreferences("st", Context.MODE_PRIVATE)
-        val first = !sp.getBoolean("imported2", false)
-        vm.importHistory(if (first) 90 else 7, quiet = !first)
+        val now = System.currentTimeMillis()
+        // people who were already using the app keep tracking from their first import
+        if (Repo.getPref(this, "trackFrom", "").isEmpty() && sp.getBoolean("imported2", false)) Repo.putPref(this, "trackFrom", (now - 90 * Bills.DAY).toString())
+        val from = Repo.getPref(this, "trackFrom", "").toLongOrNull() ?: return   // new person: wait for the welcome choice
+        vm.importHistory(maxOf(from, now - 7 * Bills.DAY), quiet = true)
         sp.edit().putBoolean("imported2", true).apply()
     }
 }
@@ -153,6 +156,13 @@ fun App(vm: MainVm) {
                 else -> SummaryScreen(vm)
             }
         }
+    }
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    var welcome by remember { mutableStateOf(Repo.getPref(appCtx, "trackFrom", "").isEmpty() && !appCtx.getSharedPreferences("st", Context.MODE_PRIVATE).getBoolean("imported2", false)) }
+    if (welcome) WelcomeDialog { from ->
+        Repo.putPref(appCtx, "trackFrom", from.toString())
+        vm.importHistory(from)
+        welcome = false
     }
     if (showSettings) SettingsDialog(vm) { showSettings = false }
 }

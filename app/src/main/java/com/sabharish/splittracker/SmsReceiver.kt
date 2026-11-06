@@ -21,10 +21,15 @@ class SmsReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 for ((body, time) in bodies) {
+                    val at = if (time > 0) time else System.currentTimeMillis()
+                    val bill = BillParser.parse(body)
+                    if (bill != null) { Repo.ingestBill(app, bill, at); continue }
                     val p = SmsParser.parse(body) ?: continue
-                    val t = Repo.ingest(app, p, if (time > 0) time else System.currentTimeMillis(), body)
+                    val t = Repo.ingest(app, p, at, body)
                     if (t != null) Repo.notifyNew(app, t)
                 }
+            } catch (e: Throwable) {
+                CrashLog.record(app, e)
             } finally {
                 pending.finish()
             }

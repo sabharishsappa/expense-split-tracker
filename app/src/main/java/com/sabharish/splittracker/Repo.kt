@@ -35,6 +35,8 @@ object Repo {
         "YES" to "YES Bank", "KOTAK" to "Kotak", "FEDERAL" to "Federal"
     )
 
+    fun bankName(bank: String): String = bankNames[bank] ?: bank
+
     /** "SBI ••6674" for cards/accounts with digits, plain bank name otherwise. */
     fun acct(bank: String, card: String): String {
         val b = bankNames[bank] ?: bank
@@ -114,6 +116,9 @@ object Repo {
                     dao.setAuto(id, true)
                     saved = saved.copy(status = "TAGGED", auto = true)
                 }
+            }
+            if (p.kind == "PAYMENT") {
+                Bills.billPaidBy(dao.unpaidBills(), p.bank, p.card, p.amount, smsTime)?.let { dao.setBillPaid(it.id, true) }
             }
             if (p.kind == "REFUND") {
                 val found = findOriginal(dao, saved)
@@ -357,6 +362,21 @@ object Repo {
             txnDate = l.date, smsTime = l.date, status = "INBOX", note = "Added from statement"))
     }
 
+    // ---------- card bills ----------
+    /** Stores a statement as a bill to pay. Returns true when it is new. */
+    suspend fun ingestBill(ctx: Context, b: ParsedBill, smsTime: Long): Boolean {
+        val db = Db.get(ctx); val dao = db.dao()
+        return db.withTransaction {
+            val all = dao.allBills()
+            if (all.any { Bills.isSame(it, b) }) return@withTransaction false
+            Bills.superseded(all, b).forEach { dao.setBillPaid(it.id, true) }
+            // already paid? an earlier payment for this card after the statement date settles it at once
+            dao.insertBill(Bill(bank = b.bank, card = b.card, total = b.total, minDue = b.minDue, dueDate = b.due, smsTime = smsTime))
+            true
+        }
+    }
+    suspend fun setBillPaid(ctx: Context, id: Long, paid: Boolean) = Db.get(ctx).dao().setBillPaid(id, paid)
+
     // ---------- accounts ----------
     suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double) {
         val bank = key.substringBefore("|"); val last = key.substringAfter("|")
@@ -367,7 +387,7 @@ object Repo {
     suspend fun exportBackup(ctx: Context): String {
         val dao = Db.get(ctx).dao()
         val prefs = Backup.PREF_KEYS.associateWith { getPref(ctx, it, "") }.filterValues { it.isNotEmpty() }
-        val json = Backup.toJson(BackupData(dao.allTxnsList(), dao.allSharesList(), dao.allSettlementsList(), dao.allRulesList(), prefs), System.currentTimeMillis())
+        val json = Backup.toJson(BackupData(dao.allTxnsList(), dao.allSharesList(), dao.allSettlementsList(), dao.allRulesList(), prefs, dao.allBills()), System.currentTimeMillis())
         putPref(ctx, "lastBackup", System.currentTimeMillis().toString())
         return json
     }
@@ -376,11 +396,12 @@ object Repo {
     suspend fun restoreBackup(ctx: Context, text: String): Int {
         val d = Backup.fromJson(text) ?: return -1
         val dao = Db.get(ctx).dao()
-        dao.wipeShares(); dao.wipeSettlements(); dao.wipeRules(); dao.wipeTxns()
+        dao.wipeShares(); dao.wipeSettlements(); dao.wipeRules(); dao.wipeTxns(); dao.wipeBills()
         d.txns.forEach { dao.restoreTxn(it) }
         d.shares.forEach { dao.restoreShare(it) }
         d.settlements.forEach { dao.restoreSettlement(it) }
         d.rules.forEach { dao.putRule(it) }
+        d.bills.forEach { dao.restoreBill(it) }
         d.prefs.forEach { (k, v) -> putPref(ctx, k, v) }
         return d.txns.size
     }
@@ -390,9 +411,8 @@ object Repo {
         ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
 
     /** Reads existing messages from the inbox and ingests transactions. Safe to run repeatedly. */
-    suspend fun importInbox(ctx: Context, days: Int): Int = withContext(Dispatchers.IO) {
+    suspend fun importInbox(ctx: Context, since: Long): Int = withContext(Dispatchers.IO) {
         if (!hasPermission(ctx, Manifest.permission.READ_SMS)) return@withContext 0
-        val since = System.currentTimeMillis() - days * 86_400_000L
         var added = 0
         val cursor = ctx.contentResolver.query(
             Uri.parse("content://sms/inbox"), arrayOf("body", "date"),
@@ -403,6 +423,8 @@ object Repo {
             val di = it.getColumnIndex("date")
             while (it.moveToNext()) {
                 val text = it.getString(bi)
+                val bill = BillParser.parse(text)
+                if (bill != null) { ingestBill(ctx, bill, it.getLong(di)); continue }
                 val p = SmsParser.parse(text) ?: continue
                 if (ingest(ctx, p, it.getLong(di), text ?: "") != null) added++
             }

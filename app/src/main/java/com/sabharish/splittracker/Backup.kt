@@ -9,7 +9,8 @@ data class BackupData(
     val shares: List<Share>,
     val settlements: List<Settlement>,
     val rules: List<Rule>,
-    val prefs: Map<String, String>
+    val prefs: Map<String, String>,
+    val bills: List<Bill> = emptyList()
 )
 
 /** Pure JSON (de)serialisation. No Android classes besides org.json. */
@@ -46,6 +47,10 @@ object Backup {
         o.put("rules", JSONArray().apply {
             d.rules.forEach { r -> put(JSONObject().put("key", r.ruleKey).put("action", r.action).put("people", r.people)) }
         })
+        o.put("bills", JSONArray().apply {
+            d.bills.forEach { b -> put(JSONObject().put("id", b.id).put("bank", b.bank).put("card", b.card).put("total", b.total)
+                .put("minDue", b.minDue).put("dueDate", b.dueDate).put("smsTime", b.smsTime).put("paid", b.paid)) }
+        })
         o.put("prefs", JSONObject().apply { d.prefs.forEach { (k, v) -> put(k, v) } })
         return o.toString()
     }
@@ -77,7 +82,9 @@ object Backup {
                         date = j.getLong("date"), mode = j.getString("mode"))
                 },
                 rules = arr("rules") { j -> Rule(j.getString("key"), j.getString("action"), j.getString("people")) },
-                prefs = prefs
+                prefs = prefs,
+                bills = arr("bills") { j -> Bill(j.getLong("id"), j.getString("bank"), j.getString("card"), j.getDouble("total"),
+                    j.getDouble("minDue"), j.getLong("dueDate"), j.getLong("smsTime"), j.optBoolean("paid")) }
             )
         }
     } catch (e: Exception) { null }

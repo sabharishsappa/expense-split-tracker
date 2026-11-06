@@ -212,8 +212,24 @@ interface AppDao {
     @Query("SELECT * FROM txn WHERE kind IN ('SPEND','UPI_OUT') AND status != 'SELF' ORDER BY txnDate DESC LIMIT 80")
     suspend fun recentSpends(): List<Txn>
 
+    @Query("SELECT * FROM bill WHERE paid = 0 ORDER BY dueDate")
+    fun dueBills(): Flow<List<Bill>>
+    @Query("SELECT * FROM bill WHERE paid = 0")
+    suspend fun unpaidBills(): List<Bill>
+    @Query("SELECT * FROM bill")
+    suspend fun allBills(): List<Bill>
+    @Insert suspend fun insertBill(b: Bill): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreBill(b: Bill)
+    @Query("UPDATE bill SET paid = :paid WHERE id = :id") suspend fun setBillPaid(id: Long, paid: Boolean)
+    @Query("DELETE FROM bill") suspend fun wipeBills()
     @Query("SELECT * FROM txn WHERE category = '' AND kind IN ('SPEND','UPI_OUT')")
     suspend fun uncategorised(): List<Txn>
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `bill` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `bank` TEXT NOT NULL, `card` TEXT NOT NULL, `total` REAL NOT NULL, `minDue` REAL NOT NULL, `dueDate` INTEGER NOT NULL, `smsTime` INTEGER NOT NULL, `paid` INTEGER NOT NULL)")
+    }
 }
 
 val MIGRATION_3_4 = object : Migration(3, 4) {
@@ -236,7 +252,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class], version = 4, exportSchema = false)
+@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class, Bill::class], version = 5, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): AppDao
 
@@ -244,7 +260,7 @@ abstract class Db : RoomDatabase() {
         @Volatile private var inst: Db? = null
         fun get(ctx: Context): Db = inst ?: synchronized(this) {
             inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "splittracker.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build().also { inst = it }
         }
     }

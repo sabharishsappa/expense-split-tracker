@@ -545,9 +545,9 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 Text("Import older messages", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { vm.importHistory(180); onDismiss() }) { Text("6 months") }
-                    OutlinedButton(onClick = { vm.importHistory(365); onDismiss() }) { Text("1 year") }
-                    OutlinedButton(onClick = { vm.importHistory(1095); onDismiss() }) { Text("3 years") }
+                    OutlinedButton(onClick = { vm.importDays(180); onDismiss() }) { Text("6 months") }
+                    OutlinedButton(onClick = { vm.importDays(365); onDismiss() }) { Text("1 year") }
+                    OutlinedButton(onClick = { vm.importDays(1095); onDismiss() }) { Text("3 years") }
                 }
             }
         },
@@ -675,4 +675,39 @@ fun PeopleSelectDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onDone:
         confirmButton = { TextButton(enabled = chosen.isNotEmpty(), onClick = { onDone(chosen.toList()) }) { Text("✓") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+
+/** First launch: from when should old messages be brought in? Later ones always arrive live. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun WelcomeDialog(onPick: (Long) -> Unit) {
+    val options = remember { Bills.trackFromOptions(System.currentTimeMillis()) }
+    var sel by remember { mutableStateOf(options.getOrNull(1)?.second ?: options.first().second) }
+    var picking by remember { mutableStateOf(false) }
+    val fmt = remember { java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.ENGLISH) }
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Welcome 👋") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("From which date should I track your spends?", fontWeight = FontWeight.SemiBold)
+                Text("Messages from that day until now go straight into your Inbox, so nothing is missed. New messages after that arrive with a notification — and stay in the Inbox until you sort them.", fontSize = 13.sp, color = muted())
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    options.forEach { (label, t) -> Pill(label, { sel = t }, selected = sel == t, strong = sel == t) }
+                    Pill("Pick a date", { picking = true }, selected = options.none { it.second == sel }, strong = options.none { it.second == sel })
+                }
+                Text("Tracking from ${fmt.format(java.util.Date(sel))}", fontSize = 13.sp, color = teal())
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(sel) }) { Text("Start") } }
+    )
+    if (picking) {
+        val st = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = sel)
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = { TextButton(onClick = { st.selectedDateMillis?.let { sel = minOf(it, System.currentTimeMillis()) }; picking = false }) { Text("OK") } },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } }
+        ) { androidx.compose.material3.DatePicker(state = st) }
+    }
 }
