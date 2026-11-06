@@ -90,3 +90,77 @@ class StatementSourcesTest {
         assertEquals(listOf(1L), Statement.txnsFor(src, txns).map { it.id })
     }
 }
+
+/** Line layouts copied from real statements (amounts and names changed). */
+class StatementLayoutsTest {
+    private fun one(text: String) = Statement.parse(text).also { assertEquals(1, it.size) }[0]
+
+    @Test fun sbiCardUsesTrailingCOrD() {
+        val l = Statement.parse("""
+              16 Sep 26        CARD CASHBACK CREDIT                                                         158.00        C
+              16 Sep 26        TECHMASH SOLUTIONS PRI Bangalore IN                                          198.64         D
+              02 Oct 26        PAYMENT RECEIVED 000BD016275BAMAAAOX936L                                   3,653.16        C
+        """.trimIndent())
+        assertEquals(listOf(true, false, true), l.map { it.credit })
+        assertEquals(198.64, l[1].amount, 0.001)
+        assertEquals("TECHMASH SOLUTIONS PRI Bangalore IN", l[1].desc)
+    }
+
+    @Test fun hdfcCardWithTimePipeAndPlusForMoneyIn() {
+        val l = Statement.parse("""
+              30/08/2026| 15:04                       Swiggy FoodBENGALURU                              C 689.00      l
+              01/09/2026| 00:00                       10% Swiggy CashBack                              + C 68.90      l
+              02/09/2026| 07:46                       BPPY CC PAYMENT BD016245 (Ref# ST262460083000010420126)  + C 32,691.00      l
+        """.trimIndent())
+        assertEquals(3, l.size)
+        assertEquals(listOf(false, true, true), l.map { it.credit })
+        assertEquals(689.0, l[0].amount, 0.001); assertEquals("Swiggy FoodBENGALURU", l[0].desc)
+        assertEquals(32691.0, l[2].amount, 0.001)
+        assertEquals("2026-08-30", TestUtil.ymd(l[0].date))
+    }
+
+    @Test fun indusindCardIgnoresRewardPointsColumn() {
+        val l = Statement.parse("""
+              02/10/2026      INDIE PAYMENT                                                          0                            481.20 CR
+              24/09/2026      SWIGGY E COM BANGALORE IN                 DEPARTMENTAL                    10                            481.00 DR
+        """.trimIndent())
+        assertEquals(2, l.size)
+        assertTrue(l[0].credit); assertFalse(l[1].credit)
+        assertEquals(481.0, l[1].amount, 0.001)
+        assertEquals("SWIGGY E COM BANGALORE IN DEPARTMENTAL", l[1].desc)
+    }
+
+    @Test fun sbiAccountCreditDebitBalanceColumns() {
+        val l = Statement.parse("""
+              Date                       Transaction Reference                       Ref.No./Chq.No.                    Credit               Debit              Balance
+              Balance on 01-09-26:              441.32                                          null                    null               null                null
+              02-09-26      IMPS/624507776782/ICI-XX395-SAPPA S/IMPS Tran                                      -            73383.00                      0          73824.32
+              02-09-26      UPI/DR/624531846306/SAPPA SA/KKBK/sabharish./UPI                                   -                       0          15000.00           58824.32
+        """.trimIndent())
+        assertEquals(2, l.size)
+        assertTrue(l[0].credit); assertEquals(73383.0, l[0].amount, 0.001)
+        assertFalse(l[1].credit); assertEquals(15000.0, l[1].amount, 0.001)
+    }
+
+    @Test fun kotakAccountUsesBalanceMovementAndSerialNumbers() {
+        val l = Statement.parse("""
+              #       Date           Description                                   Chq/Ref. No.    Withdrawal (Dr.)     Deposit (Cr.)       Balance
+              -       -                 Opening Balance                            -                                    -                   -             1,634.05
+              1           01 Sep 2026   PCD/2159/Ratnadeep Super Market/P          624404379417                    87.05                                  1,547.00
+              2           02 Sep 2026   UPI/Sappa Sabhari/SBIN/624531846306/UPI    UPI-624546912384                                15,000.00          16,547.00
+              3           04 Sep 2026   UPI/Sappa Sabharis/SBIN/624796683751/UPI   UPI-624703461363             15,000.00                                 1,547.00
+        """.trimIndent())
+        assertEquals(3, l.size)
+        assertEquals(listOf(false, true, false), l.map { it.credit })
+        assertEquals(listOf(87.05, 15000.0, 15000.0), l.map { it.amount })
+    }
+
+    @Test fun totalsAndHeadersAreNotTransactions() {
+        assertTrue(Statement.parse("Statement Date 15/10/2026 Total Outstanding 1,234.00\nTotal 10 481.00").isEmpty())
+    }
+
+    @Test fun twoDigitYearsAreRead() {
+        assertEquals("2026-09-16", TestUtil.ymd(one("16 Sep 26   SHOP   10.00 D").date))
+        assertEquals("2025-10-12", TestUtil.ymd(one("12/10/25 SHOP 10.00 D").date))
+    }
+}

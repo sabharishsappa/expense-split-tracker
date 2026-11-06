@@ -29,35 +29,61 @@ object Statement {
 
     fun txnsFor(s: StmtSource, txns: List<Txn>): List<Txn> {
         val det = Accounts.detected(txns)
-        return if (s.isCard) txns.filter { it.bank == s.bank && it.card == s.last && (it.kind == "SPEND" || it.kind == "REFUND") && it.status != "REVERSED" }
+        return if (s.isCard) txns.filter { it.bank == s.bank && it.card == s.last && (it.kind == "SPEND" || it.kind == "REFUND" || it.kind == "PAYMENT") && it.status != "REVERSED" }
         else txns.filter { Accounts.accountOf(it, det) == Accounts.keyOf(s.bank, s.last) }
     }
 
-    private val dateRx = Regex("""^\s*(\d{1,2}[/\-. ](?:\d{1,2}|[A-Za-z]{3})[/\-. ]\d{2,4})\b""")
-    private val amtRx = Regex("""(?<![\w.])-?(?:₹|Rs\.?|INR)?\s?(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})|\d+\.\d{1,2})\s*(Cr|CR|cr|Dr|DR|dr)?\.?\s*$""")
+    private const val NUM = """\d[\d,]*(?:\.\d{1,2})?"""
+    private val dateRx = Regex("""^\s*(?:\d{1,4}\s+)?(\d{1,2}[/\-. ](?:\d{1,2}|[A-Za-z]{3})[/\-. ]\d{2,4})(?!\d)""")
+    private val openingRx = Regex("""(?:Opening Balance|Balance on \d{2}-\d{2}-\d{2}:?)\D*?(-?[\d,]+\.\d{2})\s*(?:null.*)?$""")
+    private val cardRx = Regex("""(\+)?\s*(?:(?<![A-Za-z0-9])C|₹|Rs\.?|`)?\s*($NUM)\s*(Cr|CR|Dr|DR|C|D)?\s*$""")
+    private val plainRx = Regex("""(?<![\w.])-?($NUM)\s*$""")
+    private val decimalTok = Regex("""-?\d[\d,]*\.\d{1,2}""")
+    private val skipRx = Regex("""\b(total|statement|due|opening|closing|balance|previous|summary|limit|rewards?|points)\b""", RegexOption.IGNORE_CASE)
     private val formats = listOf("dd/MM/yyyy", "dd-MM-yyyy", "dd.MM.yyyy", "dd/MM/yy", "dd-MM-yy", "dd MMM yyyy", "dd-MMM-yyyy", "dd/MMM/yyyy", "dd-MMM-yy", "dd MMM yy")
 
     private fun parseDate(s: String): Long? {
+        val t = s.trim().replace(Regex("\\s+"), " ")
         for (f in formats) try {
             val df = SimpleDateFormat(f, Locale.ENGLISH); df.isLenient = false
-            return df.parse(s.trim().replace(Regex("\\s+"), " "))?.time
+            val d = df.parse(t)
+            if (d != null) {
+                val c = java.util.Calendar.getInstance(); c.time = d
+                if (c.get(java.util.Calendar.YEAR) >= 1990) return d.time
+            }
         } catch (_: Exception) {}
         return null
     }
 
+    private fun num(s: String) = s.replace(",", "").toDouble()
+
     /**
-     * Reads plain statement text (from a CSV or from text pulled out of a PDF): any line that starts with a date and ends
-     * with an amount. "Cr" or a minus sign marks money coming in; everything else is money going out.
-     * Closing balance columns are skipped when a line has both an amount and a balance.
+     * Reads statement text (from a CSV or pulled out of a PDF): every line that starts with a date and ends with an amount.
+     * Handles card statements (amount followed by C/D or Cr/Dr, or "+ C 68.90" for money in) and bank statements
+     * (amount + balance, or credit/debit/balance columns; the direction comes from the column order or from how the
+     * balance moved). Wrapped description lines and totals are ignored.
      */
     fun parse(text: String): List<StmtLine> {
         val out = mutableListOf<StmtLine>()
+        var prev: Double? = null
+        val creditFirst = Regex("""Credit\s+Debit""").containsMatchIn(text)
         for (raw in text.lines()) {
-            val line = raw.replace(',', ',').trim().trim('"')
-            val d = dateRx.find(line) ?: continue
+            val line = raw.trim().trim('"')
+            val d = dateRx.find(line)
+            if (d == null) {
+                openingRx.find(line)?.let { prev = num(it.groupValues[1]) }
+                continue
+            }
             val date = parseDate(d.groupValues[1]) ?: continue
             var rest = line.substring(d.range.last + 1).trim()
-            // csv: split on commas outside quotes into cells, keep numeric cells
+            rest = rest.replace(Regex("""^[|\s]*(\d{1,2}:\d{2}(:\d{2})?)?[|\s]*"""), "")
+            // a second (value) date right after the first
+            dateRx.find(rest)?.let { m2 ->
+                if (m2.range.first == 0 && parseDate(m2.groupValues[1]) != null) rest = rest.substring(m2.range.last + 1).trim()
+            }
+            rest = rest.replace(Regex("""\s+[lI|]$"""), "")
+
+            // plain CSV cells
             val cells = if (rest.count { it == ',' } >= 2 && !rest.contains(Regex("""\d,\d{3}"""))) rest.split(',').map { it.trim().trim('"') } else listOf(rest)
             val nums = cells.mapNotNull { c -> if (c.matches(Regex("""-?\d+(\.\d+)?"""))) c.toDouble() else null }
             if (cells.size > 1 && nums.isNotEmpty()) {
@@ -66,14 +92,54 @@ object Statement {
                 out.add(StmtLine(date, desc.ifBlank { "Statement entry" }, abs(amount), amount < 0))
                 continue
             }
-            val m = amtRx.find(rest) ?: continue
-            val amt = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: continue
-            val credit = m.groupValues[2].equals("Cr", true) || m.value.trimStart().startsWith("-")
-            rest = rest.substring(0, m.range.first).trim()
-            out.add(StmtLine(date, rest.replace(Regex("\\s+"), " ").ifBlank { "Statement entry" }, amt, credit))
+
+            // card style: marker after or before the amount
+            val a = cardRx.find(rest)
+            if (a != null && a.groupValues[2].contains('.')) {
+                val suffix = a.groupValues[3]; val plus = a.groupValues[1].isNotEmpty()
+                val pre = rest.substring(0, a.groups[2]!!.range.first)
+                val prefixC = Regex("""(?<![A-Za-z0-9])C\s*$""").containsMatchIn(pre)
+                if (suffix.isNotEmpty() || plus || prefixC) {
+                    var desc = pre.replace(Regex("""\s*\+?\s*(C|₹|Rs\.?|`)?\s*$"""), "")
+                    if (Regex("""\s{2,}\d{1,3}\s*$""").containsMatchIn(desc)) desc = desc.replace(Regex("""\s+\d+\s*$"""), "")
+                    out.add(StmtLine(date, clean(desc), num(a.groupValues[2]), plus || suffix.uppercase() in listOf("C", "CR")))
+                    continue
+                }
+            }
+
+            // bank style: amount(s) then balance
+            val tail = mutableListOf<String>()
+            for (t in rest.split(Regex("\\s+")).reversed()) { if (decimalTok.matches(t) || t == "0") tail.add(t) else break }
+            if (tail.size >= 2) {
+                val vals = tail.reversed().takeLast(3).map { num(it) }
+                val bal = vals.last()
+                val tailRx = Regex("(?:\\s+(?:-?\\d[\\d,]*\\.\\d{1,2}|0)){${vals.size}}$")
+                val desc = tailRx.find(rest)?.let { rest.substring(0, it.range.first) } ?: rest
+                val amount: Double; val credit: Boolean
+                if (vals.size == 3) {
+                    val x = vals[0]; val y = vals[1]
+                    if (creditFirst) { credit = x != 0.0; amount = if (x != 0.0) x else y }
+                    else { credit = y != 0.0; amount = if (y != 0.0) y else x }
+                } else {
+                    amount = vals[0]
+                    val p = prev
+                    credit = if (p != null) bal > p else Regex("""/CR/|\bCR\b""").containsMatchIn(rest)
+                }
+                prev = bal
+                out.add(StmtLine(date, clean(desc.trim().trimEnd('-').trim()), amount, credit))
+                continue
+            }
+
+            // simple: description then amount
+            val p = plainRx.find(rest)
+            if (p != null && p.groupValues[1].contains('.')) {
+                out.add(StmtLine(date, clean(rest.substring(0, p.range.first)), num(p.groupValues[1]), rest[p.range.first] == '-'))
+            }
         }
-        return out
+        return out.filter { !skipRx.containsMatchIn(it.desc) }
     }
+
+    private fun clean(s: String) = s.replace(Regex("\\s+"), " ").trim().ifBlank { "Statement entry" }
 
     /** One-to-one matching on amount and date (within [days] days). */
     fun reconcile(lines: List<StmtLine>, txns: List<Txn>, days: Int = 3): Recon {
@@ -92,5 +158,5 @@ object Statement {
         return Recon(matched, missing, extra, lines.size)
     }
 
-    private fun isIn(t: Txn) = t.kind == "UPI_IN" || t.kind == "REFUND"
+    private fun isIn(t: Txn) = t.kind == "UPI_IN" || t.kind == "REFUND" || t.kind == "PAYMENT"
 }
