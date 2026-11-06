@@ -80,6 +80,16 @@ object Repo {
             if (isUpi && isSelf(ctx, p.merchant)) status = "SELF"
             else if (p.kind == "UPI_IN" && p.amount < 10) status = "IGNORED"
 
+            var transferNote = ""
+            var pairedWith: Txn? = null
+            if (status == "INBOX" && p.kind.startsWith("UPI")) {
+                val probe = Txn(bank = p.bank, card = p.card, kind = p.kind, amount = p.amount, merchant = p.merchant,
+                    txnDate = p.dateMillis ?: smsTime, smsTime = smsTime, status = "INBOX")
+                val other = if (p.kind == "UPI_OUT") "UPI_IN" else "UPI_OUT"
+                pairedWith = TransferMatcher.find(probe, dao.transferCandidates(other, p.amount - 0.011, p.amount + 0.011,
+                    smsTime - TransferMatcher.WINDOW_MS, smsTime + TransferMatcher.WINDOW_MS))
+                if (pairedWith != null) { status = "SELF"; transferNote = "Transfer between your own accounts" }
+            }
             var cat = ""
             if (p.kind == "SPEND" || p.kind == "UPI_OUT") {
                 cat = dao.rule(catKey(p.merchant))?.people ?: Categories.guess(p.merchant)
@@ -88,8 +98,9 @@ object Repo {
                 bank = p.bank, card = p.card, kind = p.kind, amount = p.amount, merchant = p.merchant,
                 txnDate = p.dateMillis ?: smsTime, smsTime = smsTime, status = status, category = cat
             )
-            val id = dao.insert(t)
-            var saved = t.copy(id = id)
+            val id = dao.insert(t.copy(note = transferNote))
+            var saved = t.copy(id = id, note = transferNote)
+            pairedWith?.let { dao.setStatusNote(it.id, "SELF", "Transfer between your own accounts") }
 
             if ((p.kind == "SPEND" || p.kind == "UPI_OUT") && status == "INBOX") {
                 val rule = dao.rule(merchantKey(p.merchant, p.card))
@@ -265,6 +276,12 @@ object Repo {
     // ---------- reminder text ----------
     fun reminderText(ctx: Context, person: String, rows: List<PendingRow>, aliases: Map<String, String>): String =
         Reminder.build(person, rows, aliases, getPref(ctx, "upi", ""), System.currentTimeMillis())
+
+    // ---------- accounts ----------
+    suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double) {
+        val bank = key.substringBefore("|"); val last = key.substringAfter("|")
+        Db.get(ctx).dao().putRule(Accounts.encode(Account(key, bank, last, name.trim(), balance, System.currentTimeMillis())))
+    }
 
     // ---------- backup ----------
     suspend fun exportBackup(ctx: Context): String {

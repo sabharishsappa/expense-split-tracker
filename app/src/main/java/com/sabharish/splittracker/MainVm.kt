@@ -40,6 +40,10 @@ class MainVm(app: Application) : AndroidViewModel(app) {
         Repo.putPref(getApplication(), "tags", Logic.joinTags(customTags.value))
     }
 
+    val accounts = kotlinx.coroutines.flow.combine(dao.all(), dao.acctRules()) { t, r -> Accounts.views(t, r) }.hot(emptyList())
+    fun setBalance(key: String, name: String, balance: Double) =
+        viewModelScope.launch { Repo.setAccountBalance(getApplication(), key, name, balance) }
+
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 

@@ -127,6 +127,12 @@ interface AppDao {
     @Query("SELECT COUNT(*) FROM txn WHERE kind = :kind AND amount = :amount AND card = :card AND merchant = :merchant AND smsTime BETWEEN :from AND :to")
     suspend fun near(kind: String, amount: Double, card: String, merchant: String, from: Long, to: Long): Int
 
+    @Query("SELECT * FROM txn WHERE kind = :kind AND status = 'INBOX' AND amount BETWEEN :lo AND :hi AND smsTime BETWEEN :from AND :to")
+    suspend fun transferCandidates(kind: String, lo: Double, hi: Double, from: Long, to: Long): List<Txn>
+
+    @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'")
+    fun acctRules(): Flow<List<Rule>>
+
     @Query("SELECT * FROM txn WHERE id = :id")
     suspend fun get(id: Long): Txn?
 
