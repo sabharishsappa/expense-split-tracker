@@ -194,22 +194,21 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Logic.selectedFirst(peopleChips, picked.toList()).forEach { p -> Pill(if (p == Repo.ME) "Me" else p, { toggle(p) }, selected = picked.contains(p)) }
-                        Pill(if (showSearch) "Hide contacts" else "+ Contacts", { showSearch = !showSearch })
                     }
-                    if (showSearch) {
+                    run {
                         Spacer(Modifier.height(8.dp))
                         OutlinedTextField(
                             value = query, onValueChange = { query = it }, singleLine = true,
-                            label = { Text(if (contacts.isEmpty()) "Type a name" else "Search contacts or type a name") },
+                            label = { Text("Type a name or search contacts") },
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (q.isNotEmpty() && contacts.none { it.equals(q, true) }) {
                             Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.fillMaxWidth().clickable { add(q); query = ""; showSearch = false }.padding(vertical = 10.dp))
+                                modifier = Modifier.fillMaxWidth().clickable { add(q); query = "" }.padding(vertical = 10.dp))
                         }
-                        results.forEach { name ->
+                        if (q.isNotEmpty()) results.forEach { name ->
                             Text(name, modifier = Modifier.fillMaxWidth().clickable {
-                                add(name); query = ""; showSearch = false
+                                add(name); query = ""
                             }.padding(vertical = 10.dp))
                         }
                     }
@@ -474,7 +473,6 @@ private fun Section(title: String, hint: String = "", content: @Composable () ->
 fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     var upi by remember { mutableStateOf(Repo.getPref(ctx, "upi", "")) }
-    var names by remember { mutableStateOf(Repo.getPref(ctx, "selfnames", "sabharish")) }
     val scope = rememberCoroutineScope()
     val last by vm.lastBackup.collectAsState()
     var note by remember { mutableStateOf("") }
@@ -513,19 +511,17 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     Section("Privacy", "This app has no internet permission. Your messages, people and amounts stay on this phone. They only leave if you choose to: a backup file you save, or a reminder you send yourself.") {
                         Text("🔒 Nothing is uploaded or published", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
-                    Section("Payments", "Your UPI ID goes into reminders. Transfers to or from names containing your name words are treated as your own money.") {
+                    Section("Payments", "Your UPI ID is put in the reminder message so people know where to pay.") {
                         OutlinedTextField(value = upi, onValueChange = { upi = it; Repo.putPref(ctx, "upi", it.trim()) }, singleLine = true,
                             label = { Text("My UPI ID") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = names, onValueChange = { names = it; Repo.putPref(ctx, "selfnames", it.trim()) }, singleLine = true,
-                            label = { Text("My name words, comma separated") }, modifier = Modifier.fillMaxWidth())
                     }
-                    Section("Tags", "Tap a tag to rename, hide or delete it.") {
+                    Section("Tags", "Your own tags come first — tap to rename, hide or delete. Built-in tags can only be hidden.") {
                         val mine by vm.customTags.collectAsState()
                         val hidden by vm.hiddenTags.collectAsState()
                         var newTag by remember { mutableStateOf(false) }
                         var editing by remember { mutableStateOf<String?>(null) }
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            (vm.tags.collectAsState().value.filter { it != "Other" } + hidden).distinct().forEach { c ->
+                            (mine + (vm.tags.collectAsState().value.filter { it != "Other" } + hidden).distinct().filter { it !in mine }).forEach { c ->
                                 Pill(if (c in hidden) "$c (hidden)" else c, { editing = c }, compact = true)
                             }
                             Pill("+ New", { newTag = true }, compact = true)

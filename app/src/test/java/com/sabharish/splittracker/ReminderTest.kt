@@ -26,12 +26,12 @@ class ReminderTest {
     @Test fun upiIdIsAddedWhenPresent() {
         val rows = listOf(pending("Rajesh", "Namma Irani", 37.5, nov6, total = 187.5, parts = 5))
         val text = Reminder.build("Rajesh", rows, emptyMap(), "me@okaxis", nov6 + day)
-        assertTrue(text.contains("Total pending: ₹37.50\nPay to: me@okaxis\n\nThank you!"))
+        assertTrue(text.contains("Total pending: ₹37.50\n\nPay via any UPI app (GPay, PhonePe, Paytm) to:\nme@okaxis\n\nThank you!"))
     }
 
     @Test fun noUpiLineWhenBlank() {
         val rows = listOf(pending("Rajesh", "Swiggy", 640.0, nov6))
-        assertFalse(Reminder.build("Rajesh", rows, emptyMap(), "  ", nov6 + day).contains("Pay to"))
+        assertFalse(Reminder.build("Rajesh", rows, emptyMap(), "  ", nov6 + day).contains("Pay via"))
     }
 
     @Test fun fullySpentOnThemIsASingleLine() {
@@ -51,6 +51,7 @@ class ReminderTest {
     @Test fun toneGetsFirmerWithAge() {
         val rows = listOf(pending("Rajesh", "Swiggy", 640.0, nov6))
         assertTrue(Reminder.build("Rajesh", rows, emptyMap(), "", nov6 + 5 * day).startsWith("Hi Rajesh 👋"))
+        assertTrue(Reminder.build("Rajesh", rows, emptyMap(), "", nov6 + 20 * day).startsWith("Hi Rajesh 👋"))
         assertTrue(Reminder.build("Rajesh", rows, emptyMap(), "", nov6 + 20 * day).contains("A gentle reminder"))
         val old = Reminder.build("Rajesh", rows, emptyMap(), "", nov6 + 40 * day)
         assertTrue(old.contains("pending for over a month"))

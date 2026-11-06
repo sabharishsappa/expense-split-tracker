@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -96,6 +98,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun App(vm: MainVm) {
     var tab by remember { mutableIntStateOf(0) }
+    var inboxSection by remember { mutableIntStateOf(0) }
+    var searching by remember(tab) { mutableStateOf(false) }
+    var query by remember(tab) { mutableStateOf("") }
     val spends by vm.inbox.collectAsState()
     val money by vm.moneyIn.collectAsState()
     val status by vm.status.collectAsState()
@@ -145,14 +150,25 @@ fun App(vm: MainVm) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(titles[tab], fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
+                        Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
+                    }
+                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+                }
+            }
+            if (searching && tab in 1..3) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = query, onValueChange = { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(if (tab == 2) "Search a person or bill" else "Name, amount, tag or message") }
+                )
             }
             Spacer(Modifier.height(6.dp))
             when (tab) {
-                0 -> HomeScreen(vm) { tab = it }
-                1 -> InboxScreen(vm, undoable)
-                2 -> PendingScreen(vm)
-                3 -> AllScreen(vm)
+                0 -> HomeScreen(vm) { if (it == 11) { inboxSection = 3; tab = 1 } else { if (it == 1) inboxSection = 0; tab = it } }
+                1 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
+                2 -> PendingScreen(vm, query)
+                3 -> AllScreen(vm, query)
                 else -> SummaryScreen(vm)
             }
         }

@@ -68,6 +68,10 @@ object Logic {
         return "Split ${selected.size} ways · ${money(per)} each"
     }
 
+    /** Cash lent to people (tag "Lent"): what is still to come back. */
+    fun lentTotal(rows: List<PendingRow>): Double =
+        rows.filter { it.person != ME && it.category.equals("Lent", true) }.sumOf { it.amount - it.settled }
+
     /** One line describing what the single ✓ will do to every ticked bill. */
     fun bulkSummary(count: Int, total: Double, tag: String, people: List<String>): String {
         if (count == 0) return "Tick the bills to change"
@@ -222,8 +226,8 @@ object Reminder {
         val first = person.trim().substringBefore(" ")
         val intro = when {
             days <= 14 -> "Hi $first 👋\n\nA quick reminder about the spends I covered for you:"
-            days <= 30 -> "Hi $first,\n\nA gentle reminder about the spends I covered for you:"
-            else -> "Hi $first,\n\nFollowing up on the spends I covered for you. This has been pending for over a month:"
+            days <= 30 -> "Hi $first 👋\n\nA gentle reminder about the spends I covered for you:"
+            else -> "Hi $first 👋\n\nFollowing up on the spends I covered for you. This has been pending for over a month:"
         }
         val shown = sorted.take(8)
         val lines = shown.joinToString("\n") { r ->
@@ -238,7 +242,7 @@ object Reminder {
             }
         }
         val more = if (sorted.size > shown.size) "\n…and ${sorted.size - shown.size} more" else ""
-        val pay = if (upi.isNotBlank()) "\nPay to: ${upi.trim()}" else ""
+        val pay = if (upi.isNotBlank()) "\n\nPay via any UPI app (GPay, PhonePe, Paytm) to:\n${upi.trim()}" else ""
         val close = if (days > 30) "Could you please clear it this week? Thank you!" else "Thank you!"
         return "$intro\n\n$lines$more\n\nTotal pending: ${Logic.money(total)}$pay\n\n$close"
     }

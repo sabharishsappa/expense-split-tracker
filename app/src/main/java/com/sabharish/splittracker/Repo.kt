@@ -368,6 +368,18 @@ object Repo {
             txnDate = l.date, smsTime = l.date, status = "INBOX", note = "Added from statement"))
     }
 
+    // ---------- cash lent ----------
+    /** Money you handed over (cash or otherwise) that someone should give back. Shows under Owed as "Lent". */
+    suspend fun addLent(ctx: Context, person: String, amount: Double, note: String = "") {
+        val db = Db.get(ctx); val dao = db.dao()
+        val now = System.currentTimeMillis()
+        db.withTransaction {
+            val id = dao.insert(Txn(bank = "CASH", card = "", kind = "UPI_OUT", amount = amount, merchant = "Lent to $person",
+                txnDate = now, smsTime = now, status = "TAGGED", category = "Lent", note = note))
+            dao.insertShare(Share(txnId = id, person = person, amount = amount, settled = 0.0))
+        }
+    }
+
     // ---------- card bills ----------
     /** Stores a statement as a bill to pay. Returns true when it is new. */
     suspend fun ingestBill(ctx: Context, b: ParsedBill, smsTime: Long): Boolean {

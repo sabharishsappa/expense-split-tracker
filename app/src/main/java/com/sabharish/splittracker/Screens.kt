@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -106,14 +108,12 @@ private fun TxnHeader(t: Txn, aliases: Map<String, String>, incoming: Boolean = 
 // ======================= INBOX =======================
 
 @Composable
-fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
+fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section: Int, onSection: (Int) -> Unit) {
     val allSpends by vm.inbox.collectAsState()
     val allMoney by vm.moneyIn.collectAsState()
     val allAuto by vm.autoTagged.collectAsState()
     val allFailed by vm.failed.collectAsState()
-    var section by remember { mutableIntStateOf(0) }
     var via by remember { mutableStateOf("All") }
-    var q by remember(Epoch.value) { mutableStateOf("") }
     val aliasMap by vm.aliases.collectAsState()
     fun List<Txn>.search() = if (q.isBlank()) this else filter { Filters.textMatches(it, emptyList(), aliasMap, q) }
     val spends = allSpends.search(); val money = allMoney.search(); val auto = allAuto.search(); val failed = allFailed.search()
@@ -126,16 +126,11 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
         containerColor = androidx.compose.ui.graphics.Color.Transparent
     ) {
         tabs.forEachIndexed { i, (name, n) ->
-            androidx.compose.material3.Tab(selected = section == i, onClick = { section = i },
+            androidx.compose.material3.Tab(selected = section == i, onClick = { onSection(i) },
                 text = { Text(if (n > 0) "$name · $n" else name, fontSize = 14.sp) })
         }
     }
     Spacer(Modifier.height(8.dp))
-    OutlinedTextField(
-        value = q, onValueChange = { q = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("Search name, amount or message") },
-        trailingIcon = { if (q.isNotEmpty()) TextButton(onClick = { q = "" }) { Text("✕") } }
-    )
     Spacer(Modifier.height(8.dp))
     if (q.isNotBlank() && spends.isEmpty() && money.isEmpty() && auto.isEmpty() && failed.isEmpty())
         Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 15.sp)
@@ -462,10 +457,13 @@ private fun FailedList(vm: MainVm, items: List<Txn>) {
 // ======================= PENDING =======================
 
 @Composable
-fun PendingScreen(vm: MainVm) {
+fun PendingScreen(vm: MainVm, q: String) {
     val ctx = LocalContext.current
     val aliases by vm.aliases.collectAsState()
-    val rows by vm.pending.collectAsState()
+    val allRows by vm.pending.collectAsState()
+    val rows = if (q.isBlank()) allRows else allRows.filter { it.person.contains(q.trim(), true) || Repo.nameOnly(it.merchant, aliases).contains(q.trim(), true) || it.category.contains(q.trim(), true) }
+    var lentFor by remember { mutableStateOf<String?>(null) }
+    var pickLent by remember { mutableStateOf(false) }
     var settleFor by remember { mutableStateOf<String?>(null) }
     var remindFor by remember { mutableStateOf<String?>(null) }
     val grouped = rows.groupBy { it.person }
@@ -476,6 +474,10 @@ fun PendingScreen(vm: MainVm) {
         Text("Owed to you", fontSize = 13.sp, color = muted())
         Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (total > 0) teal() else muted())
         Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
+        val lent = Logic.lentTotal(rows)
+        if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = teal())
+        Spacer(Modifier.height(6.dp))
+        OutlinedButton(onClick = { pickLent = true }) { Text("+ I lent money") }
     }
     Spacer(Modifier.height(12.dp))
     if (rows.isEmpty()) Text("Nobody owes you anything right now.", color = muted(), fontSize = 15.sp)
@@ -494,14 +496,18 @@ fun PendingScreen(vm: MainVm) {
                 }
                 Spacer(Modifier.height(8.dp))
                 val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
+                // at most 3 bills show; the rest scroll inside this box
+                Column(Modifier.heightIn(max = 144.dp).verticalScroll(rememberScrollState())) {
                 e.value.forEach { r ->
                     Row(Modifier.fillMaxWidth().clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
                         verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
-                        Text("${Repo.shortDate(r.txnDate)} · ${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
+                        Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
                         Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+                }
+                if (e.value.size > 3) Text("${e.value.size - 3} more · scroll", fontSize = 12.sp, color = muted(), modifier = Modifier.padding(start = 12.dp))
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text("Remind", maxLines = 1) }
@@ -511,6 +517,18 @@ fun PendingScreen(vm: MainVm) {
                 }
             }
         }
+    }
+    if (pickLent) PersonPickerDialog(vm, "Who did you lend to?", { pickLent = false }) { lentFor = it; pickLent = false }
+    lentFor?.let { person ->
+        var amt by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { lentFor = null },
+            title = { Text("Lent to $person") },
+            text = { OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount ₹") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)) },
+            confirmButton = { TextButton(enabled = (amt.toDoubleOrNull() ?: 0.0) > 0, onClick = { vm.addLent(person, amt.toDouble()); lentFor = null }) { Text("Add") } },
+            dismissButton = { TextButton(onClick = { lentFor = null }) { Text("Cancel") } }
+        )
     }
     settleFor?.let { person ->
         val mine = rows.filter { it.person == person }
@@ -531,29 +549,26 @@ fun PendingScreen(vm: MainVm) {
 // ======================= ALL TRANSACTIONS =======================
 
 @Composable
-fun AllScreen(vm: MainVm) {
+fun AllScreen(vm: MainVm, q: String) {
     val aliases by vm.aliases.collectAsState()
     val txns by vm.all.collectAsState()
     val shares by vm.shares.collectAsState()
-    var f by remember { mutableStateOf(TxnFilter()) }
+    var f0 by remember { mutableStateOf(TxnFilter()) }
+    val f = f0.copy(query = q)
     var sheetFor by remember { mutableStateOf<Txn?>(null) }
     val tags by vm.tags.collectAsState()
     val byTxn = shares.groupBy { it.txnId }
     val now = System.currentTimeMillis()
     val shown = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) }
-    OutlinedTextField(
-        value = f.query, onValueChange = { f = f.copy(query = it) }, singleLine = true,
-        placeholder = { Text("Search name, amount, tag, person or message") }, modifier = Modifier.fillMaxWidth()
-    )
     Spacer(Modifier.height(6.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterPill("Type", Filters.types, f.type) { f = f.copy(type = it) }
-        FilterPill("Date", Filters.ranges, f.range) { f = f.copy(range = it) }
+        FilterPill("Type", Filters.types, f.type) { f0 = f0.copy(type = it) }
+        FilterPill("Date", Filters.ranges, f.range) { f0 = f0.copy(range = it) }
         FilterPill("Tag", listOf("Any", "Untagged") + tags, if (f.tagState == "Untagged") "Untagged" else f.tag.ifBlank { "Any" }) {
-            f = when (it) { "Any" -> f.copy(tagState = "Any", tag = ""); "Untagged" -> f.copy(tagState = "Untagged", tag = ""); else -> f.copy(tagState = "Any", tag = it) }
+            f0 = when (it) { "Any" -> f0.copy(tagState = "Any", tag = ""); "Untagged" -> f0.copy(tagState = "Untagged", tag = ""); else -> f0.copy(tagState = "Any", tag = it) }
         }
-        FilterPill("Status", Filters.statuses, f.status) { f = f.copy(status = it) }
-        if (f.active) Pill("Clear ✕", { f = TxnFilter() }, compact = true)
+        FilterPill("Status", Filters.statuses, f.status) { f0 = f0.copy(status = it) }
+        if (f0.active) Pill("Clear ✕", { f0 = TxnFilter() }, compact = true)
     }
     Spacer(Modifier.height(6.dp))
     Text("${shown.size} transactions · ${Logic.money(shown.filter { it.kind == "SPEND" || it.kind == "UPI_OUT" }.sumOf { it.amount })} spent",
@@ -634,7 +649,7 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
                 live.forEach { s ->
                     val label = if (s.person == Repo.ME) "Me" else s.person.substringBefore(" ")
                     val st = if (s.person == Repo.ME) "" else if (s.settled >= s.amount - 0.005) " ✓ paid" else " · owes ${Repo.money(s.amount - s.settled)}"
-                    Pill("$label ${Repo.money(s.amount)}$st", { onChange(t) }, selected = true, compact = true)
+                    Pill("$label ${Repo.money(s.amount)}$st", { onChange(t) })
                 }
             }
         }

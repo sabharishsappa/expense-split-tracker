@@ -80,6 +80,11 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                     if (owed.isEmpty()) "All settled 🎉" else "${owed.size} ${if (owed.size == 1) "person" else "people"} · tap to see details",
                     color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp
                 )
+                val lent = Logic.lentTotal(pending)
+                if (lent > 0.004) {
+                    Spacer(Modifier.height(2.dp))
+                    Text("Cash lent ${Logic.money(lent)} · Shared spends ${Logic.money(total - lent)}", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                }
             }
         }
         if (bills.isNotEmpty()) item { BillsCard(bills) { b -> payingBill = b } }
@@ -111,7 +116,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile("To review", toReview.toString(), if (toReview > 0) amber() else green(), Modifier.weight(1f)) { go(1) }
-                StatTile("Awaiting refund", failed.size.toString(), if (failed.isNotEmpty()) amber() else green(), Modifier.weight(1f)) { go(1) }
+                StatTile("Awaiting refund", failed.size.toString(), if (failed.isNotEmpty()) amber() else green(), Modifier.weight(1f)) { go(11) }
             }
         }
         if (accounts.isNotEmpty()) {

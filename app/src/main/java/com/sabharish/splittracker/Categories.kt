@@ -5,7 +5,7 @@ import java.util.Locale
 object Categories {
     val all = listOf(
         "Grocery", "Food Order", "Dine Out", "Cab", "Travel", "Shopping",
-        "Bills", "Fuel", "Entertainment", "Health", "Other"
+        "Bills", "Fuel", "Entertainment", "Health", "Lent", "Other"
     )
 
     private val rules: List<Pair<String, List<String>>> = listOf(

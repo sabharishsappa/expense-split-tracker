@@ -99,9 +99,9 @@ class ScenarioTest {
                 }
                 val text = Reminder.build("Rajesh Kumar", rows, emptyMap(), upi, now)
                 val due = rows.sumOf { it.amount - it.settled }
-                assertTrue(text.startsWith("Hi Rajesh"))
+                assertTrue(text.startsWith("Hi Rajesh 👋"))
                 assertTrue("total shown", text.contains("Total pending: ${Logic.money(due)}"))
-                assertEquals(upi.isNotEmpty(), text.contains("Pay to: $upi"))
+                assertEquals(upi.isNotEmpty(), text.contains("to:\n$upi\n\nThank you!"))
                 assertEquals(items > 8, text.contains("more"))
                 assertFalse(text.contains("null") || text.contains("NaN"))
                 assertFalse("no triple blank lines", text.contains("\n\n\n"))
