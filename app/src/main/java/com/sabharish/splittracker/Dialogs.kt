@@ -510,6 +510,9 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    Section("Privacy", "This app has no internet permission. Your messages, people and amounts stay on this phone. They only leave if you choose to: a backup file you save, or a reminder you send yourself.") {
+                        Text("🔒 Nothing is uploaded or published", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    }
                     Section("Payments", "Your UPI ID goes into reminders. Transfers to or from names containing your name words are treated as your own money.") {
                         OutlinedTextField(value = upi, onValueChange = { upi = it; Repo.putPref(ctx, "upi", it.trim()) }, singleLine = true,
                             label = { Text("My UPI ID") }, modifier = Modifier.fillMaxWidth())

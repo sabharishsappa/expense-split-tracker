@@ -78,9 +78,9 @@ private fun daysSince(ms: Long) = ((System.currentTimeMillis() - ms) / 86_400_00
 
 @Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-private fun AppCard(onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+private fun AppCard(onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Card(
-        if (onLongClick != null) Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).combinedClickable(onClick = {}, onLongClick = onLongClick) else Modifier.fillMaxWidth(),
+        if (onLongClick != null || onClick != null) Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick) else Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -220,6 +220,8 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSimilar: () -> Unit, onSele
 private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> Unit) {
     val recents by vm.recents.collectAsState()
     var sheetFor by remember { mutableStateOf<Pair<Txn, List<String>>?>(null) }
+    // chosen people live here, not inside each card, so scrolling or searching never loses them
+    val chosenBy = remember(Epoch.value) { androidx.compose.runtime.mutableStateMapOf<Long, List<String>>() }
     var confirmAll by remember { mutableStateOf(false) }
     if (items.isEmpty()) {
         Text("Inbox zero ✨ New card and UPI payments appear here on their own.", color = muted(), fontSize = 15.sp)
@@ -248,7 +250,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliasesNow, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else SpendCard(t, vm, recents, undoable, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen }
+            else SpendCard(t, vm, recents, undoable, sel = chosenBy[t.id] ?: emptyList(), setSel = { chosenBy[t.id] = it }, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen }
         }
     }
     sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen) }
@@ -264,7 +266,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
 }
 
 @Composable
-private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onSimilar: () -> Unit = {}, onSelect: () -> Unit = {}, onMore: (Txn, List<String>) -> Unit) {
+private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, sel: List<String>, setSel: (List<String>) -> Unit, onSimilar: () -> Unit = {}, onSelect: () -> Unit = {}, onMore: (Txn, List<String>) -> Unit) {
     val aliases by vm.aliases.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
     var catMenu by remember { mutableStateOf(false) }
@@ -294,8 +296,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
         Spacer(Modifier.height(12.dp))
         Text("Whose spend? Tap one or more", fontSize = 13.sp, color = muted())
         Spacer(Modifier.height(6.dp))
-        val sel = remember(Epoch.value) { mutableStateListOf<String>() }
-        fun toggle(p: String) { if (p in sel) sel.remove(p) else sel.add(p) }
+        fun toggle(p: String) { setSel(if (p in sel) sel - p else sel + p) }
         val s = sug
         val asBefore = if (s != null && s.action == "PEOPLE") s.people.split(",").filter { it.isNotBlank() } else emptyList()
         val chips = (listOf(Repo.ME) + recents.filter { it !in asBefore }.take(4) + sel.filter { it != Repo.ME && it !in recents }).distinct()
@@ -303,10 +304,10 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
         val labelOf = chips.zip(firstNames(chips)).toMap().mapValues { if (it.key == Repo.ME) "Me" else it.value }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ordered.filter { it in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }, selected = true) }
-            if (asBefore.isNotEmpty() && sel.toList() != asBefore) {
+            if (asBefore.isNotEmpty() && sel != asBefore) {
                 val label = firstNames(asBefore.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
                     if (asBefore.contains(Repo.ME)) " & you" else ""
-                Pill("As before: $label", { sel.clear(); sel.addAll(asBefore) })
+                Pill("As before: $label", { setSel(asBefore) })
             }
             ordered.filter { it !in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }) }
             Pill("More…", { onMore(t, sel.toList()) })
@@ -608,7 +609,7 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
         "BILLPAY" -> "Card bill payment"
         else -> ""
     }
-    AppCard {
+    AppCard(onClick = if (spendLike && t.status != "REVERSED") ({ onChange(t) }) else null) {
         TxnHeader(t, aliases, incoming) {
             if (spendLike) Box {
                 IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
@@ -623,17 +624,19 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
         if (t.note.isNotBlank()) Text(t.note, fontSize = 13.sp, color = muted())
         if (spendLike) {
             Spacer(Modifier.height(6.dp))
-            Box {
-                Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
-                TagMenu(vm, catMenu, { catMenu = false }) { vm.setCategory(t, it) }
-            }
+            Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { onChange(t) })
         }
         val live = ss.filter { it.amount > 0.004 }
-        if (live.isNotEmpty()) Spacer(Modifier.height(6.dp))
-        live.forEach { s ->
-            val label = if (s.person == Repo.ME) "You" else s.person
-            val st = if (s.person == Repo.ME) "your share" else if (s.settled >= s.amount - 0.005) "paid" else "owes ${Repo.money(s.amount - s.settled)}"
-            Text("$label · ${Repo.money(s.amount)} · $st", fontSize = 14.sp)
+        if (live.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            // same chip look as the Inbox card and the edit page
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                live.forEach { s ->
+                    val label = if (s.person == Repo.ME) "Me" else s.person.substringBefore(" ")
+                    val st = if (s.person == Repo.ME) "" else if (s.settled >= s.amount - 0.005) " ✓ paid" else " · owes ${Repo.money(s.amount - s.settled)}"
+                    Pill("$label ${Repo.money(s.amount)}$st", { onChange(t) }, selected = true, compact = true)
+                }
+            }
         }
         if (live.any { it.person != Repo.ME }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
