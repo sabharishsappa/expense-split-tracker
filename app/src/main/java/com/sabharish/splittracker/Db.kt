@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * kind:   SPEND (card) | UPI_OUT | UPI_IN | REFUND | PAYMENT (card bill payment)
- * status: INBOX | TAGGED | IGNORED | REFUND | REFUNDED | BILLPAY | SELF | REPAID
+ * status: INBOX | TAGGED | IGNORED | REFUND | REVERSED | FAILED | BILLPAY | SELF | REPAID
  */
 @Entity(tableName = "txn")
 data class Txn(
@@ -33,7 +33,8 @@ data class Txn(
     val splitAdded: Boolean = false,
     val category: String = "",
     val refundOf: Long = 0,
-    val note: String = ""
+    val note: String = "",
+    val auto: Boolean = false   // tagged automatically by a remembered rule
 )
 
 @Entity(tableName = "share", indices = [Index("txnId"), Index("person")])
@@ -90,6 +91,24 @@ interface AppDao {
 
     @Query("SELECT * FROM rule WHERE ruleKey = :k")
     suspend fun rule(k: String): Rule?
+
+    @Query("DELETE FROM rule WHERE ruleKey = :k")
+    suspend fun deleteRule(k: String)
+
+    @Query("SELECT * FROM rule WHERE ruleKey LIKE 'alias|%'")
+    fun aliases(): Flow<List<Rule>>
+
+    @Query("UPDATE txn SET auto = :v WHERE id = :id")
+    suspend fun setAuto(id: Long, v: Boolean)
+
+    @Query("SELECT * FROM txn WHERE auto = 1 AND status = 'TAGGED' ORDER BY txnDate DESC, id DESC LIMIT 40")
+    fun autoTagged(): Flow<List<Txn>>
+
+    @Query("SELECT * FROM txn WHERE status = 'FAILED' ORDER BY txnDate DESC, id DESC")
+    fun failed(): Flow<List<Txn>>
+
+    @Query("SELECT * FROM txn WHERE kind = 'REFUND' AND status = 'INBOX' AND amount BETWEEN :lo AND :hi AND smsTime >= :since")
+    suspend fun refundsWaiting(lo: Double, hi: Double, since: Long): List<Txn>
 
     @Query("SELECT COUNT(*) FROM txn WHERE kind = :kind AND amount = :amount AND card = :card AND merchant = :merchant AND smsTime BETWEEN :from AND :to")
     suspend fun near(kind: String, amount: Double, card: String, merchant: String, from: Long, to: Long): Int
@@ -148,7 +167,7 @@ interface AppDao {
     @Query("SELECT t.card AS card, t.txnDate AS txnDate, t.category AS category, s.person AS person, s.amount AS shareAmt, s.settled AS settled FROM txn t JOIN share s ON s.txnId = t.id WHERE t.kind IN ('SPEND','UPI_OUT')")
     fun summary(): Flow<List<SummaryRow>>
 
-    @Query("SELECT * FROM txn WHERE kind IN ('SPEND','UPI_OUT') AND amount BETWEEN :lo AND :hi AND smsTime BETWEEN :from AND :to AND status != 'REFUNDED' AND id NOT IN (SELECT refundOf FROM txn WHERE refundOf > 0) ORDER BY smsTime DESC LIMIT 5")
+    @Query("SELECT * FROM txn WHERE kind IN ('SPEND','UPI_OUT') AND amount BETWEEN :lo AND :hi AND smsTime BETWEEN :from AND :to AND status NOT IN ('REVERSED','SELF','IGNORED') AND id NOT IN (SELECT refundOf FROM txn WHERE refundOf > 0) ORDER BY smsTime DESC LIMIT 12")
     suspend fun refundCandidates(lo: Double, hi: Double, from: Long, to: Long): List<Txn>
 
     @Query("SELECT * FROM txn WHERE kind IN ('SPEND','UPI_OUT') AND status != 'SELF' ORDER BY txnDate DESC LIMIT 80")
@@ -156,6 +175,12 @@ interface AppDao {
 
     @Query("SELECT * FROM txn WHERE category = '' AND kind IN ('SPEND','UPI_OUT')")
     suspend fun uncategorised(): List<Txn>
+}
+
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE txn ADD COLUMN auto INTEGER NOT NULL DEFAULT 0")
+    }
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -166,7 +191,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class], version = 2, exportSchema = false)
+@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class], version = 3, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): AppDao
 
@@ -174,7 +199,7 @@ abstract class Db : RoomDatabase() {
         @Volatile private var inst: Db? = null
         fun get(ctx: Context): Db = inst ?: synchronized(this) {
             inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "splittracker.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { inst = it }
         }
     }

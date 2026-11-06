@@ -64,7 +64,8 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.READ_CONTACTS, Manifest.permission.POST_NOTIFICATIONS
             )
         )
-        setContent { MaterialTheme(colorScheme = AppColors) { App(vm) } }
+        ThemeState.mode = Repo.getPref(this, "theme", "system")
+        setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) } }
     }
 
     override fun onResume() {

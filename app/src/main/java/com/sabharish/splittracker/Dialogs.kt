@@ -57,29 +57,48 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
     val picked = remember { mutableStateListOf<String>() }
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    var custom by remember { mutableStateOf(false) }
-    val amounts = remember { mutableStateMapOf<String, String>() }
+    var splitMode by remember { mutableStateOf("EQUAL") }   // EQUAL | PERCENT | PARTS | AMOUNT
+    val vals = remember { mutableStateMapOf<String, String>() }
+    val aliases by vm.aliases.collectAsState()
+    var rename by remember { mutableStateOf(false) }
     var alreadyPaid by remember { mutableStateOf(false) }
     var splitAdded by remember { mutableStateOf(false) }
     var rememberRule by remember { mutableStateOf(true) }
 
-    fun toggle(name: String) {
-        if (picked.contains(name)) picked.remove(name) else picked.add(name)
+    fun equal(): List<NewShare> = Repo.equalShares(t.amount, picked.toList(), alreadyPaid)
+
+    fun fmt(v: Double) = String.format(java.util.Locale.US, "%.2f", v)
+
+    /** Fill sensible starting values whenever the people or the split mode change. */
+    fun refill() {
+        vals.clear()
+        val names = picked.toList()
+        if (names.size < 2) return
+        when (splitMode) {
+            "PERCENT" -> {
+                val base = Math.floor(10000.0 / names.size) / 100
+                names.forEachIndexed { i, n -> vals[n] = fmt(if (i == names.size - 1) 100.0 - base * (names.size - 1) else base) }
+            }
+            "PARTS" -> names.forEach { vals[it] = "1" }
+            "AMOUNT" -> equal().forEach { vals[it.person] = fmt(it.amount) }
+        }
     }
 
-    fun equal(): List<NewShare> = Repo.equalShares(t.amount, picked.toList(), alreadyPaid)
+    fun add(name: String) { if (!picked.contains(name)) picked.add(name); refill() }
+    fun toggle(name: String) { if (picked.contains(name)) picked.remove(name) else picked.add(name); refill() }
 
     fun build(): List<NewShare>? {
         if (picked.isEmpty()) return null
-        if (!custom) return equal()
-        val out = ArrayList<NewShare>()
-        var sum = 0.0
-        for (p in picked) {
-            val a = amounts[p]?.toDoubleOrNull() ?: return null
-            sum += a
-            out.add(NewShare(p, a, p == Repo.ME || alreadyPaid))
+        val names = picked.toList()
+        if (names.size < 2 || splitMode == "EQUAL") return equal()
+        val nums = ArrayList<Double>()
+        for (n in names) nums.add(vals[n]?.toDoubleOrNull() ?: return null)
+        return when (splitMode) {
+            "PERCENT" -> if (Math.abs(nums.sum() - 100.0) > 0.01) null else Repo.weightedShares(t.amount, names, nums, alreadyPaid)
+            "PARTS" -> Repo.weightedShares(t.amount, names, nums, alreadyPaid)
+            else -> if (Math.abs(nums.sum() - t.amount) > 0.011) null
+                    else names.mapIndexed { i, n -> NewShare(n, nums[i], n == Repo.ME || alreadyPaid) }
         }
-        return if (Math.abs(sum - t.amount) < 0.011) out else null
     }
 
     val shares = build()
@@ -90,13 +109,17 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
     val q = query.trim()
     val results = contacts.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }.take(8)
 
+    if (rename) AliasDialog(t.merchant, aliases[Repo.aliasKey(t.merchant).removePrefix("alias|")] ?: "", { rename = false }) { vm.setAlias(t.merchant, it); rename = false }
+
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(Repo.money(t.amount), fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        Text("${t.merchant} · ${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 13.sp, color = Muted)
+                        Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 13.sp, color = muted())
+                        TextButton(onClick = { rename = true }) { Text("Rename merchant") }
                     }
                     TextButton(onClick = onDismiss) { Text("Close") }
                 }
@@ -110,13 +133,13 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
 
                     Spacer(Modifier.height(18.dp))
                     Text("Who was this for?", fontWeight = FontWeight.SemiBold)
-                    Text("Pick one person if it was all theirs. Pick several to split equally.", fontSize = 12.sp, color = Muted)
+                    Text("Pick one person if it was all theirs. Pick several to split equally.", fontSize = 12.sp, color = muted())
                     Spacer(Modifier.height(6.dp))
                     val s = sug
                     if (s != null && s.action == "PEOPLE" && s.people.isNotBlank()) {
                         val names = s.people.split(",").filter { it.isNotBlank() }
                         Pill("As before: " + names.joinToString(", ") { if (it == Repo.ME) "You" else it }, {
-                            picked.clear(); picked.addAll(names)
+                            picked.clear(); picked.addAll(names); refill()
                         }, strong = true)
                         Spacer(Modifier.height(8.dp))
                     }
@@ -132,39 +155,46 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (q.isNotEmpty() && contacts.none { it.equals(q, true) }) {
-                            Text("Add \"$q\"", color = Teal, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.fillMaxWidth().clickable { if (!picked.contains(q)) picked.add(q); query = "" }.padding(vertical = 10.dp))
+                            Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.fillMaxWidth().clickable { add(q); query = "" }.padding(vertical = 10.dp))
                         }
                         results.forEach { name ->
                             Text(name, modifier = Modifier.fillMaxWidth().clickable {
-                                if (!picked.contains(name)) picked.add(name); query = ""
+                                add(name); query = ""
                             }.padding(vertical = 10.dp))
                         }
                     }
 
                     if (picked.isNotEmpty()) {
-                        Spacer(Modifier.height(16.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Switch(checked = custom, onCheckedChange = {
-                                custom = it
-                                if (it) { picked.forEach { p -> amounts[p] = String.format(java.util.Locale.US, "%.2f", equal().firstOrNull { x -> x.person == p }?.amount ?: 0.0) } }
-                            })
-                            Spacer(Modifier.padding(4.dp))
-                            Text("Custom amounts")
+                        if (picked.size >= 2) {
+                            Spacer(Modifier.height(16.dp))
+                            Text("How to split", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(6.dp))
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("EQUAL" to "Equal", "PERCENT" to "Percent", "PARTS" to "Parts", "AMOUNT" to "Amounts").forEach { (m, label) ->
+                                    Pill(label, { splitMode = m; refill() }, selected = splitMode == m)
+                                }
+                            }
+                            if (splitMode == "PARTS") Text("Example: 2 and 1 means one person pays twice the other.", fontSize = 12.sp, color = muted())
                         }
-                        if (custom) {
+                        Spacer(Modifier.height(8.dp))
+                        if (picked.size >= 2 && splitMode != "EQUAL") {
+                            val unit = when (splitMode) { "PERCENT" -> "%"; "PARTS" -> "parts"; else -> "₹" }
                             picked.forEach { p ->
                                 OutlinedTextField(
-                                    value = amounts[p] ?: "", onValueChange = { amounts[p] = it }, singleLine = true,
-                                    label = { Text(if (p == Repo.ME) "You" else p) }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                                    value = vals[p] ?: "", onValueChange = { vals[p] = it }, singleLine = true,
+                                    label = { Text((if (p == Repo.ME) "You" else p) + " ($unit)") },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                                 )
                             }
-                            if (shares == null) Text("Amounts must add up to ${Repo.money(t.amount)}", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                        } else {
+                            if (shares == null) Text(
+                                when (splitMode) { "PERCENT" -> "Percentages must add up to 100"; "PARTS" -> "Enter a number for each person"; else -> "Amounts must add up to ${Repo.money(t.amount)}" },
+                                color = MaterialTheme.colorScheme.error, fontSize = 13.sp
+                            )
                             Spacer(Modifier.height(6.dp))
-                            (shares ?: emptyList()).forEach { sh ->
-                                Text("${if (sh.person == Repo.ME) "You" else sh.person}: ${Repo.money(sh.amount)}", fontSize = 14.sp)
-                            }
+                        }
+                        (shares ?: emptyList()).forEach { sh ->
+                            Text("${if (sh.person == Repo.ME) "You" else sh.person}: ${Repo.money(sh.amount)}", fontSize = 15.sp)
                         }
                         Spacer(Modifier.height(6.dp))
                         Text(
@@ -173,7 +203,7 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                                 owedToYou > 0 -> "${Repo.money(owedToYou)} will show as owed to you."
                                 else -> "Nothing is owed to you."
                             },
-                            fontWeight = FontWeight.SemiBold, color = Teal
+                            fontWeight = FontWeight.SemiBold, color = teal()
                         )
                     }
 
@@ -206,24 +236,45 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
     }
 }
 
+@Composable
+fun AliasDialog(raw: String, current: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename merchant") },
+        text = {
+            Column {
+                Text("Bank shows: $raw", fontSize = 13.sp, color = muted())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Show as (for example CRED)") })
+                Spacer(Modifier.height(6.dp))
+                Text("Both names are shown, so you can still recognise it. Leave empty to remove the name.", fontSize = 12.sp, color = muted())
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(name) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 // ---------------------------------------------------------------
 // Link a refund / reversal to the purchase it belongs to
 // ---------------------------------------------------------------
 @Composable
 fun LinkRefundDialog(vm: MainVm, refund: Txn, onDismiss: () -> Unit) {
     val spends by produceState(emptyList<Txn>(), refund.id) { value = vm.recentSpends(refund.amount) }
+    val aliases by vm.aliases.collectAsState()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Which purchase was refunded?") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("${Repo.money(refund.amount)} came back. Closest matches first. Anything others owed for it shrinks automatically.", fontSize = 12.sp, color = Muted)
+                Text("${Repo.money(refund.amount)} came back. Closest matches first. Anything others owed for it shrinks automatically.", fontSize = 12.sp, color = muted())
                 Spacer(Modifier.height(8.dp))
                 if (spends.isEmpty()) Text("No purchases found.")
                 spends.forEach { s ->
                     Column(Modifier.fillMaxWidth().clickable { vm.linkRefund(refund.id, s.id); onDismiss() }.padding(vertical = 8.dp)) {
-                        Text("${s.merchant} · ${Repo.money(s.amount)}", fontWeight = FontWeight.SemiBold)
-                        Text("${Repo.acct(s.bank, s.card)} · ${fullDate(s.txnDate)}", fontSize = 12.sp, color = Muted)
+                        Text("${Repo.title(s.merchant, aliases)} · ${Repo.money(s.amount)}", fontWeight = FontWeight.SemiBold)
+                        Text("${Repo.acct(s.bank, s.card)} · ${fullDate(s.txnDate)}", fontSize = 12.sp, color = muted())
                     }
                 }
             }
@@ -252,7 +303,7 @@ fun PersonPickerDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onPick:
                 OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true,
                     label = { Text("Search or type a name") }, modifier = Modifier.fillMaxWidth())
                 if (q.isNotEmpty() && pool.none { it.equals(q, true) }) {
-                    Text("Add \"$q\"", color = Teal, fontWeight = FontWeight.SemiBold,
+                    Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.fillMaxWidth().clickable { onPick(q) }.padding(vertical = 10.dp))
                 }
                 results.forEach { n -> Text(n, modifier = Modifier.fillMaxWidth().clickable { onPick(n) }.padding(vertical = 10.dp)) }
@@ -275,7 +326,7 @@ fun SettleDialog(person: String, owed: Double, onDismiss: () -> Unit, onSave: (D
         title = { Text("$person paid you") },
         text = {
             Column {
-                Text("Clears the oldest items first. Partial payments are fine.", fontSize = 12.sp, color = Muted)
+                Text("Clears the oldest items first. Partial payments are fine.", fontSize = 12.sp, color = muted())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount received") })
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -341,7 +392,15 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = names, onValueChange = { names = it }, singleLine = true,
                     label = { Text("My name words (to hide own transfers)") }, modifier = Modifier.fillMaxWidth())
-                Text("Comma separated. UPI payments to or from a name containing any of these are treated as your own transfers.", fontSize = 12.sp, color = Muted)
+                Text("Comma separated. UPI payments to or from a name containing any of these are treated as your own transfers.", fontSize = 12.sp, color = muted())
+                Spacer(Modifier.height(14.dp))
+                Text("Appearance", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("system" to "Auto", "light" to "Light", "dark" to "Dark").forEach { (m, label) ->
+                        Pill(label, { ThemeState.mode = m; Repo.putPref(ctx, "theme", m) }, selected = ThemeState.mode == m)
+                    }
+                }
                 Spacer(Modifier.height(14.dp))
                 Text("Import older messages", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))

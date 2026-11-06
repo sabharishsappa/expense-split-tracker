@@ -46,8 +46,20 @@ object Repo {
 
     // ---------- keys ----------
     private fun norm(s: String) = s.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
-    fun merchantKey(merchant: String, card: String) = norm(merchant) + "|" + card
+    /** Remembered choices are per merchant (any card or account). */
+    fun merchantKey(merchant: String, @Suppress("UNUSED_PARAMETER") card: String) = "m|" + norm(merchant)
     fun catKey(merchant: String) = "cat|" + norm(merchant)
+    fun aliasKey(raw: String) = "alias|" + norm(raw)
+
+    /** Friendly name used everywhere in the UI. Shows both names so the merchant stays recognisable. */
+    fun title(raw: String, aliases: Map<String, String>): String {
+        val a = aliases[norm(raw)] ?: Categories.builtinAlias(raw)
+        return if (a == null || a.equals(raw, true)) raw else "$a · $raw"
+    }
+
+    /** Short name for messages to other people. */
+    fun nameOnly(raw: String, aliases: Map<String, String>): String =
+        aliases[norm(raw)] ?: Categories.builtinAlias(raw) ?: raw
 
     // ---------- preferences ----------
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("st", Context.MODE_PRIVATE)
@@ -91,16 +103,18 @@ object Repo {
 
             if ((p.kind == "SPEND" || p.kind == "UPI_OUT") && status == "INBOX") {
                 val rule = dao.rule(merchantKey(p.merchant, p.card))
-                if (rule != null && rule.action == "MINE") {
+                val mine = (rule != null && rule.action == "MINE") || (rule == null && Categories.defaultMine(p.merchant))
+                if (mine) {
                     dao.insertShare(Share(txnId = id, person = ME, amount = p.amount, settled = p.amount))
                     dao.setStatus(id, "TAGGED")
-                    saved = saved.copy(status = "TAGGED")
+                    dao.setAuto(id, true)
+                    saved = saved.copy(status = "TAGGED", auto = true)
                 }
             }
             if (p.kind == "REFUND") {
-                val orig = findOriginal(dao, saved)
-                if (orig != null) {
-                    applyRefund(dao, saved, orig)
+                val found = findOriginal(dao, saved)
+                if (found != null && found.second) {
+                    applyRefund(dao, saved, found.first)
                     saved = saved.copy(status = "REFUND")
                 }
             }
@@ -108,24 +122,59 @@ object Repo {
         }
     }
 
-    // ---------- refunds ----------
+    // ---------- refunds and failed payments ----------
     private fun alnum4(s: String) = norm(s).take(4)
 
-    private suspend fun findOriginal(dao: AppDao, refund: Txn): Txn? {
-        val from = refund.smsTime - 120L * 86_400_000L
+    /** Purchases that could be the one this refund/reversal belongs to, best guess first. */
+    private suspend fun candidates(dao: AppDao, refund: Txn): List<Txn> {
+        val days = if (refund.merchant == "UPI reversal") 15L else 120L
+        val from = refund.smsTime - days * 86_400_000L
         val c = dao.refundCandidates(refund.amount - 0.011, refund.amount + 0.011, from, refund.smsTime)
-        if (refund.merchant == "UPI reversal") return c.firstOrNull()
-        return c.firstOrNull { alnum4(it.merchant) == alnum4(refund.merchant) }
+        val reversal = refund.merchant == "UPI reversal"
+        return c.sortedWith(
+            compareByDescending<Txn> { it.status == "FAILED" }
+                .thenByDescending { reversal || alnum4(it.merchant) == alnum4(refund.merchant) }
+                .thenByDescending { it.smsTime }
+        )
     }
+
+    /** Returns the best match and whether it is certain enough to close the books without asking. */
+    private suspend fun findOriginal(dao: AppDao, refund: Txn): Pair<Txn, Boolean>? {
+        val c = candidates(dao, refund)
+        if (c.isEmpty()) return null
+        val failed = c.filter { it.status == "FAILED" }
+        if (failed.size == 1) return failed[0] to true
+        val reversal = refund.merchant == "UPI reversal"
+        val matches = if (reversal) c else c.filter { alnum4(it.merchant) == alnum4(refund.merchant) }
+        if (failed.isEmpty() && matches.size == 1) return matches[0] to true
+        return c[0] to false
+    }
+
+    suspend fun suggestOriginal(ctx: Context, refund: Txn): Txn? = findOriginal(Db.get(ctx).dao(), refund)?.first
 
     private suspend fun applyRefund(dao: AppDao, refund: Txn, orig: Txn) {
         val ratio = minOf(1.0, refund.amount / orig.amount)
         for (s in dao.sharesFor(orig.id)) {
             dao.setShareAmount(s.id, Math.round(s.amount * (1 - ratio) * 100) / 100.0)
         }
-        if (orig.status == "INBOX" && ratio > 0.995) dao.setStatus(orig.id, "REFUNDED")
-        dao.setRefund(refund.id, orig.id, "REFUND", "Refund for ${orig.merchant}")
+        val full = ratio > 0.995
+        if (full) dao.setStatus(orig.id, "REVERSED")
+        dao.setRefund(refund.id, orig.id, "REFUND", (if (full) "Reversal of " else "Partial refund for ") + orig.merchant)
     }
+
+    /** User says this payment failed. Closes automatically when the matching refund arrives (or already did). */
+    suspend fun markFailed(ctx: Context, t: Txn): Boolean {
+        val db = Db.get(ctx); val dao = db.dao()
+        return db.withTransaction {
+            dao.deleteShares(t.id)
+            dao.setStatus(t.id, "FAILED")
+            dao.setAuto(t.id, false)
+            val waiting = dao.refundsWaiting(t.amount - 0.011, t.amount + 0.011, t.smsTime)
+            if (waiting.size == 1) { applyRefund(dao, waiting[0], t); true } else false
+        }
+    }
+
+    suspend fun unfail(ctx: Context, id: Long) = Db.get(ctx).dao().setStatus(id, "INBOX")
 
     suspend fun linkRefund(ctx: Context, refundId: Long, originalId: Long) {
         val db = Db.get(ctx); val dao = db.dao()
@@ -157,13 +206,40 @@ object Repo {
         }
     }
 
+    /** Shares proportional to weights (percentages or parts). Rounding remainder goes to the last person. */
+    fun weightedShares(total: Double, names: List<String>, weights: List<Double>, paidOthers: Boolean): List<NewShare>? {
+        if (names.isEmpty() || names.size != weights.size || weights.any { it < 0 }) return null
+        val sum = weights.sum()
+        if (sum <= 0) return null
+        var left = total
+        return names.mapIndexed { i, p ->
+            val a = if (i == names.size - 1) Math.round(left * 100) / 100.0 else Math.floor(total * weights[i] / sum * 100) / 100
+            left -= a
+            NewShare(p, a, p == ME || paidOthers)
+        }
+    }
+
+    suspend fun setAlias(ctx: Context, raw: String, name: String) {
+        val dao = Db.get(ctx).dao()
+        val n = name.trim()
+        if (n.isEmpty()) dao.deleteRule(aliasKey(raw)) else dao.putRule(Rule(aliasKey(raw), "ALIAS", n))
+        for (t in dao.uncategorised()) {
+            if (t.merchant == raw) {
+                val c = Categories.guess(n.ifEmpty { raw })
+                if (c.isNotBlank()) dao.setCategory(t.id, c)
+            }
+        }
+    }
+
     suspend fun tag(ctx: Context, t: Txn, shares: List<NewShare>, category: String, remember: Boolean, splitAdded: Boolean) {
         val db = Db.get(ctx); val dao = db.dao()
         db.withTransaction {
+            dao.deleteShares(t.id)
             for (s in shares) {
                 dao.insertShare(Share(txnId = t.id, person = s.person, amount = s.amount, settled = if (s.paid) s.amount else 0.0))
             }
             dao.setStatus(t.id, "TAGGED")
+            dao.setAuto(t.id, false)
             dao.setCategory(t.id, category)
             if (splitAdded) dao.setSplitAdded(t.id, true)
             if (remember) {
@@ -250,7 +326,7 @@ object Repo {
     }
 
     // ---------- reminder text ----------
-    fun reminderText(ctx: Context, person: String, rows: List<PendingRow>): String {
+    fun reminderText(ctx: Context, person: String, rows: List<PendingRow>, aliases: Map<String, String>): String {
         val sorted = rows.sortedBy { it.txnDate }
         val total = sorted.sumOf { it.amount - it.settled }
         val days = ((System.currentTimeMillis() - sorted.first().txnDate) / 86_400_000L).toInt()
@@ -261,7 +337,7 @@ object Repo {
             else -> "Hi $first,\nFollowing up on the spends I covered for you. This has been pending for over a month:"
         }
         val shown = sorted.take(8)
-        val lines = shown.joinToString("\n") { "• ${shortDate(it.txnDate)} · ${it.merchant} · ${money(it.amount - it.settled)}" }
+        val lines = shown.joinToString("\n") { "• ${shortDate(it.txnDate)} · ${nameOnly(it.merchant, aliases)} · ${money(it.amount - it.settled)}" }
         val more = if (sorted.size > shown.size) "\n…and ${sorted.size - shown.size} more" else ""
         val upi = getPref(ctx, "upi", "").trim()
         val pay = if (upi.isNotEmpty()) "\nUPI: $upi" else ""

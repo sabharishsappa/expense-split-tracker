@@ -23,7 +23,7 @@ object Categories {
         "Shopping" to listOf("amazon", "flipkart", "myntra", "ajio", "meesho", "nykaa", "decathlon", "lifestyle",
             "shoppers stop", "westside", "reliance retail", "croma", "tata cliq", "snapdeal", "pantaloons", "max fashion"),
         "Bills" to listOf("airtel", "jio", "vodafone", "bescom", "electricity", "broadband", "fibernet", "policybazaar",
-            "insurance", "lic ", "recharge", "gas", "water board", "bharat bill", "cred", "bbps"),
+            "insurance", " lic ", "recharge", " gas ", "water board", "bharat bill", " cred ", "bbps"),
         "Fuel" to listOf("petrol", "bpcl", "hpcl", "iocl", "indian oil", "shell", "fuel", "nayara"),
         "Entertainment" to listOf("bigtree", "bookmyshow", "netflix", "spotify", "hotstar", "prime video", "pvr", "inox",
             "youtube", "google play", "apple", "sony liv", "zee5", "gaming"),
@@ -31,8 +31,19 @@ object Categories {
             "diagnostic", "dental", "lab", "medical")
     )
 
+    /** Known payment-processor names mapped to the brand you actually paid. */
+    private val builtinAliases = listOf("razdreamplug" to "CRED", "credclub" to "CRED")
+
+    fun builtinAlias(raw: String): String? {
+        val n = raw.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+        return builtinAliases.firstOrNull { n.contains(it.first) }?.second
+    }
+
+    /** Merchants that are nearly always your own spend, so they are tagged as Mine automatically. */
+    fun defaultMine(merchant: String): Boolean = merchant.lowercase(Locale.ROOT).contains("instamart")
+
     fun guess(merchant: String): String {
-        val m = " " + merchant.lowercase(Locale.ROOT) + " "
+        val m = " " + (builtinAlias(merchant) ?: merchant).lowercase(Locale.ROOT) + " "
         for ((cat, words) in rules) {
             if (words.any { m.contains(it) }) return cat
         }

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -21,6 +22,9 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     val pending = dao.pending().hot(emptyList())
     val summary = dao.summary().hot(emptyList())
     val recents = dao.recentPeople().hot(emptyList())
+    val autoTagged = dao.autoTagged().hot(emptyList())
+    val failed = dao.failed().hot(emptyList())
+    val aliases = dao.aliases().map { list -> list.associate { it.ruleKey.removePrefix("alias|") to it.people } }.hot(emptyMap())
 
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
@@ -48,8 +52,15 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun repaidBy(t: Txn, person: String) = viewModelScope.launch { Repo.repaidBy(getApplication(), t, person) }
     fun linkRefund(refundId: Long, originalId: Long) = viewModelScope.launch { Repo.linkRefund(getApplication(), refundId, originalId) }
     fun keepAsRefund(id: Long) = viewModelScope.launch { Repo.keepAsRefund(getApplication(), id) }
+    fun markFailed(t: Txn) = viewModelScope.launch {
+        val closed = Repo.markFailed(getApplication(), t)
+        status.value = if (closed) "Marked failed. A matching refund was already received, so it is closed." else "Marked failed. It closes automatically when the refund arrives."
+    }
+    fun unfail(id: Long) = viewModelScope.launch { Repo.unfail(getApplication(), id) }
+    fun setAlias(raw: String, name: String) = viewModelScope.launch { Repo.setAlias(getApplication(), raw, name) }
     fun toggleSplitAdded(t: Txn) = viewModelScope.launch { dao.setSplitAdded(t.id, !t.splitAdded) }
 
+    suspend fun suggestRefund(t: Txn): Txn? = Repo.suggestOriginal(getApplication(), t)
     suspend fun suggestion(t: Txn): Rule? = Repo.suggestion(getApplication(), t)
     suspend fun recentSpends(refundAmount: Double): List<Txn> = Repo.recentSpends(getApplication(), refundAmount)
 }

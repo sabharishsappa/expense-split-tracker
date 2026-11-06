@@ -1,6 +1,5 @@
 package com.sabharish.splittracker
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -22,6 +23,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -64,14 +67,32 @@ private fun firstNames(people: List<String>): List<String> {
     return people.mapIndexed { i, p -> if (firsts.count { it == firsts[i] } > 1) p else firsts[i] }
 }
 
+private fun daysSince(ms: Long) = ((System.currentTimeMillis() - ms) / 86_400_000L).toInt()
+
 @Composable
 private fun AppCard(content: @Composable () -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) { Column(Modifier.padding(14.dp)) { content() } }
+    ) { Column(Modifier.padding(16.dp)) { content() } }
+}
+
+/** Merchant (with its friendly name) on the left, amount on the right, one detail line below. */
+@Composable
+private fun TxnHeader(t: Txn, aliases: Map<String, String>, incoming: Boolean = false, trailing: @Composable () -> Unit = {}) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            Text(Repo.title(t.merchant, aliases), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 13.sp, color = muted())
+        }
+        Text(
+            (if (incoming) "+" else "") + Repo.money(t.amount),
+            fontSize = 22.sp, fontWeight = FontWeight.Bold, color = if (incoming) green() else MaterialTheme.colorScheme.onSurface
+        )
+        trailing()
+    }
 }
 
 // ======================= INBOX =======================
@@ -80,13 +101,22 @@ private fun AppCard(content: @Composable () -> Unit) {
 fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit) {
     val spends by vm.inbox.collectAsState()
     val money by vm.moneyIn.collectAsState()
+    val auto by vm.autoTagged.collectAsState()
+    val failed by vm.failed.collectAsState()
     var section by remember { mutableIntStateOf(0) }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Pill("To tag · ${spends.size}", { section = 0 }, selected = section == 0)
         Pill("Money in · ${money.size}", { section = 1 }, selected = section == 1)
+        Pill("Auto · ${auto.size}", { section = 2 }, selected = section == 2)
+        Pill("Failed · ${failed.size}", { section = 3 }, selected = section == 3)
     }
     Spacer(Modifier.height(10.dp))
-    if (section == 0) SpendList(vm, spends, undoable) else MoneyInList(vm, money)
+    when (section) {
+        0 -> SpendList(vm, spends, undoable)
+        1 -> MoneyInList(vm, money)
+        2 -> AutoList(vm, auto)
+        else -> FailedList(vm, failed)
+    }
 }
 
 @Composable
@@ -95,21 +125,19 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     var sheetFor by remember { mutableStateOf<Txn?>(null) }
     var confirmAll by remember { mutableStateOf(false) }
     if (items.isEmpty()) {
-        Text("All caught up. New card and UPI payments show up here automatically.", color = Muted)
+        Text("All caught up. New card and UPI payments show up here automatically.", color = muted(), fontSize = 15.sp)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { vm.importHistory(365) }) { Text("Import last 12 months of messages") }
         return
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text("Tap Me or a name. Use More to split.", fontSize = 12.sp, color = Muted, modifier = Modifier.weight(1f))
+        Text("Tap Me or a name. More… to split.", fontSize = 13.sp, color = muted(), modifier = Modifier.weight(1f))
         if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(items, key = { it.id }) { t -> SpendCard(t, vm, recents, undoable) { sheetFor = it } }
     }
-    sheetFor?.let { t ->
-        TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) })
-    }
+    sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }) }
     if (confirmAll) {
         AlertDialog(
             onDismissRequest = { confirmAll = false },
@@ -123,35 +151,35 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
 
 @Composable
 private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, onMore: (Txn) -> Unit) {
+    val aliases by vm.aliases.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
     var catMenu by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
+    var rename by remember { mutableStateOf(false) }
     fun quick(shares: List<NewShare>, label: String) {
         vm.tag(t, shares, t.category, false, false)
         undoable(t.id, label)
     }
     AppCard {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.weight(1f)) {
-                Text(t.merchant, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 12.sp, color = Muted)
-            }
-            Text(Repo.money(t.amount), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        TxnHeader(t, aliases) {
             Box {
-                Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
-                DropdownMenu(expanded = catMenu, onDismissRequest = { catMenu = false }) {
-                    Categories.all.forEach { c ->
-                        DropdownMenuItem(text = { Text(c) }, onClick = { vm.setCategory(t, c); catMenu = false })
-                    }
+                IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                    DropdownMenuItem(text = { Text("Rename merchant") }, onClick = { moreMenu = false; rename = true })
+                    DropdownMenuItem(text = { Text("Payment failed, expecting refund") }, onClick = { moreMenu = false; vm.markFailed(t) })
+                    DropdownMenuItem(text = { Text("Skip, not a real spend") }, onClick = { moreMenu = false; vm.ignore(t) })
                 }
             }
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { vm.ignore(t) }) { Text("Skip", color = Muted) }
         }
-        Spacer(Modifier.height(4.dp))
-        Text("Whose spend?", fontSize = 12.sp, color = Muted)
+        Spacer(Modifier.height(10.dp))
+        Box {
+            Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
+            DropdownMenu(expanded = catMenu, onDismissRequest = { catMenu = false }) {
+                Categories.all.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { vm.setCategory(t, c); catMenu = false }) }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("Whose spend?", fontSize = 13.sp, color = muted())
         Spacer(Modifier.height(6.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill("Me", { quick(listOf(NewShare(Repo.ME, t.amount, true)), "Tagged as yours") }, strong = true)
@@ -163,19 +191,16 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
                 if (names.isNotEmpty()) {
                     val label = firstNames(names.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
                         if (names.contains(Repo.ME)) " & you" else ""
-                    Pill("As before: $label", {
-                        quick(Repo.equalShares(t.amount, names, false), "Tagged as before")
-                    })
+                    Pill("As before: $label", { quick(Repo.equalShares(t.amount, names, false), "Tagged as before") })
                 }
             }
             val shown = recents.filter { it !in skip }.take(4)
             val labels = firstNames(shown)
-            shown.forEachIndexed { i, p ->
-                Pill(labels[i], { quick(listOf(NewShare(p, t.amount, false)), "Tagged to $p") })
-            }
+            shown.forEachIndexed { i, p -> Pill(labels[i], { quick(listOf(NewShare(p, t.amount, false)), "Tagged to $p") }) }
             Pill("More…", { onMore(t) })
         }
     }
+    if (rename) AliasDialog(t.merchant, aliases[Repo.aliasKey(t.merchant).removePrefix("alias|")] ?: "", { rename = false }) { vm.setAlias(t.merchant, it); rename = false }
 }
 
 @Composable
@@ -186,15 +211,13 @@ private fun MoneyInList(vm: MainVm, items: List<Txn>) {
     var pickFor by remember { mutableStateOf<Txn?>(null) }
     var linkFor by remember { mutableStateOf<Txn?>(null) }
     if (items.isEmpty()) {
-        Text("No money-in to review. UPI payments you receive, and refunds, appear here.", color = Muted)
+        Text("No money-in to review. UPI payments you receive, and refunds, appear here.", color = muted(), fontSize = 15.sp)
         return
     }
     val owed = pending.groupBy { it.person }.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.map { it.key }
     val known = (owed + recents + contacts).distinct()
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(items, key = { it.id }) { t ->
-            MoneyCard(t, vm, owed, known, onPick = { pickFor = it }, onLink = { linkFor = it })
-        }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(items, key = { it.id }) { t -> MoneyCard(t, vm, owed, known, onPick = { pickFor = it }, onLink = { linkFor = it }) }
     }
     pickFor?.let { t ->
         PersonPickerDialog(vm, "Repayment from…", onDismiss = { pickFor = null }, onPick = { vm.repaidBy(t, it); pickFor = null })
@@ -204,20 +227,15 @@ private fun MoneyInList(vm: MainVm, items: List<Txn>) {
 
 @Composable
 private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String>, onPick: (Txn) -> Unit, onLink: (Txn) -> Unit) {
+    val aliases by vm.aliases.collectAsState()
     var confirm by remember { mutableStateOf<String?>(null) }
+    val guess by produceState<Txn?>(null, t.id) { value = if (t.kind == "REFUND") vm.suggestRefund(t) else null }
     AppCard {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.weight(1f)) {
-                Text(if (t.kind == "REFUND") "Refund · ${t.merchant}" else "From ${t.merchant}", fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 12.sp, color = Muted)
-            }
-            Text("+" + Repo.money(t.amount), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Green)
-        }
-        Spacer(Modifier.height(10.dp))
+        TxnHeader(t, aliases, incoming = true)
+        Spacer(Modifier.height(12.dp))
         if (t.kind == "UPI_IN") {
             val match = Repo.bestMatch(t.merchant, known)
-            Text("Is someone paying you back?", fontSize = 12.sp, color = Muted)
+            Text("Is someone paying you back?", fontSize = 13.sp, color = muted())
             Spacer(Modifier.height(6.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (match != null) Pill("Repayment from $match", { confirm = match }, strong = true)
@@ -226,19 +244,31 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
                 others.forEachIndexed { i, p -> Pill(labels[i], { confirm = p }) }
                 Pill("Someone else…", { onPick(t) })
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { onLink(t) }) { Text("It's a refund") }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = Muted) }
+                TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) }
             }
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onLink(t) }) { Text("Link to purchase") }
-                OutlinedButton(onClick = { vm.keepAsRefund(t.id) }) { Text("Just keep") }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = Muted) }
+            val g = guess
+            if (g != null) {
+                Text("Looks like a refund for:", fontSize = 13.sp, color = muted())
+                Text("${Repo.title(g.merchant, aliases)} · ${Repo.money(g.amount)} · ${fullDate(g.txnDate)}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = { vm.linkRefund(t.id, g.id) }) { Text("Yes, close it") }
+                    OutlinedButton(onClick = { onLink(t) }) { Text("Pick another") }
+                }
+            } else {
+                Text("No matching purchase found. Link it so the books stay clear.", fontSize = 13.sp, color = muted())
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = { onLink(t) }) { Text("Link to purchase") }
+                    OutlinedButton(onClick = { vm.keepAsRefund(t.id) }) { Text("Just keep") }
+                }
             }
+            Row { Spacer(Modifier.weight(1f)); TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) } }
         }
     }
     confirm?.let { person ->
@@ -252,11 +282,64 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
     }
 }
 
+@Composable
+private fun AutoList(vm: MainVm, items: List<Txn>) {
+    val aliases by vm.aliases.collectAsState()
+    var sheetFor by remember { mutableStateOf<Txn?>(null) }
+    if (items.isEmpty()) {
+        Text("Nothing was tagged automatically yet. Items from merchants you tag with Remember on appear here, so you can change them.", color = muted(), fontSize = 15.sp)
+        return
+    }
+    Text("Counted as yours automatically. Change any that were for someone else.", fontSize = 13.sp, color = muted())
+    Spacer(Modifier.height(6.dp))
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(items, key = { it.id }) { t ->
+            AppCard {
+                TxnHeader(t, aliases)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (t.category.isNotBlank()) Pill(t.category, {})
+                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(onClick = { sheetFor = t }) { Text("Change") }
+                }
+            }
+        }
+    }
+    sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
+}
+
+@Composable
+private fun FailedList(vm: MainVm, items: List<Txn>) {
+    val aliases by vm.aliases.collectAsState()
+    if (items.isEmpty()) {
+        Text("No failed payments. If a payment fails, open the ⋮ menu on it and choose “Payment failed”. It closes by itself when the refund SMS arrives.", color = muted(), fontSize = 15.sp)
+        return
+    }
+    Text("Waiting for the bank to reverse these. They close automatically when the refund arrives.", fontSize = 13.sp, color = muted())
+    Spacer(Modifier.height(6.dp))
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(items, key = { it.id }) { t ->
+            val d = daysSince(t.txnDate)
+            AppCard {
+                TxnHeader(t, aliases)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (d > 10) "Waiting $d days. Worth checking with the bank." else "Waiting $d days",
+                    fontSize = 13.sp, color = if (d > 10) amber() else muted()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { vm.unfail(t.id) }) { Text("It didn't fail") }
+            }
+        }
+    }
+}
+
 // ======================= PENDING =======================
 
 @Composable
 fun PendingScreen(vm: MainVm) {
     val ctx = LocalContext.current
+    val aliases by vm.aliases.collectAsState()
     val rows by vm.pending.collectAsState()
     var settleFor by remember { mutableStateOf<String?>(null) }
     var remindFor by remember { mutableStateOf<String?>(null) }
@@ -264,31 +347,31 @@ fun PendingScreen(vm: MainVm) {
     val total = rows.sumOf { it.amount - it.settled }
 
     AppCard {
-        Text("Owed to you", fontSize = 12.sp, color = Muted)
-        Text(Repo.money(total), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = if (total > 0) Teal else Muted)
-        Text("${grouped.size} people · ${rows.size} items", fontSize = 12.sp, color = Muted)
+        Text("Owed to you", fontSize = 13.sp, color = muted())
+        Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (total > 0) teal() else muted())
+        Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
     }
-    Spacer(Modifier.height(10.dp))
-    if (rows.isEmpty()) Text("Nobody owes you anything right now.", color = Muted)
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Spacer(Modifier.height(12.dp))
+    if (rows.isEmpty()) Text("Nobody owes you anything right now.", color = muted(), fontSize = 15.sp)
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(grouped.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.toList(), key = { it.key }) { e ->
             val owed = e.value.sumOf { it.amount - it.settled }
-            val days = ((System.currentTimeMillis() - e.value.minOf { it.txnDate }) / 86_400_000L).toInt()
+            val days = daysSince(e.value.minOf { it.txnDate })
             AppCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text(e.key, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                        Text("${e.value.size} items · oldest $days days", fontSize = 12.sp,
-                            color = if (days > 30) MaterialTheme.colorScheme.error else if (days > 14) Amber else Muted)
+                    Column(Modifier.weight(1f)) {
+                        Text(e.key, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        Text("${e.value.size} items · oldest $days days", fontSize = 13.sp,
+                            color = if (days > 30) MaterialTheme.colorScheme.error else if (days > 14) amber() else muted())
                     }
-                    Text(Repo.money(owed), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(Repo.money(owed), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.height(6.dp))
-                e.value.take(6).forEach { r ->
-                    Text("${Repo.shortDate(r.txnDate)} · ${r.merchant} · ${Repo.money(r.amount - r.settled)}", fontSize = 13.sp)
-                }
-                if (e.value.size > 6) Text("…and ${e.value.size - 6} more", fontSize = 12.sp, color = Muted)
                 Spacer(Modifier.height(8.dp))
+                e.value.take(6).forEach { r ->
+                    Text("${Repo.shortDate(r.txnDate)} · ${Repo.nameOnly(r.merchant, aliases)} · ${Repo.money(r.amount - r.settled)}", fontSize = 14.sp)
+                }
+                if (e.value.size > 6) Text("…and ${e.value.size - 6} more", fontSize = 13.sp, color = muted())
+                Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { remindFor = e.key }) { Text("Remind") }
                     OutlinedButton(onClick = { settleFor = e.key }) { Text("Mark paid") }
@@ -301,7 +384,7 @@ fun PendingScreen(vm: MainVm) {
         SettleDialog(person, owed, onDismiss = { settleFor = null }) { amt, mode -> vm.settle(person, amt, mode); settleFor = null }
     }
     remindFor?.let { person ->
-        val text = Repo.reminderText(ctx, person, rows.filter { it.person == person })
+        val text = Repo.reminderText(ctx, person, rows.filter { it.person == person }, aliases)
         ReminderDialog(text) { remindFor = null }
     }
 }
@@ -310,10 +393,12 @@ fun PendingScreen(vm: MainVm) {
 
 @Composable
 fun AllScreen(vm: MainVm) {
+    val aliases by vm.aliases.collectAsState()
     val txns by vm.all.collectAsState()
     val shares by vm.shares.collectAsState()
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("All") }
+    var sheetFor by remember { mutableStateOf<Txn?>(null) }
     val byTxn = shares.groupBy { it.txnId }
     val q = query.trim()
     val shown = txns.filter { t ->
@@ -321,50 +406,61 @@ fun AllScreen(vm: MainVm) {
         val okFilter = when (filter) {
             "Card" -> t.kind == "SPEND"
             "UPI" -> t.kind.startsWith("UPI")
-            "Refunds" -> t.kind == "REFUND"
+            "Refunds" -> t.kind == "REFUND" || t.status == "REVERSED"
             "Pending" -> ss.any { it.person != Repo.ME && it.settled < it.amount - 0.005 }
             "To tag" -> t.status == "INBOX"
+            "Failed" -> t.status == "FAILED"
             else -> true
         }
-        okFilter && (q.isEmpty() || t.merchant.contains(q, true) || t.card.contains(q) || t.bank.contains(q, true) ||
-            t.category.contains(q, true) || ss.any { it.person.contains(q, true) })
+        okFilter && (q.isEmpty() || t.merchant.contains(q, true) || Repo.title(t.merchant, aliases).contains(q, true) || t.card.contains(q) ||
+            t.bank.contains(q, true) || t.category.contains(q, true) || ss.any { it.person.contains(q, true) })
     }
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("All", "Card", "UPI", "Refunds", "Pending", "To tag").forEach { f -> Pill(f, { filter = f }, selected = filter == f) }
+        listOf("All", "Card", "UPI", "Refunds", "Pending", "To tag", "Failed").forEach { f -> Pill(f, { filter = f }, selected = filter == f) }
     }
     OutlinedTextField(
         value = query, onValueChange = { query = it }, singleLine = true,
         label = { Text("Search merchant, person, tag or card") }, modifier = Modifier.fillMaxWidth()
     )
     Spacer(Modifier.height(6.dp))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(shown, key = { it.id }) { t -> TxnRow(t, byTxn[t.id] ?: emptyList(), vm) }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(shown, key = { it.id }) { t -> TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases) { sheetFor = it } }
     }
+    sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
 }
 
 @Composable
-private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm) {
+private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, String>, onChange: (Txn) -> Unit) {
     var catMenu by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
+    var rename by remember { mutableStateOf(false) }
     val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
+    val spendLike = t.kind == "SPEND" || t.kind == "UPI_OUT"
     val state = when (t.status) {
         "INBOX" -> "Needs tagging"
         "SELF" -> "Own transfer"
         "IGNORED" -> "Skipped"
-        "REFUNDED" -> "Refunded"
+        "REVERSED" -> "Reversed"
+        "FAILED" -> "Failed · waiting for refund"
         "REPAID" -> "Repayment"
         "BILLPAY" -> "Card bill payment"
         else -> ""
     }
     AppCard {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(t.merchant, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text((if (incoming) "+" else "") + Repo.money(t.amount), fontWeight = FontWeight.Bold, color = if (incoming) Green else MaterialTheme.colorScheme.onSurface)
+        TxnHeader(t, aliases, incoming) {
+            if (spendLike) Box {
+                IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                    if (t.status == "TAGGED" || t.status == "INBOX") DropdownMenuItem(text = { Text("Change who / tag") }, onClick = { moreMenu = false; onChange(t) })
+                    DropdownMenuItem(text = { Text("Rename merchant") }, onClick = { moreMenu = false; rename = true })
+                    if (t.status != "FAILED" && t.status != "REVERSED") DropdownMenuItem(text = { Text("Payment failed, expecting refund") }, onClick = { moreMenu = false; vm.markFailed(t) })
+                }
+            }
         }
-        Text("${Repo.acct(t.bank, t.card)} · ${fullDate(t.txnDate)} · ${kindLabel(t.kind)}" + if (state.isNotEmpty()) " · $state" else "",
-            fontSize = 12.sp, color = if (t.status == "INBOX") Amber else Muted)
-        if (t.note.isNotBlank()) Text(t.note, fontSize = 12.sp, color = Muted)
-        if (t.kind == "SPEND" || t.kind == "UPI_OUT") {
-            Spacer(Modifier.height(4.dp))
+        if (state.isNotEmpty()) Text(state, fontSize = 13.sp, color = if (t.status == "INBOX" || t.status == "FAILED") amber() else muted())
+        if (t.note.isNotBlank()) Text(t.note, fontSize = 13.sp, color = muted())
+        if (spendLike) {
+            Spacer(Modifier.height(6.dp))
             Box {
                 Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { catMenu = true })
                 DropdownMenu(expanded = catMenu, onDismissRequest = { catMenu = false }) {
@@ -372,18 +468,21 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm) {
                 }
             }
         }
-        ss.forEach { s ->
+        val live = ss.filter { it.amount > 0.004 }
+        if (live.isNotEmpty()) Spacer(Modifier.height(6.dp))
+        live.forEach { s ->
             val label = if (s.person == Repo.ME) "You" else s.person
             val st = if (s.person == Repo.ME) "your share" else if (s.settled >= s.amount - 0.005) "paid" else "owes ${Repo.money(s.amount - s.settled)}"
-            Text("$label · ${Repo.money(s.amount)} · $st", fontSize = 12.sp)
+            Text("$label · ${Repo.money(s.amount)} · $st", fontSize = 14.sp)
         }
-        if (ss.any { it.person != Repo.ME }) {
+        if (live.any { it.person != Repo.ME }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = t.splitAdded, onCheckedChange = { vm.toggleSplitAdded(t) })
-                Text("Added to PhonePe Split", fontSize = 12.sp)
+                Text("Added to PhonePe Split", fontSize = 14.sp)
             }
         }
     }
+    if (rename) AliasDialog(t.merchant, aliases[Repo.aliasKey(t.merchant).removePrefix("alias|")] ?: "", { rename = false }) { vm.setAlias(t.merchant, it); rename = false }
 }
 
 // ======================= SUMMARY =======================
@@ -403,17 +502,17 @@ fun SummaryScreen(vm: MainVm) {
     val mine = inMonth.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
     val forOthers = inMonth.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
     val receivable = rows.filter { it.person != Repo.ME }.sumOf { it.shareAmt - it.settled }.coerceAtLeast(0.0)
-    val byCat = inMonth.filter { it.person == Repo.ME }
+    val byCat = inMonth.filter { it.person == Repo.ME && it.shareAmt > 0.004 }
         .groupBy { it.category.ifBlank { "Untagged" } }
         .mapValues { e -> e.value.sumOf { it.shareAmt } }
         .entries.sortedByDescending { it.value }
     val byCard = inMonth.groupBy { it.card }.entries.sortedByDescending { e -> e.value.sumOf { it.shareAmt } }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
-                Text(label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(label, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 TextButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Text("Next ›") }
             }
         }
@@ -421,34 +520,34 @@ fun SummaryScreen(vm: MainVm) {
             AppCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text("My spend", fontSize = 12.sp, color = Muted)
-                        Text(Repo.money(mine), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("My spend", fontSize = 13.sp, color = muted())
+                        Text(Repo.money(mine), fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Paid for others", fontSize = 12.sp, color = Muted)
-                        Text(Repo.money(forOthers), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Paid for others", fontSize = 13.sp, color = muted())
+                        Text(Repo.money(forOthers), fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Text("Still to recover (all time): ${Repo.money(receivable)}", fontSize = 13.sp, color = Teal, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(10.dp))
+                Text("Still to recover (all time): ${Repo.money(receivable)}", fontSize = 14.sp, color = teal(), fontWeight = FontWeight.SemiBold)
             }
         }
         if (byCat.isNotEmpty()) {
             item {
                 AppCard {
-                    Text("Where my money went", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
+                    Text("Where my money went", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(Modifier.height(10.dp))
                     val top = byCat.first().value.coerceAtLeast(1.0)
                     byCat.take(8).forEach { e ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(e.key, fontSize = 13.sp)
-                            Text(Repo.money(e.value), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(e.key, fontSize = 14.sp)
+                            Text(Repo.money(e.value), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Box(
-                            Modifier.padding(top = 2.dp, bottom = 8.dp)
+                            Modifier.padding(top = 3.dp, bottom = 10.dp)
                                 .fillMaxWidth((e.value / top).toFloat().coerceIn(0.03f, 1f))
-                                .height(6.dp)
-                                .background(Teal, RoundedCornerShape(3.dp))
+                                .height(8.dp)
+                                .background(teal(), RoundedCornerShape(4.dp))
                         )
                     }
                 }
@@ -457,19 +556,19 @@ fun SummaryScreen(vm: MainVm) {
         if (byCard.isNotEmpty()) {
             item {
                 AppCard {
-                    Text("By card / account", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
+                    Text("By card / account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(Modifier.height(8.dp))
                     byCard.forEach { e ->
                         val m = e.value.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
                         val o = e.value.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
-                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("••${e.key}", fontSize = 13.sp)
-                            Text("mine ${Repo.money(m)} · others ${Repo.money(o)}", fontSize = 13.sp)
+                        Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("••${e.key}", fontSize = 14.sp)
+                            Text("mine ${Repo.money(m)} · others ${Repo.money(o)}", fontSize = 14.sp)
                         }
                     }
                 }
             }
         }
-        if (inMonth.isEmpty()) item { Text("Nothing tagged for this month yet.", color = Muted) }
+        if (inMonth.isEmpty()) item { Text("Nothing tagged for this month yet.", color = muted(), fontSize = 15.sp) }
     }
 }
