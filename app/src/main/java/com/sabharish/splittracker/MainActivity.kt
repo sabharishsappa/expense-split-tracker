@@ -121,6 +121,8 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
     var inboxSection by remember { mutableIntStateOf(0) }
     var showNewSplit by remember { mutableStateOf(false) }
+    var addMenu by remember { mutableStateOf(false) }
+    var showEntry by remember { mutableStateOf(false) }
     var opened by remember { mutableStateOf<Txn?>(null) }
     val openId by vm.openId.collectAsState()
     var searching by remember(tab) { mutableStateOf(false) }
@@ -185,7 +187,13 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(titles[tab], fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (tab in 0..3) androidx.compose.material3.TextButton(onClick = { showNewSplit = true }) { Text("+ Split", fontWeight = FontWeight.SemiBold) }
+                    if (tab in 0..3) Box {
+                        androidx.compose.material3.TextButton(onClick = { addMenu = true }) { Text("+ Add", fontWeight = FontWeight.SemiBold) }
+                        androidx.compose.material3.DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Split a bill") }, onClick = { addMenu = false; showNewSplit = true })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Spent, received or moved") }, onClick = { addMenu = false; showEntry = true })
+                        }
+                    }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                         Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
                     }
@@ -223,6 +231,7 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
         Repo.putPref(appCtx, "selfAsked", "1"); askName = false
     }
     if (showNewSplit) NewSplitFlow(vm) { showNewSplit = false }
+    if (showEntry) AddEntryDialog(vm) { showEntry = false }
     opened?.let { t -> TagSheet(vm, t, onDismiss = { opened = null }, onSaved = { undoable(t.id, it) }) }
     if (showSettings) SettingsDialog(vm) { showSettings = false }
 }

@@ -11,7 +11,13 @@ object Accounts {
     const val PREFIX = "acct|"
 
     fun keyOf(bank: String, last: String) = "$bank|$last"
-    fun label(bank: String, last: String) = "${bank.lowercase().replaceFirstChar { it.uppercase() }} ••$last"
+    const val CASH = "CASH|"
+    fun label(bank: String, last: String) =
+        if (bank == "CASH") "Cash" else "${bank.lowercase().replaceFirstChar { it.uppercase() }} ••$last"
+
+    /** Accounts to pick from when adding an entry by hand: every known account, and Cash even before it has any entry. */
+    fun options(views: List<AccountView>): List<AccountView> =
+        if (views.any { it.key == CASH }) views else views + AccountView(CASH, "Cash", false, 0.0, 0, "")
 
     fun isCredit(t: Txn) = t.kind == "UPI_IN" || (t.kind == "REFUND" && t.merchant == "UPI reversal")
     fun isDebit(t: Txn) = t.kind == "UPI_OUT" || (t.kind == "SPEND" && t.bank == "KOTAK")
@@ -68,14 +74,15 @@ object Accounts {
 object TransferMatcher {
     const val WINDOW_MS = 10 * 60_000L
 
-    fun find(t: Txn, candidates: List<Txn>): Txn? {
+    /** [window] is 10 minutes for automatic pairing; the "own transfer" button widens it to a few days (NEFT, IMPS). */
+    fun find(t: Txn, candidates: List<Txn>, window: Long = WINDOW_MS): Txn? {
         if (t.kind != "UPI_OUT" && t.kind != "UPI_IN") return null
         val opposite = if (t.kind == "UPI_OUT") "UPI_IN" else "UPI_OUT"
         return candidates
             .filter { it.id != t.id && it.kind == opposite && it.status == "INBOX" }
             .filter { abs(it.amount - t.amount) < 0.011 }
             .filter { it.bank != t.bank || it.card != t.card }
-            .filter { abs(it.smsTime - t.smsTime) <= WINDOW_MS }
+            .filter { abs(it.smsTime - t.smsTime) <= window }
             .minByOrNull { abs(it.smsTime - t.smsTime) }
     }
 }
@@ -102,4 +109,30 @@ object BalanceSms {
         val bank = banks.firstOrNull { up.contains(it.first) }?.second ?: return null
         return BalanceHit(bank, last, amount)
     }
+}
+
+/** Entries made by hand, for money that sends no SMS: cash, other banks, wallets. */
+object Entries {
+    const val OWN = "Transfer between your own accounts"
+    const val DAYS3 = 3 * 24 * 60 * 60_000L
+
+    fun bankOf(key: String) = key.substringBefore("|")
+    fun lastOf(key: String) = key.substringAfter("|")
+
+    fun spent(key: String, title: String, amount: Double, now: Long) = Txn(
+        bank = bankOf(key), card = lastOf(key), kind = "UPI_OUT", amount = amount,
+        merchant = title.trim().ifEmpty { "Added by me" }, txnDate = now, smsTime = now, status = "INBOX", note = "Added by hand"
+    )
+
+    fun received(key: String, title: String, amount: Double, now: Long) = Txn(
+        bank = bankOf(key), card = lastOf(key), kind = "UPI_IN", amount = amount,
+        merchant = title.trim().ifEmpty { "Added by me" }, txnDate = now, smsTime = now, status = "INBOX", note = "Added by hand"
+    )
+
+    /** Money moved between two of your accounts: one debit and one credit, both kept out of your spends. */
+    fun moved(fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double, now: Long): Pair<Txn, Txn> =
+        Txn(bank = bankOf(fromKey), card = lastOf(fromKey), kind = "UPI_OUT", amount = amount, merchant = "To $toLabel",
+            txnDate = now, smsTime = now, status = "SELF", note = OWN) to
+        Txn(bank = bankOf(toKey), card = lastOf(toKey), kind = "UPI_IN", amount = amount, merchant = "From $fromLabel",
+            txnDate = now, smsTime = now, status = "SELF", note = OWN)
 }

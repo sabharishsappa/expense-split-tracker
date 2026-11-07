@@ -127,6 +127,20 @@ class MainVm(app: Application) : AndroidViewModel(app) {
 
     fun tagAllMine(list: List<Txn>) = viewModelScope.launch(safe) { Repo.tagAllMine(getApplication(), list) }
     fun untag(id: Long) = viewModelScope.launch(safe) { Repo.untag(getApplication(), id) }
+    fun addSpent(title: String, amount: Double, key: String) = viewModelScope.launch(safe) {
+        Repo.addManual(getApplication(), title, amount, key); status.value = "Added — find it in your Inbox to tag it"
+    }
+    fun addReceived(title: String, amount: Double, key: String) = viewModelScope.launch(safe) {
+        Repo.addReceived(getApplication(), title, amount, key); status.value = "Added — say what it was in your Inbox"
+    }
+    fun addMoved(from: AccountView, to: AccountView, amount: Double) = viewModelScope.launch(safe) {
+        Repo.addMoved(getApplication(), from.key, to.key, from.label, to.label, amount)
+        status.value = "Moved ${Logic.money(amount)} from ${from.label} to ${to.label}"
+    }
+    fun ownTransfer(t: Txn) = viewModelScope.launch(safe) {
+        val both = Repo.markOwnTransfer(getApplication(), t)
+        status.value = if (both) "Own transfer — both sides linked" else "Own transfer — left out of your spends"
+    }
     fun ignore(t: Txn) = viewModelScope.launch(safe) { Repo.ignore(getApplication(), t) }
     fun setCategory(t: Txn, c: String) = viewModelScope.launch(safe) {
         val n = Repo.setCategory(getApplication(), t, c)

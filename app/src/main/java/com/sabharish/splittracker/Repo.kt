@@ -434,11 +434,36 @@ object Repo {
 
     // ---------- entries made by hand ----------
     /** A spend that has no SMS (cash, another app). Starts untagged so the normal split page can finish it. */
-    suspend fun addManual(ctx: Context, title: String, amount: Double): Txn {
-        val dao = Db.get(ctx).dao(); val now = System.currentTimeMillis()
-        val t = Txn(bank = "CASH", card = "", kind = "UPI_OUT", amount = amount, merchant = title.trim().ifEmpty { "Added by me" },
-            txnDate = now, smsTime = now, status = "INBOX", note = "Added by hand")
+    suspend fun addManual(ctx: Context, title: String, amount: Double, accountKey: String = Accounts.CASH): Txn {
+        val dao = Db.get(ctx).dao()
+        val t = Entries.spent(accountKey, title, amount, System.currentTimeMillis())
         return t.copy(id = dao.insert(t))
+    }
+
+    suspend fun addReceived(ctx: Context, title: String, amount: Double, accountKey: String) {
+        Db.get(ctx).dao().insert(Entries.received(accountKey, title, amount, System.currentTimeMillis()))
+    }
+
+    suspend fun addMoved(ctx: Context, fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double) {
+        val db = Db.get(ctx); val dao = db.dao()
+        val (out, inn) = Entries.moved(fromKey, toKey, fromLabel, toLabel, amount, System.currentTimeMillis())
+        db.withTransaction { dao.insert(out); dao.insert(inn) }
+    }
+
+    /**
+     * Marks one message as a move between your own accounts. If the other half is waiting in the Inbox
+     * (same amount, within a few days, other account) both are linked. Returns true when the other half was found.
+     */
+    suspend fun markOwnTransfer(ctx: Context, t: Txn): Boolean {
+        val db = Db.get(ctx); val dao = db.dao()
+        return db.withTransaction {
+            val other = if (t.kind == "UPI_OUT") "UPI_IN" else "UPI_OUT"
+            val mate = TransferMatcher.find(t, dao.transferCandidates(other, t.amount - 0.011, t.amount + 0.011,
+                t.smsTime - Entries.DAYS3, t.smsTime + Entries.DAYS3), Entries.DAYS3)
+            dao.setStatusNote(t.id, "SELF", Entries.OWN)
+            mate?.let { dao.setStatusNote(it.id, "SELF", Entries.OWN) }
+            mate != null
+        }
     }
 
     // ---------- card bills ----------

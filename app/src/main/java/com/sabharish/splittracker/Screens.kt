@@ -279,6 +279,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
                     DropdownMenuItem(text = { Text("Select same merchant") }, onClick = { moreMenu = false; onSimilar() })
                     DropdownMenuItem(text = { Text("Rename merchant") }, onClick = { moreMenu = false; rename = true })
                     DropdownMenuItem(text = { Text("Payment failed") }, onClick = { moreMenu = false; vm.markFailed(t) })
+                    if (t.kind == "UPI_OUT") DropdownMenuItem(text = { Text("Own transfer") }, onClick = { moreMenu = false; vm.ownTransfer(t) })
                     DropdownMenuItem(text = { Text("Not a spend (skip)") }, onClick = { moreMenu = false; vm.ignore(t) })
                 }
             }
@@ -374,6 +375,7 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
                 Pill("Gift", { vm.receivedFor(t, "Received: Gift") })
                 Pill("Other", { vm.receivedFor(t, "Received: Other") })
                 Pill("Refund", { onLink(t) })
+                Pill("My own transfer", { vm.ownTransfer(t) })
             }
             Row { Spacer(Modifier.weight(1f)); TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) } }
         } else {
