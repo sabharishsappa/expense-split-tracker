@@ -105,7 +105,7 @@ private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
                                 Text(s.person, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                                 Text(Repo.money(s.amount), fontSize = 14.sp, color = muted())
                             }
-                            if (s.person in asked) Pill("Asked ✓", {}, compact = true)
+                            if (s.person in asked) Pill("Asked ✓", { asked.remove(s.person) }, compact = true)
                         }
                     }
                 }

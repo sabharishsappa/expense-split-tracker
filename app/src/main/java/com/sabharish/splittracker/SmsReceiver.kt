@@ -28,7 +28,9 @@ class SmsReceiver : BroadcastReceiver() {
                     if (bill != null) { Repo.ingestBill(app, bill, at); continue }
                     val p = SmsParser.parse(body)
                     if (p != null) { val t = Repo.ingest(app, p, at, body); if (t != null && !quietOld(at)) Repo.notifyNew(app, t) }
-                    BalanceSms.parse(body)?.let { Repo.ingestBalance(app, it, at) }
+                    val bal = BalanceSms.parse(body)
+                    if (bal != null) Repo.ingestBalance(app, bal, at)
+                    else if (p == null && Diagnostics.looksFinancial(body)) Repo.noteUnparsed(app, body)
                 }
             } catch (e: Throwable) {
                 CrashLog.record(app, e)

@@ -84,7 +84,6 @@ fun TagSheet(
 
     var category by remember { mutableStateOf(t.category) }
     val picked = remember { mutableStateListOf<String>().also { it.addAll(initial) } }
-    var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var splitMode by remember { mutableStateOf("EQUAL") }   // EQUAL | PERCENT | PARTS | AMOUNT
     val vals = remember { mutableStateMapOf<String, String>() }
@@ -178,9 +177,13 @@ fun TagSheet(
                                 val people = sh.map { it.person }
                                 val title = titleText
                                 scope.launch {
-                                    val made = Repo.addManual(ctx, title, amt)
-                                    Repo.tag(ctx, made, sh, category, false, splitAdded && othersInvolved)
-                                    onCreated(made, people)
+                                    try {
+                                        val made = Repo.addManual(ctx, title, amt)
+                                        Repo.tag(ctx, made, sh, category, false, splitAdded && othersInvolved)
+                                        onCreated(made, people)
+                                    } catch (e: Exception) {
+                                        CrashLog.record(ctx, e); vm.status.value = "Couldn't save the split. Details are in Settings."
+                                    }
                                 }
                             } else {
                                 vm.tag(t, sh, category, rememberRule, splitAdded && othersInvolved)
@@ -520,15 +523,18 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     var confirmRestore by remember { mutableStateOf<String?>(null) }
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
-            val text = vm.backupText()
-            withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } }
-            note = "Backup saved"
+            note = try {
+                val text = vm.backupText()
+                withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } }
+                "Backup saved"
+            } catch (e: Exception) { CrashLog.record(ctx, e); "Couldn't save the backup file" }
         }
     }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
-            val text = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" }
-            confirmRestore = text
+            try {
+                confirmRestore = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" }
+            } catch (e: Exception) { CrashLog.record(ctx, e); note = "Couldn't read that file" }
         }
     }
     confirmRestore?.let { text ->
@@ -605,6 +611,22 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                                 }
                             }
                             if (rules.size > 40) Text("…and ${rules.size - 40} more", fontSize = 12.sp, color = muted())
+                        }
+                    }
+                    var unparsed by remember { mutableStateOf(Repo.unparsed(ctx)) }
+                    var showUnparsed by remember { mutableStateOf(false) }
+                    if (unparsed.isNotEmpty()) Section("Messages I couldn't read", "Bank-like messages that matched nothing. Copy one and send it to the developer so it can be added.") {
+                        Row(Modifier.fillMaxWidth().clickable { showUnparsed = !showUnparsed }, verticalAlignment = Alignment.CenterVertically) {
+                            Text("${unparsed.size} found", Modifier.weight(1f), fontSize = 15.sp)
+                            Text(if (showUnparsed) "Hide" else "Show", color = teal())
+                        }
+                        if (showUnparsed) {
+                            unparsed.forEach { Text(it, fontSize = 11.sp, color = muted()) }
+                            val cb = LocalClipboardManager.current
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { cb.setText(AnnotatedString(unparsed.joinToString("\n\n"))); note = "Copied" }) { Text("Copy all") }
+                                OutlinedButton(onClick = { Repo.clearUnparsed(ctx); unparsed = emptyList() }) { Text("Clear") }
+                            }
                         }
                     }
                     var crash by remember { mutableStateOf(CrashLog.read(ctx)) }
@@ -771,4 +793,23 @@ fun WelcomeDialog(onPick: (Long) -> Unit) {
             dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } }
         ) { androidx.compose.material3.DatePicker(state = st) }
     }
+}
+
+
+/** Asked once: the name on your UPI, so transfers between your own accounts are not treated as spends. */
+@Composable
+fun NameDialog(onDone: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { onDone("") },
+        title = { Text("Your name") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("As it appears on UPI. Payments between your own accounts are then left out of your spends.", fontSize = 13.sp, color = muted())
+                OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name or first name") })
+            }
+        },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onDone(name.trim()) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = { onDone("") }) { Text("Skip") } }
+    )
 }

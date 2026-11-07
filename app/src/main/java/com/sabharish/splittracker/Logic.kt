@@ -74,7 +74,7 @@ object Logic {
      */
     fun autoSettle(rows: List<PendingRow>, sender: String, amount: Double): List<Long>? {
         val owing = rows.filter { it.person != ME && it.amount - it.settled > 0.004 }
-        val person = bestMatch(sender, owing.map { it.person }.distinct()) ?: return null
+        val person = strictMatch(sender, owing.map { it.person }.distinct()) ?: return null
         val mine = owing.filter { it.person == person }
         val one = mine.filter { Math.abs((it.amount - it.settled) - amount) < 0.011 }
         if (one.size == 1) return listOf(one[0].shareId)
@@ -123,6 +123,24 @@ object Logic {
             if (score > bestScore) { bestScore = score; best = p }
         }
         return best
+    }
+
+    /**
+     * Like [bestMatch] but for actions done without asking: one clear winner only, and the person's first name
+     * must appear in the sender's name (a shared surname like "Kumar" is not enough).
+     */
+    fun strictMatch(name: String, people: List<String>): String? {
+        fun toks(s: String) = s.lowercase(Locale.ROOT).split(Regex("[^a-z]+")).filter { it.length >= 3 }
+        fun hit(a: String, b: String) = a == b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)))
+        val nt = toks(name)
+        if (nt.isEmpty()) return null
+        val scored = people.map { p -> val pt = toks(p); p to nt.count { a -> pt.any { b -> hit(a, b) } } }.filter { it.second > 0 }
+        if (scored.isEmpty()) return null
+        val top = scored.maxOf { it.second }
+        val best = scored.filter { it.second == top }
+        if (best.size != 1) return null
+        val first = toks(best[0].first).firstOrNull() ?: return null
+        return if (nt.any { hit(it, first) }) best[0].first else null
     }
 
     /** Friendly name with the bank's original name beside it, so the merchant stays recognisable. */
@@ -239,6 +257,14 @@ object RefundMatcher {
 }
 
 /** The message sent to someone who owes you money. */
+/** Spots bank-style messages the parser did not understand, so they can be reviewed on the phone. */
+object Diagnostics {
+    private val money = Regex("""(?:rs\.?|inr|₹)\s?[\d,]+""", RegexOption.IGNORE_CASE)
+    private val verb = Regex("""\b(debited|credited|spent|sent|received|withdrawn|paid|payment of|refund)\b""", RegexOption.IGNORE_CASE)
+    private val noise = Regex("""\b(otp|offer|win|cashback|loan|kyc|apply now|click|voucher|reward)\b""", RegexOption.IGNORE_CASE)
+    fun looksFinancial(body: String?): Boolean = !body.isNullOrBlank() && money.containsMatchIn(body) && verb.containsMatchIn(body) && !noise.containsMatchIn(body)
+}
+
 /** Groups you split with often ("Badminton" → Ravi, Kiran, Sai), remembered on this phone only. */
 object Groups {
     data class Group(val name: String, val people: List<String>)

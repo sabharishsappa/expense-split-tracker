@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.remember
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -90,7 +91,7 @@ fun Pill(
     val on = selected || strong
     Box(
         modifier
-            .heightIn(min = if (compact) 36.dp else 44.dp)
+            .heightIn(min = if (compact) 40.dp else 48.dp)
             .clip(RoundedCornerShape(50))
             .background(if (on) scheme.primary else scheme.surfaceVariant)
             .clickable(onClick = onClick)
@@ -125,7 +126,7 @@ fun Segmented(options: List<String>, selected: String, onPick: (String) -> Unit,
         options.forEach { o ->
             val on = o == selected
             Box(
-                Modifier.weight(1f).heightIn(min = 36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                Modifier.weight(1f).heightIn(min = 40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     .background(if (on) scheme.surface else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable { onPick(o) },
                 contentAlignment = androidx.compose.ui.Alignment.Center
@@ -134,5 +135,23 @@ fun Segmented(options: List<String>, selected: String, onPick: (String) -> Unit,
                     color = if (on) scheme.onSurface else scheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+
+/** Shown while the app cannot read messages: says why nothing appears and how to fix it. */
+@Composable
+fun SmsBanner() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ok = remember(Epoch.value) { Repo.hasPermission(ctx, android.Manifest.permission.READ_SMS) }
+    if (ok) return
+    androidx.compose.foundation.layout.Column(
+        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(16.dp)
+    ) {
+        Text("Allow SMS access", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+        Text("Bank messages are read on this phone to find your payments. Nothing is uploaded.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+        androidx.compose.material3.TextButton(onClick = {
+            ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + ctx.packageName)))
+        }) { Text("Open settings") }
     }
 }

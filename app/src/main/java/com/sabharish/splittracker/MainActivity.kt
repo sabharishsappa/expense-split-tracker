@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
@@ -76,16 +77,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        perms.launch(
-            arrayOf(
-                Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CONTACTS, Manifest.permission.POST_NOTIFICATIONS
-            )
-        )
+        // a brand-new person sees the welcome choice first; permissions are asked right after it
+        if (Repo.getPref(this, "trackFrom", "").isNotEmpty() || getSharedPreferences("st", Context.MODE_PRIVATE).getBoolean("imported2", false)) askPermissions()
         readIntent(intent)
         ThemeState.mode = Repo.getPref(this, "theme", "system")
-        setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) } }
+        setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) { askPermissions() } } }
     }
+
+    private fun askPermissions() = perms.launch(
+        arrayOf(
+            Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS,
+            Manifest.permission.READ_CONTACTS, Manifest.permission.POST_NOTIFICATIONS
+        )
+    )
 
     override fun onStop() {
         super.onStop()
@@ -106,13 +110,14 @@ class MainActivity : ComponentActivity() {
         // people who were already using the app keep tracking from their first import
         if (Repo.getPref(this, "trackFrom", "").isEmpty() && sp.getBoolean("imported2", false)) Repo.putPref(this, "trackFrom", (now - 90 * Bills.DAY).toString())
         val from = Repo.getPref(this, "trackFrom", "").toLongOrNull() ?: return   // new person: wait for the welcome choice
-        vm.importHistory(maxOf(from, now - 7 * Bills.DAY), quiet = true)
+        val first = !sp.getBoolean("imported2", false)
+        vm.importHistory(if (first) from else maxOf(from, now - 7 * Bills.DAY), quiet = !first)
         sp.edit().putBoolean("imported2", true).apply()
     }
 }
 
 @Composable
-fun App(vm: MainVm) {
+fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
     var inboxSection by remember { mutableIntStateOf(0) }
     var showNewSplit by remember { mutableStateOf(false) }
@@ -169,7 +174,7 @@ fun App(vm: MainVm) {
                 NavigationBarItem(selected = tab == 2, onClick = { tab = 2 },
                     icon = { Icon(Icons.Default.Person, null) }, label = { Text("Owed") })
                 NavigationBarItem(selected = tab == 3, onClick = { tab = 3 },
-                    icon = { Icon(Icons.Default.List, null) }, label = { Text("All") })
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("All") })
                 NavigationBarItem(selected = tab == 4, onClick = { tab = 4 },
                     icon = { Icon(Icons.Default.DateRange, null) }, label = { Text("Summary") })
             }
@@ -178,7 +183,7 @@ fun App(vm: MainVm) {
         Column(Modifier.padding(pad).fillMaxSize().padding(horizontal = 14.dp)) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(titles[tab], fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text(titles[tab], fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (tab in 0..3) androidx.compose.material3.TextButton(onClick = { showNewSplit = true }) { Text("+ Split", fontWeight = FontWeight.SemiBold) }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
@@ -194,6 +199,8 @@ fun App(vm: MainVm) {
                 )
             }
             Spacer(Modifier.height(6.dp))
+            val loaded by vm.loaded.collectAsState()
+            if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() } else
             when (tab) {
                 0 -> HomeScreen(vm) { if (it == 11) { inboxSection = 3; tab = 1 } else { if (it == 1) inboxSection = 0; tab = it } }
                 1 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
@@ -207,8 +214,13 @@ fun App(vm: MainVm) {
     var welcome by remember { mutableStateOf(Repo.getPref(appCtx, "trackFrom", "").isEmpty() && !appCtx.getSharedPreferences("st", Context.MODE_PRIVATE).getBoolean("imported2", false)) }
     if (welcome) WelcomeDialog { from ->
         Repo.putPref(appCtx, "trackFrom", from.toString())
-        vm.importHistory(from)
         welcome = false
+        askPermissions()
+    }
+    var askName by remember { mutableStateOf(Repo.getPref(appCtx, "selfAsked", "").isEmpty()) }
+    if (!welcome && askName) NameDialog { n ->
+        if (n.isNotEmpty()) Repo.putPref(appCtx, "selfnames", n)
+        Repo.putPref(appCtx, "selfAsked", "1"); askName = false
     }
     if (showNewSplit) NewSplitFlow(vm) { showNewSplit = false }
     opened?.let { t -> TagSheet(vm, t, onDismiss = { opened = null }, onSaved = { undoable(t.id, it) }) }

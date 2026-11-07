@@ -27,8 +27,7 @@ object Repo {
     // ---------- formatting ----------
     fun money(v: Double): String = Logic.money(v)
 
-    private val shortDate = SimpleDateFormat("d MMM", Locale.ENGLISH)
-    fun shortDate(ms: Long): String = shortDate.format(Date(ms))
+    fun shortDate(ms: Long): String = Logic.shortDate(ms)
 
     private val bankNames = mapOf(
         "SBI" to "SBI", "HDFC" to "HDFC", "ICICI" to "ICICI", "INDUSIND" to "IndusInd",
@@ -59,12 +58,15 @@ object Repo {
     fun putPref(ctx: Context, key: String, v: String) = prefs(ctx).edit().putString(key, v).apply()
 
     private fun selfNames(ctx: Context): List<String> =
-        getPref(ctx, "selfnames", "sabharish").split(",").map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }
+        getPref(ctx, "selfnames", "").split(",").map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }
 
     private fun isSelf(ctx: Context, name: String): Boolean {
         val n = name.lowercase(Locale.ROOT)
         return selfNames(ctx).any { n.contains(it) }
     }
+
+    /** The same SMS seen twice (live + inbox read) differs by seconds; two real purchases are further apart than this. */
+    private const val DEDUPE_MS = 45_000L
 
     // ---------- ingest ----------
     /** Stores one parsed SMS. Returns the new transaction when it needs the user's attention. */
@@ -72,9 +74,9 @@ object Repo {
         val db = Db.get(ctx)
         val dao = db.dao()
         return db.withTransaction {
-            val dup = dao.near(p.kind, p.amount, p.card, p.merchant, smsTime - 180_000, smsTime + 180_000)
+            val dup = dao.near(p.kind, p.amount, p.card, p.merchant, smsTime - DEDUPE_MS, smsTime + DEDUPE_MS)
             if (dup > 0) {
-                if (body.isNotBlank()) dao.fillBody(p.kind, p.amount, p.card, p.merchant, smsTime - 180_000, smsTime + 180_000, body)
+                if (body.isNotBlank()) dao.fillBody(p.kind, p.amount, p.card, p.merchant, smsTime - DEDUPE_MS, smsTime + DEDUPE_MS, body)
                 return@withTransaction null
             }
             val isUpi = p.kind.startsWith("UPI")
@@ -132,8 +134,14 @@ object Repo {
                 val ids = Logic.autoSettle(rows, p.merchant, p.amount)
                 val who = ids?.let { rows.firstOrNull { r -> r.shareId == it.first() }?.person }
                 if (ids != null && who != null) {
-                    for (sid in ids) { val sh = dao.share(sid) ?: continue; dao.setSettled(sid, sh.amount) }
-                    dao.insertSettlement(Settlement(person = who, amount = p.amount, date = System.currentTimeMillis(), mode = "UPI"))
+                    val applied = ArrayList<String>()
+                    for (sid in ids) {
+                        val sh = dao.share(sid) ?: continue
+                        applied.add("$sid:${sh.amount - sh.settled}")
+                        dao.setSettled(sid, sh.amount)
+                    }
+                    val settleId = dao.insertSettlement(Settlement(person = who, amount = p.amount, date = System.currentTimeMillis(), mode = "UPI"))
+                    dao.putRule(Rule("auto|$id", "AUTO", "$settleId;" + applied.joinToString(",")))
                     dao.setStatusNote(id, "REPAID", "Paid by $who · matched automatically")
                     saved = saved.copy(status = "REPAID", note = "Paid by $who · matched automatically")
                 }
@@ -367,10 +375,6 @@ object Repo {
 
     fun bestMatch(name: String, people: List<String>): String? = Logic.bestMatch(name, people)
 
-    // ---------- reminder text ----------
-    fun reminderText(ctx: Context, person: String, rows: List<PendingRow>, aliases: Map<String, String>): String =
-        Reminder.build(person, rows, aliases, getPref(ctx, "upi", ""), System.currentTimeMillis())
-
     // ---------- statements ----------
     /** Adds a statement line the app never saw, as an untagged spend. */
     suspend fun addFromStatement(ctx: Context, s: StmtSource, l: StmtLine) {
@@ -378,6 +382,35 @@ object Repo {
         Db.get(ctx).dao().insert(Txn(bank = s.bank, card = s.last, kind = kind, amount = l.amount, merchant = Logic.title(l.desc.take(40), emptyMap()),
             txnDate = l.date, smsTime = l.date, status = "INBOX", note = "Added from statement"))
     }
+
+    /** Takes back an automatic match: the bills become unpaid again and the payment returns to the Inbox. */
+    suspend fun undoAutoSettle(ctx: Context, t: Txn) {
+        val db = Db.get(ctx); val dao = db.dao()
+        db.withTransaction {
+            val r = dao.rule("auto|${t.id}")
+            if (r != null) {
+                val parts = r.people.split(";")
+                parts.getOrNull(0)?.toLongOrNull()?.let { dao.deleteSettlement(it) }
+                parts.getOrNull(1)?.split(",")?.filter { it.isNotBlank() }?.forEach { pair ->
+                    val sid = pair.substringBefore(":").toLongOrNull(); val amt = pair.substringAfter(":").toDoubleOrNull()
+                    val sh = if (sid != null) dao.share(sid) else null
+                    if (sh != null && amt != null) dao.setSettled(sh.id, Math.max(0.0, sh.settled - amt))
+                }
+                dao.deleteRule("auto|${t.id}")
+            }
+            dao.setStatusNote(t.id, "INBOX", "")
+        }
+    }
+
+    // ---------- messages the parser did not understand (kept on this phone, for diagnosis) ----------
+    fun noteUnparsed(ctx: Context, body: String) {
+        val key = body.replace(Regex("\\d+"), "#").replace(Regex("\\s+"), " ").trim().take(60)
+        val old = getPref(ctx, "unparsed", "").split("\u0001").filter { it.isNotBlank() }
+        if (old.any { it.replace(Regex("\\d+"), "#").replace(Regex("\\s+"), " ").trim().take(60) == key }) return
+        putPref(ctx, "unparsed", (listOf(body.replace("\u0001", " ").take(300)) + old).take(15).joinToString("\u0001"))
+    }
+    fun unparsed(ctx: Context): List<String> = getPref(ctx, "unparsed", "").split("\u0001").filter { it.isNotBlank() }
+    fun clearUnparsed(ctx: Context) = putPref(ctx, "unparsed", "")
 
     // ---------- money you owe ----------
     /** The money received in [t] was borrowed: you will need to pay [person] back. */
@@ -407,19 +440,6 @@ object Repo {
             txnDate = now, smsTime = now, status = "INBOX", note = "Added by hand")
         return t.copy(id = dao.insert(t))
     }
-    suspend fun deleteManual(ctx: Context, id: Long) = Db.get(ctx).dao().deleteTxnIfInbox(id)
-
-    // ---------- cash lent ----------
-    /** Money you handed over (cash or otherwise) that someone should give back. Shows under Owed as "Lent". */
-    suspend fun addLent(ctx: Context, person: String, amount: Double, note: String = "") {
-        val db = Db.get(ctx); val dao = db.dao()
-        val now = System.currentTimeMillis()
-        db.withTransaction {
-            val id = dao.insert(Txn(bank = "CASH", card = "", kind = "UPI_OUT", amount = amount, merchant = "Lent to $person",
-                txnDate = now, smsTime = now, status = "TAGGED", category = "Lent", note = note))
-            dao.insertShare(Share(txnId = id, person = person, amount = amount, settled = 0.0))
-        }
-    }
 
     // ---------- card bills ----------
     /** Stores a statement as a bill to pay. Returns true when it is new. */
@@ -442,7 +462,7 @@ object Repo {
         val dao = Db.get(ctx).dao()
         val key = Accounts.keyOf(hit.bank, hit.last)
         val saved = dao.acctRulesList().mapNotNull { Accounts.decode(it) }.firstOrNull { it.key == key }
-        val known = saved != null || Accounts.detected(dao.allTxnsList()).any { Accounts.keyOf(it.first, it.second) == key }
+        val known = saved != null || dao.detectedAccounts().any { Accounts.keyOf(it.bank, it.card) == key }
         if (!known) return false
         if (saved != null && smsTime + 1 <= saved.asOf) return false      // older than what we already have
         dao.putRule(Accounts.encode(Account(key, hit.bank, hit.last, saved?.name ?: "", hit.balance, smsTime + 1)))
@@ -466,14 +486,18 @@ object Repo {
     /** Replaces everything with the backup. Returns the number of transactions restored, or -1 if the file is not a backup. */
     suspend fun restoreBackup(ctx: Context, text: String): Int {
         val d = Backup.fromJson(text) ?: return -1
-        val dao = Db.get(ctx).dao()
-        dao.wipeShares(); dao.wipeSettlements(); dao.wipeRules(); dao.wipeTxns(); dao.wipeBills(); dao.wipePayables()
-        d.txns.forEach { dao.restoreTxn(it) }
-        d.shares.forEach { dao.restoreShare(it) }
-        d.settlements.forEach { dao.restoreSettlement(it) }
-        d.rules.forEach { dao.putRule(it) }
-        d.bills.forEach { dao.restoreBill(it) }
-        d.payables.forEach { dao.restorePayable(it) }
+        val db = Db.get(ctx); val dao = db.dao()
+        // a safety copy of what is on the phone now, in case the file turns out to be the wrong one
+        try { java.io.File(ctx.filesDir, "before_restore.json").writeText(exportBackup(ctx)) } catch (_: Exception) {}
+        db.withTransaction {
+            dao.wipeShares(); dao.wipeSettlements(); dao.wipeRules(); dao.wipeTxns(); dao.wipeBills(); dao.wipePayables()
+            d.txns.forEach { dao.restoreTxn(it) }
+            d.shares.forEach { dao.restoreShare(it) }
+            d.settlements.forEach { dao.restoreSettlement(it) }
+            d.rules.forEach { dao.putRule(it) }
+            d.bills.forEach { dao.restoreBill(it) }
+            d.payables.forEach { dao.restorePayable(it) }
+        }
         d.prefs.forEach { (k, v) -> putPref(ctx, k, v) }
         return d.txns.size
     }
@@ -499,7 +523,9 @@ object Repo {
                 if (bill != null) { ingestBill(ctx, bill, it.getLong(di)); continue }
                 val p = SmsParser.parse(text)
                 if (p != null && ingest(ctx, p, it.getLong(di), text ?: "") != null) added++
-                BalanceSms.parse(text)?.let { h -> ingestBalance(ctx, h, it.getLong(di)) }
+                val bal = BalanceSms.parse(text)
+                if (bal != null) ingestBalance(ctx, bal, it.getLong(di))
+                else if (p == null && Diagnostics.looksFinancial(text)) noteUnparsed(ctx, text ?: "")
             }
         }
         added

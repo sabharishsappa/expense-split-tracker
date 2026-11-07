@@ -13,7 +13,7 @@ class App : Application() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {
-                File(filesDir, CrashLog.FILE).writeText("${Date()}\nthread: ${thread.name}\n${Log.getStackTraceString(error)}")
+                CrashLog.append(this, "${Date()}\nthread: ${thread.name}\n${Log.getStackTraceString(error)}")
             } catch (_: Throwable) {
             }
             previous?.uncaughtException(thread, error)
@@ -23,10 +23,19 @@ class App : Application() {
 
 object CrashLog {
     const val FILE = "last_crash.txt"
+    /** Keeps the last few problems, newest first, not just the latest one. */
+    fun append(ctx: Context, entry: String) {
+        try {
+            val f = File(ctx.filesDir, FILE)
+            val old = if (f.exists()) f.readText().split(SEP).filter { it.isNotBlank() } else emptyList()
+            f.writeText((listOf(entry.take(2500)) + old).take(5).joinToString(SEP))
+        } catch (_: Throwable) {}
+    }
+    const val SEP = "\n=====\n"
     fun read(ctx: Context): String = try { File(ctx.filesDir, FILE).takeIf { it.exists() }?.readText() ?: "" } catch (_: Exception) { "" }
     /** Keeps the error of a problem we recovered from, so it can still be read in Settings. */
     fun record(ctx: Context, error: Throwable) {
-        try { File(ctx.filesDir, FILE).writeText("${Date()}\n(handled)\n${Log.getStackTraceString(error)}") } catch (_: Throwable) {}
+        append(ctx, "${Date()}\n(handled)\n${Log.getStackTraceString(error)}")
     }
     fun clear(ctx: Context) { try { File(ctx.filesDir, FILE).delete() } catch (_: Exception) {} }
 }

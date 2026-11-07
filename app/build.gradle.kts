@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 34
         // Rises with every GitHub build, so each one counts as an update
-        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: (System.currentTimeMillis() / 60000).toInt()
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 

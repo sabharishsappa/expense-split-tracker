@@ -85,6 +85,8 @@ data class Payable(
     val date: Long, val note: String = "", val txnId: Long = 0
 )
 
+data class AcctPair(val bank: String, val card: String)
+
 data class TagCount(val category: String, val n: Int)
 
 data class SummaryRow(
@@ -114,7 +116,10 @@ interface AppDao {
 
     @Insert suspend fun insert(t: Txn): Long
     @Insert suspend fun insertShare(s: Share): Long
-    @Insert suspend fun insertSettlement(s: Settlement)
+    @Insert suspend fun insertSettlement(s: Settlement): Long
+    @Query("DELETE FROM settlement WHERE id = :id") suspend fun deleteSettlement(id: Long)
+    @Query("SELECT DISTINCT bank, card FROM txn WHERE kind IN ('UPI_IN','UPI_OUT') OR (kind = 'REFUND' AND merchant = 'UPI reversal')")
+    suspend fun detectedAccounts(): List<AcctPair>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putRule(r: Rule)
 
     @Query("SELECT * FROM rule WHERE ruleKey = :k")
@@ -156,7 +161,6 @@ interface AppDao {
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'cat|%' ORDER BY ruleKey")
     fun catRules(): Flow<List<Rule>>
 
-    @Query("DELETE FROM txn WHERE id = :id AND status = 'INBOX' AND bank = 'CASH'") suspend fun deleteTxnIfInbox(id: Long)
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'")
     fun acctRules(): Flow<List<Rule>>
 
@@ -292,7 +296,17 @@ abstract class Db : RoomDatabase() {
 
     companion object {
         @Volatile private var inst: Db? = null
+        /** Before the first run of a new database version, keep a copy of the file so a faulty upgrade can never cost the data. */
+        private fun keepCopyBeforeUpgrade(ctx: Context) {
+            try {
+                val marker = java.io.File(ctx.filesDir, "db_version"); val file = ctx.getDatabasePath("splittracker.db")
+                if (file.exists() && (!marker.exists() || marker.readText() != "6")) file.copyTo(java.io.File(file.parentFile, "splittracker.db.before-upgrade"), overwrite = true)
+                marker.writeText("6")
+            } catch (_: Exception) {}
+        }
+
         fun get(ctx: Context): Db = inst ?: synchronized(this) {
+            keepCopyBeforeUpgrade(ctx)
             inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "splittracker.db")
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build().also { inst = it }

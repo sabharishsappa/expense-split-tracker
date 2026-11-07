@@ -36,8 +36,8 @@ class HabitTest {
     }
 
     @Test fun lines() {
-        assertEquals("Every spend this month is sorted", Habit.clarityLine(100, 0))
-        assertEquals("1 spend left to sort", Habit.clarityLine(90, 1))
-        assertEquals("4 spends left to sort", Habit.clarityLine(50, 4))
+        assertEquals("Every spend this month is sorted", Habit.clarityLine(0))
+        assertEquals("1 spend left to sort", Habit.clarityLine(1))
+        assertEquals("4 spends left to sort", Habit.clarityLine(4))
     }
 }

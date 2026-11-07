@@ -68,6 +68,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
         )
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+        item { SmsBanner() }
         item {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
@@ -121,7 +122,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                     Spacer(Modifier.padding(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text("This month's clarity", fontSize = 13.sp, color = muted())
-                        Text(Habit.clarityLine(((clarity ?: 1f) * 100).toInt(), spends.size), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text(Habit.clarityLine(spends.size), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         Text(if (days > 0) "🔥 $days-day inbox-zero streak" else "Clear your inbox today to start a streak", fontSize = 13.sp, color = if (days > 0) amber() else muted())
                     }
                 }

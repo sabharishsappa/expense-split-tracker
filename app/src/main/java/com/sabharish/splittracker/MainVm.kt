@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -60,23 +61,19 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun setBalance(key: String, name: String, balance: Double) =
         viewModelScope.launch(safe) { Repo.setAccountBalance(getApplication(), key, name, balance) }
 
-    fun bulkCategory(txns: List<Txn>, c: String) = viewModelScope.launch(safe) {
-        Repo.bulkCategory(getApplication(), txns, c); status.value = "Tagged ${txns.size} as $c"
-    }
     fun bulkApply(txns: List<Txn>, tag: String, people: List<String>) = viewModelScope.launch(safe) {
         Repo.bulkApply(getApplication(), txns, tag, people)
         status.value = "Updated ${txns.size} ${if (txns.size == 1) "bill" else "bills"}"
     }
-    fun addLent(person: String, amount: Double) = viewModelScope.launch(safe) { Repo.addLent(getApplication(), person, amount); status.value = "Added ${Logic.money(amount)} lent to $person" }
-    fun bulkPeople(txns: List<Txn>, people: List<String>) = viewModelScope.launch(safe) {
-        val n = Repo.bulkPeople(getApplication(), txns, people)
-        status.value = if (n == 0) "Nothing to update (money-in rows can't be split)" else "Updated $n spends"
-    }
-
     fun addFromStatement(s: StmtSource, l: StmtLine) = viewModelScope.launch(safe) { Repo.addFromStatement(getApplication(), s, l) }
 
     /** Set when a notification is tapped: which transaction to open. */
     val openId = MutableStateFlow(0L)
+
+    /** False until the first read of the database finishes, so screens never flash "all caught up" while loading. */
+    val loaded = MutableStateFlow(false)
+    init { viewModelScope.launch(safe) { dao.all().first(); loaded.value = true } }
+    fun undoAutoSettle(t: Txn) = viewModelScope.launch(safe) { Repo.undoAutoSettle(getApplication(), t); status.value = "Match undone — the payment is back in your Inbox" }
     suspend fun txnById(id: Long): Txn? = dao.txnById(id)
 
     val contacts = MutableStateFlow<List<String>>(emptyList())

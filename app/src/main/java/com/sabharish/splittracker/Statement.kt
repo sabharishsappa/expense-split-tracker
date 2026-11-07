@@ -97,7 +97,7 @@ object Statement {
                 if (amount != null) {
                     val points = Regex("""\s{2,}(-?\d+)(?=\s|$)""").find(rest)
                     val credit = block.any { Regex("""\bCR\b""").containsMatchIn(it) } || points?.groupValues?.get(1)?.startsWith("-") == true
-                    val desc = rest.replace(serialRx, "").let { d -> points?.let { d.substring(0, d.indexOf(it.value).coerceAtLeast(0)) } ?: d }
+                    val desc = rest.replace(serialRx, "").let { txt -> points?.let { txt.substring(0, txt.indexOf(it.value).coerceAtLeast(0)) } ?: txt }
                     out.add(StmtLine(date, clean(desc), num(amount), credit))
                 }
                 continue

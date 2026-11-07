@@ -60,8 +60,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-private val fullDate = SimpleDateFormat("d MMM yyyy", Locale.ENGLISH)
-fun fullDate(ms: Long): String = fullDate.format(Date(ms))
+fun fullDate(ms: Long): String = SimpleDateFormat("d MMM yyyy", Locale.ENGLISH).format(Date(ms))
 
 fun kindLabel(kind: String) = when (kind) {
     "SPEND" -> "Card"
@@ -135,7 +134,6 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
                 text = { Text(if (n > 0) "$name · $n" else name, fontSize = 14.sp) })
         }
     }
-    Spacer(Modifier.height(8.dp))
     Spacer(Modifier.height(8.dp))
     if (q.isNotBlank() && spends.isEmpty() && money.isEmpty() && auto.isEmpty() && failed.isEmpty())
         Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 15.sp)
@@ -221,6 +219,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     val chosenBy = remember(Epoch.value) { androidx.compose.runtime.mutableStateMapOf<Long, List<String>>() }
     var confirmAll by remember { mutableStateOf(false) }
     if (items.isEmpty()) {
+        if (!Repo.hasPermission(androidx.compose.ui.platform.LocalContext.current, android.Manifest.permission.READ_SMS)) { SmsBanner(); return }
         Text("You're all caught up. New payments will show up here.", color = muted(), fontSize = 15.sp)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { vm.importDays(365) }) { Text("Import last 12 months of messages") }
@@ -466,7 +465,6 @@ private fun FailedList(vm: MainVm, items: List<Txn>) {
 
 @Composable
 fun PendingScreen(vm: MainVm, q: String) {
-    val ctx = LocalContext.current
     val aliases by vm.aliases.collectAsState()
     val allRows by vm.pending.collectAsState()
     val rows = if (q.isBlank()) allRows else allRows.filter { it.person.contains(q.trim(), true) || Repo.nameOnly(it.merchant, aliases).contains(q.trim(), true) || it.category.contains(q.trim(), true) }
@@ -654,7 +652,6 @@ private fun FilterPill(title: String, options: List<String>, selected: String, o
 
 @Composable
 private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, String>, onChange: (Txn) -> Unit) {
-    var catMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf(false) }
     val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
@@ -682,6 +679,7 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
         }
         if (state.isNotEmpty()) Text(state, fontSize = 13.sp, color = if (t.status == "INBOX" || t.status == "FAILED") amber() else muted())
         if (t.note.isNotBlank()) Text(t.note, fontSize = 13.sp, color = muted())
+        if (t.status == "REPAID" && t.note.contains("matched automatically")) TextButton(onClick = { vm.undoAutoSettle(t) }) { Text("Wrong match? Undo") }
         if (spendLike) {
             Spacer(Modifier.height(6.dp))
             Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { onChange(t) })

@@ -53,3 +53,9 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - [ ] Statement check (Home) still reads your PDFs.
 - [ ] Refund matching, failed payments, custom tags (edit/delete/hide) still work.
 - [ ] Tag a merchant once → next SMS from it is auto-sorted.
+
+## Safety and review fixes
+- `StrictMatchTest` – automatic settling needs one clear name match (shared surname or ties never match).
+- `DiagnosticsTest` – which unread messages are worth listing under Settings > Messages I couldn't read.
+- Restore runs in one database transaction and keeps `before_restore.json` first; the database file is copied before an upgrade.
+- Manual checks on phone: deny SMS permission (banner shows), first launch (welcome, then permissions, then name), "Wrong match? Undo" on an auto-matched payment.

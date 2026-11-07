@@ -40,7 +40,7 @@ object Habit {
 
     fun monthStart(now: Long): Long = Filters.rangeFor("This month", now).first ?: now
 
-    fun clarityLine(pct: Int, inbox: Int) = when {
+    fun clarityLine(inbox: Int) = when {
         inbox == 0 -> "Every spend this month is sorted"
         inbox == 1 -> "1 spend left to sort"
         else -> "$inbox spends left to sort"
