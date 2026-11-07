@@ -1,4 +1,4 @@
-# Split Tracker — manual test checklist
+# Kharcha — manual test checklist
 
 Tick each line as you try it on your phone. "Expect" is what should happen.
 
