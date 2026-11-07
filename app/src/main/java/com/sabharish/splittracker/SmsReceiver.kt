@@ -17,18 +17,18 @@ class SmsReceiver : BroadcastReceiver() {
         if (msgs.isEmpty()) return
         // Long SMS arrive in parts: join the parts of each sender
         val bodies = msgs.groupBy { it.originatingAddress ?: "" }
-            .map { (_, parts) -> parts.joinToString("") { it.messageBody ?: "" } to parts.first().timestampMillis }
+            .map { (from, parts) -> Triple(parts.joinToString("") { it.messageBody ?: "" }, parts.first().timestampMillis, from) }
         val app = context.applicationContext
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                for ((body, time) in bodies) {
+                for ((body, time, from) in bodies) {
                     val at = if (time > 0) time else System.currentTimeMillis()
                     val bill = BillParser.parse(body)
                     if (bill != null) { Repo.ingestBill(app, bill, at); continue }
-                    val p = SmsParser.parse(body)
+                    val p = SmsParser.parse(body, from)
                     if (p != null) { val t = Repo.ingest(app, p, at, body); if (t != null && !quietOld(at)) Repo.notifyNew(app, t) }
-                    val bal = BalanceSms.parse(body)
+                    val bal = BalanceSms.parse(body, from)
                     if (bal != null) Repo.ingestBalance(app, bal, at)
                     else if (p == null && Diagnostics.looksFinancial(body)) Repo.noteUnparsed(app, body)
                 }

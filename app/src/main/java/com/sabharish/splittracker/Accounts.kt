@@ -99,14 +99,13 @@ object BalanceSms {
     private val banks = listOf("SBI" to "SBI", "ICICI" to "ICICI", "HDFC" to "HDFC", "KOTAK" to "KOTAK", "FEDERAL" to "FEDERAL",
         "DBS" to "DBS", "YES BANK" to "YES", "INDUSIND" to "INDUSIND", "UNION BANK" to "UNION", "BOI" to "BOI", "AXIS" to "AXIS")
 
-    fun parse(body: String?): BalanceHit? {
+    fun parse(body: String?, sender: String? = null): BalanceHit? {
         if (body.isNullOrBlank()) return null
         val b = body.replace(Regex("\\s+"), " ")
         if (Regex("credit card|card ending|spent on", RegexOption.IGNORE_CASE).containsMatchIn(b)) return null
         val amount = bal.find(b)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: return null
         val last = acct.find(b)?.groupValues?.get(1)?.takeLast(4) ?: return null
-        val up = b.uppercase()
-        val bank = banks.firstOrNull { up.contains(it.first) }?.second ?: return null
+        val bank = Banks.detect(b, sender) ?: return null
         return BalanceHit(bank, last, amount)
     }
 }

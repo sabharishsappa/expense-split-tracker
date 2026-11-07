@@ -622,6 +622,14 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                             if (rules.size > 40) Text("…and ${rules.size - 40} more", fontSize = 12.sp, color = muted())
                         }
                     }
+                    var check by remember { mutableStateOf<Diagnostics.ReadCheck?>(null) }
+                    var checking by remember { mutableStateOf(false) }
+                    Section("Message reading check", "Finds out why some bank messages may not show up. Nothing is saved or sent anywhere.") {
+                        OutlinedButton(enabled = !checking, onClick = { checking = true; scope.launch { check = Repo.readCheck(ctx); checking = false } }) {
+                            Text(if (checking) "Checking…" else "Run check")
+                        }
+                        check?.let { r -> Diagnostics.verdict(r).forEach { Text("• $it", fontSize = 14.sp) } }
+                    }
                     var unparsed by remember { mutableStateOf(Repo.unparsed(ctx)) }
                     var showUnparsed by remember { mutableStateOf(false) }
                     if (unparsed.isNotEmpty()) Section("Messages I couldn't read", "Bank-like messages that matched nothing. Copy one and send it to the developer so it can be added.") {
@@ -633,7 +641,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                             unparsed.forEach { Text(it, fontSize = 11.sp, color = muted()) }
                             val cb = LocalClipboardManager.current
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { cb.setText(AnnotatedString(unparsed.joinToString("\n\n"))); note = "Copied" }) { Text("Copy all") }
+                                OutlinedButton(onClick = { cb.setText(AnnotatedString(unparsed.joinToString("\n\n") { Diagnostics.anonymise(it) })); note = "Copied without numbers" }) { Text("Copy without numbers") }
                                 OutlinedButton(onClick = { Repo.clearUnparsed(ctx); unparsed = emptyList() }) { Text("Clear") }
                             }
                         }

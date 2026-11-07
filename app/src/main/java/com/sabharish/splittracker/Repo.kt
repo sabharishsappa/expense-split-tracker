@@ -554,24 +554,50 @@ object Repo {
         if (!hasPermission(ctx, Manifest.permission.READ_SMS)) return@withContext 0
         var added = 0
         val cursor = ctx.contentResolver.query(
-            Uri.parse("content://sms/inbox"), arrayOf("body", "date"),
+            Uri.parse("content://sms/inbox"), arrayOf("body", "date", "address"),
             "date > ?", arrayOf(since.toString()), "date ASC"
         ) ?: return@withContext 0
         cursor.use {
             val bi = it.getColumnIndex("body")
             val di = it.getColumnIndex("date")
+            val ai = it.getColumnIndex("address")
             while (it.moveToNext()) {
                 val text = it.getString(bi)
+                val from = if (ai >= 0) it.getString(ai) else null
                 val bill = BillParser.parse(text)
                 if (bill != null) { ingestBill(ctx, bill, it.getLong(di)); continue }
-                val p = SmsParser.parse(text)
+                val p = SmsParser.parse(text, from)
                 if (p != null && ingest(ctx, p, it.getLong(di), text ?: "") != null) added++
-                val bal = BalanceSms.parse(text)
+                val bal = BalanceSms.parse(text, from)
                 if (bal != null) ingestBalance(ctx, bal, it.getLong(di))
                 else if (p == null && Diagnostics.looksFinancial(text)) noteUnparsed(ctx, text ?: "")
             }
         }
         added
+    }
+
+    /** Looks at the last 90 days of messages without saving anything, to say why some may not show up. */
+    suspend fun readCheck(ctx: Context): Diagnostics.ReadCheck = withContext(Dispatchers.IO) {
+        val sms = hasPermission(ctx, Manifest.permission.READ_SMS)
+        val recv = hasPermission(ctx, Manifest.permission.RECEIVE_SMS)
+        val notif = Build.VERSION.SDK_INT < 33 || hasPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)
+        var total = 0; var scanned = 0; var good = 0; var bad = 0
+        val senders = linkedMapOf<String, Int>()
+        if (sms) try {
+            ctx.contentResolver.query(Uri.parse("content://sms/inbox"), arrayOf("_id"), null, null, null)?.use { total = it.count }
+            val since = System.currentTimeMillis() - 90 * 86_400_000L
+            ctx.contentResolver.query(Uri.parse("content://sms/inbox"), arrayOf("body", "address"), "date > ?", arrayOf(since.toString()), "date DESC")?.use { c ->
+                val bi = c.getColumnIndex("body"); val ai = c.getColumnIndex("address")
+                while (c.moveToNext()) {
+                    scanned++
+                    val text = c.getString(bi) ?: continue
+                    val from = if (ai >= 0) c.getString(ai) else null
+                    if (BillParser.parse(text) != null || SmsParser.parse(text, from) != null) good++
+                    else if (Diagnostics.looksFinancial(text)) { bad++; Banks.senderCode(from).takeIf { it.isNotEmpty() }?.let { s -> senders[s] = (senders[s] ?: 0) + 1 } }
+                }
+            }
+        } catch (e: Exception) { CrashLog.record(ctx, e) }
+        Diagnostics.ReadCheck(sms, recv, notif, total, scanned, good, bad, senders.entries.sortedByDescending { it.value }.take(5).map { it.key }, Build.VERSION.SDK_INT)
     }
 
     suspend fun loadContacts(ctx: Context): List<String> = withContext(Dispatchers.IO) {

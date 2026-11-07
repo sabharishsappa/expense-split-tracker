@@ -263,6 +263,35 @@ object Diagnostics {
     private val verb = Regex("""\b(debited|credited|spent|sent|received|withdrawn|paid|payment of|refund)\b""", RegexOption.IGNORE_CASE)
     private val noise = Regex("""\b(otp|offer|win|cashback|loan|kyc|apply now|click|voucher|reward)\b""", RegexOption.IGNORE_CASE)
     fun looksFinancial(body: String?): Boolean = !body.isNullOrBlank() && money.containsMatchIn(body) && verb.containsMatchIn(body) && !noise.containsMatchIn(body)
+
+    /** Hides digits and UPI handles so a message's shape can be shared without the numbers in it. */
+    fun anonymise(body: String): String =
+        body.replace(Regex("""[\w.\-]+@[A-Za-z]+"""), "name@bank").replace(Regex("""\d"""), "9")
+
+    data class ReadCheck(
+        val smsAllowed: Boolean, val receiveAllowed: Boolean, val notificationsAllowed: Boolean,
+        val inboxTotal: Int, val scanned: Int, val recognised: Int, val unrecognised: Int,
+        val unrecognisedSenders: List<String>, val sdk: Int
+    )
+
+    /** Plain-language reasons why messages might not be showing up, most important first. */
+    fun verdict(r: ReadCheck): List<String> = buildList {
+        if (!r.smsAllowed) {
+            add("The app is not allowed to read messages, so nothing can appear.")
+            if (r.sdk >= 33) add("Android blocks this for apps installed from a file. Open Settings > Apps > Split Tracker, tap the ⋮ menu, choose \"Allow restricted settings\", then allow SMS under Permissions.")
+            else add("Open Settings > Apps > Split Tracker > Permissions and allow SMS.")
+            return@buildList
+        }
+        if (r.inboxTotal == 0) add("Reading is allowed but this phone shows no messages to the app. Check that the bank texts arrive in the normal Messages app, not a separate Business or Promotions inbox.")
+        else if (r.scanned == 0) add("Reading works, but there are no messages from the last 90 days.")
+        else if (r.recognised > 0) add("Reading works: ${r.recognised} bank messages from the last 90 days were understood.")
+        else if (r.unrecognised == 0) add("Reading works, but none of the ${r.scanned} recent messages looked like a bank transaction. Banks may be sending only emails, or very small payments may not send a text.")
+        if (r.unrecognised > 0) add("${r.unrecognised} look like bank transactions but were not understood" +
+            (if (r.unrecognisedSenders.isNotEmpty()) " (from ${r.unrecognisedSenders.joinToString(", ")})" else "") +
+            ". Use \"Copy without numbers\" below and send them to the developer.")
+        if (!r.receiveAllowed) add("New messages will not be caught as they arrive: allow \"Receive SMS\" for the app.")
+        if (!r.notificationsAllowed) add("Notifications are off, so you will not get a ping for new payments.")
+    }
 }
 
 /** Groups you split with often ("Badminton" → Ravi, Kiran, Sai), remembered on this phone only. */

@@ -65,10 +65,10 @@ object SmsParser {
 
     private val dateFormats = listOf(
         "dd/MM/yy", "dd-MM-yy", "dd-MM-yyyy", "dd/MM/yyyy",
-        "dd-MMM-yy", "dd-MMM-yyyy", "dd/MMM/yyyy", "yyyy-MM-dd", "ddMMMyy", "ddMMMyyyy"
+        "dd-MMM-yy", "dd-MMM-yyyy", "dd/MMM/yyyy", "yyyy-MM-dd", "ddMMMyy", "ddMMMyyyy", "dd MMM yy", "dd MMM yyyy"
     )
 
-    private fun parseDate(s: String?): Long? {
+    fun parseDate(s: String?): Long? {
         if (s.isNullOrBlank()) return null
         for (f in dateFormats) {
             try {
@@ -103,10 +103,10 @@ object SmsParser {
         return n
     }
 
-    fun parse(body: String?): Parsed? {
+    fun parse(body: String?, sender: String? = null): Parsed? {
         if (body.isNullOrBlank()) return null
         val b = body.replace(Regex("\\s+"), " ").trim()
-        if (Regex("\\bOTP\\b").containsMatchIn(b)) return null   // OTP texts repeat amount+merchant
+        if (GeneralSms.isOtp(b)) return null   // OTP texts repeat amount+merchant
         for (r in rules) {
             val m = r.pattern.matcher(b)
             if (m.find()) {
@@ -123,6 +123,7 @@ object SmsParser {
                 return Parsed(r.bank, r.kind, amt, card, merchant, parseDate(group(m, "date")))
             }
         }
-        return null
+        // none of the exact wordings matched: read it the general way, so any bank works
+        return GeneralSms.parse(b, sender)
     }
 }
