@@ -228,7 +228,9 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     val chosenBy = remember(Epoch.value) { androidx.compose.runtime.mutableStateMapOf<Long, List<String>>() }
     var confirmAll by remember { mutableStateOf(false) }
     if (items.isEmpty()) {
-        if (!Repo.hasPermission(androidx.compose.ui.platform.LocalContext.current, android.Manifest.permission.READ_SMS)) { SmsBanner(); return }
+        val smsCtx = androidx.compose.ui.platform.LocalContext.current
+        val smsOk = remember(Perm.tick) { Repo.hasPermission(smsCtx, android.Manifest.permission.READ_SMS) }
+        if (!smsOk) { SmsBanner(); return }
         Text("You're all caught up. New payments will show up here.", color = muted(), fontSize = 15.sp)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { vm.importDays(365) }) { Text("Import last 12 months of messages") }

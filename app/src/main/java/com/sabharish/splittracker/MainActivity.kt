@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
@@ -74,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private val vm: MainVm by viewModels()
 
     private val perms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        Perm.tick++
         vm.loadContacts()
         catchUp()
     }
@@ -84,6 +86,7 @@ class MainActivity : ComponentActivity() {
         if (Repo.getPref(this, "trackFrom", "").isNotEmpty() || getSharedPreferences("st", Context.MODE_PRIVATE).getBoolean("imported2", false)) askPermissions()
         readIntent(intent)
         ThemeState.mode = Repo.getPref(this, "theme", "system")
+        enableEdgeToEdge()
         setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) { askPermissions() } } }
     }
 
@@ -101,6 +104,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        Perm.tick++
         vm.loadContacts()
         catchUp()
     }

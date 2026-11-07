@@ -30,6 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** Bumped whenever the app goes to the background; screens use it to forget half-finished selections. */
+/** Bumped whenever permissions may have changed (after the prompt, and on coming back from Settings). */
+object Perm {
+    var tick by mutableIntStateOf(0)
+}
+
 object Epoch {
     var value by mutableIntStateOf(0)
 }
@@ -146,7 +151,7 @@ fun Segmented(options: List<String>, selected: String, onPick: (String) -> Unit,
 @Composable
 fun SmsBanner() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val ok = remember(Epoch.value) { Repo.hasPermission(ctx, android.Manifest.permission.READ_SMS) }
+    val ok = remember(Epoch.value, Perm.tick) { Repo.hasPermission(ctx, android.Manifest.permission.READ_SMS) }
     if (ok) return
     androidx.compose.foundation.layout.Column(
         Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(16.dp)

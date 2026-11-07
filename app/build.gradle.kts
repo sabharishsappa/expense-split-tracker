@@ -6,24 +6,35 @@ plugins {
 
 android {
     namespace = "com.sabharish.splittracker"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.sabharish.splittracker.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         // Rises with every GitHub build, so each one counts as an update
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: (System.currentTimeMillis() / 60000).toInt()
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
-    // One fixed signing key, so every new build installs over the previous one
+    // The signing key lives outside the repository. On GitHub it arrives through encrypted secrets
+    // (KEYSTORE_FILE is set by the workflow only when they exist). Everyone who builds without them gets
+    // an ordinary debug key, so a copy of this code can never produce an update for your installed app.
     signingConfigs {
         create("fixed") {
-            storeFile = file("fixed.keystore")
-            storePassword = "splittracker"
-            keyAlias = "splittracker"
-            keyPassword = "splittracker"
+            val ks = System.getenv("KEYSTORE_FILE")
+            if (!ks.isNullOrBlank()) {
+                storeFile = file(ks)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            } else {
+                // legacy key, removed once the secrets are in place
+                storeFile = file("fixed.keystore")
+                storePassword = "splittracker"
+                keyAlias = "splittracker"
+                keyPassword = "splittracker"
+            }
         }
     }
 
