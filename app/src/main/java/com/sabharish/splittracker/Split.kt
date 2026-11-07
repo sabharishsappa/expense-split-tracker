@@ -43,115 +43,93 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 
 /**
- * New split, in three calm steps:
- * 1. what for + how much (pick a saved group to fill the people in)
- * 2. who and how to divide (the same page used everywhere else)
- * 3. ask each person to pay, straight on WhatsApp
+ * New split in two calm steps:
+ * 1. one page: what for, how much, tag, who, how to divide (saved groups fill the people in)
+ * 2. ask each person to pay, straight on WhatsApp
  */
 @Composable
 fun NewSplitFlow(vm: MainVm, onClose: () -> Unit) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var title by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var groupPeople by remember { mutableStateOf<List<String>>(emptyList()) }
-    var txn by remember { mutableStateOf<Txn?>(null) }       // set once step 1 is done
-    var saved by remember { mutableStateOf(false) }
-    var done by remember { mutableStateOf<Txn?>(null) }      // set once step 2 saved
     val groups = remember { Groups.decode(Repo.getPref(ctx, "groups", "")) }
-
-    val t = txn
+    var done by remember { mutableStateOf<Txn?>(null) }
     val d = done
-    when {
-        d != null -> RequestStep(vm, d, onClose)
-        t != null -> TagSheet(vm, t, initial = if (groupPeople.isEmpty()) emptyList() else listOf(Repo.ME) + groupPeople,
-            onDismiss = { if (!saved) { scope.launch { Repo.deleteManual(ctx, t.id) }; txn = null } },
-            onSaved = {
-                saved = true
-                scope.launch {
-                    val people = vm.sharesFor(t.id).map { it.person }
-                    Repo.putPref(ctx, "groups", Groups.encode(Groups.upsert(groups, title.ifBlank { t.merchant }, people)))
-                    done = t.copy(merchant = t.merchant)
-                }
-            })
-        else -> Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close") }
-                        Text("New split", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true,
-                            label = { Text("What for?") }, placeholder = { Text("Badminton, Dinner, Trip…") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = amount, onValueChange = { amount = it }, singleLine = true,
-                            label = { Text("Total amount ₹") }, modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                        if (groups.isNotEmpty()) {
-                            Text("Your groups", fontSize = 13.sp, color = muted())
-                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                groups.forEach { g ->
-                                    Pill("${g.name} · ${g.people.size}", { title = g.name; groupPeople = g.people },
-                                        selected = groupPeople == g.people && title == g.name)
-                                }
-                            }
-                        }
-                    }
-                    Button(
-                        enabled = (amount.replace(",", "").toDoubleOrNull() ?: 0.0) > 0,
-                        onClick = {
-                            val v = amount.replace(",", "").toDouble()
-                            scope.launch { saved = false; txn = Repo.addManual(ctx, title, v) }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(52.dp)
-                    ) { Text("Next — choose people") }
-                }
-            }
+    if (d != null) RequestStep(vm, d, onClose)
+    else TagSheet(
+        vm, Txn(bank = "CASH", card = "", kind = "UPI_OUT", amount = 0.0, merchant = "", txnDate = System.currentTimeMillis(), smsTime = System.currentTimeMillis(), status = "INBOX"),
+        onDismiss = onClose, onSaved = {}, creating = true, groups = groups,
+        onCreated = { made, people ->
+            Repo.putPref(ctx, "groups", Groups.encode(Groups.upsert(groups, made.merchant, people)))
+            done = made
         }
-    }
+    )
 }
 
-/** Step 3: one row per person with their share and a Send button. */
+/** Step 2: tick the people, then Send. Each person's WhatsApp message opens one after another. */
 @Composable
 private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val shares by produceState<List<Share>>(emptyList(), t.id) { value = vm.sharesFor(t.id) }
     val others = shares.filter { it.person != Repo.ME && it.amount > 0.004 }
     val asked = remember { mutableStateListOf<String>() }
-    var sending by remember { mutableStateOf<Share?>(null) }
+    val ticked = remember { mutableStateListOf<String>() }
+    val queue = remember { mutableStateListOf<String>() }     // people still to message in this go
     val upi = Repo.getPref(ctx, "upi", "")
+    val allTicked = others.isNotEmpty() && others.all { it.person in ticked }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
-                Text("Split saved ✓", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+                Text("Split saved", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
                 Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 15.sp, color = muted())
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(12.dp))
                 if (others.isEmpty()) Text("Nobody else is in this split, so there's nothing to ask for.", color = muted())
-                else Text("Ask everyone to pay. When their payment message arrives it's marked paid for you.", fontSize = 14.sp, color = muted())
-                if (others.isNotEmpty() && upi.isBlank()) Text("Tip: add your UPI ID in Settings so the message has a pay link.", fontSize = 13.sp, color = amber(), modifier = Modifier.padding(top = 6.dp))
-                Spacer(Modifier.height(10.dp))
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                else {
+                    Text("Ask everyone to pay. When their payment message arrives it's marked paid for you.", fontSize = 14.sp, color = muted())
+                    if (upi.isBlank()) Text("Tip: add your UPI ID in Settings so the message has it.", fontSize = 13.sp, color = amber(), modifier = Modifier.padding(top = 6.dp))
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${others.size} ${if (others.size == 1) "person" else "people"}", Modifier.weight(1f), fontSize = 13.sp, color = muted())
+                        androidx.compose.material3.TextButton(onClick = { if (allTicked) ticked.clear() else { ticked.clear(); ticked.addAll(others.map { it.person }) } }) {
+                            Text(if (allTicked) "Clear" else "Select all")
+                        }
+                    }
+                }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     others.forEach { s ->
+                        val on = s.person in ticked
                         Row(
-                            Modifier.fillMaxWidth().clickable { sending = s }.padding(vertical = 6.dp),
+                            Modifier.fillMaxWidth().clickable { if (on) ticked.remove(s.person) else ticked.add(s.person) }.padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Avatar(s.person)
+                            androidx.compose.material3.Checkbox(checked = on, onCheckedChange = { if (it) ticked.add(s.person) else ticked.remove(s.person) })
+                            Avatar(s.person, 36)
                             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                 Text(s.person, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                                 Text(Repo.money(s.amount), fontSize = 14.sp, color = muted())
                             }
-                            if (s.person in asked) Text("Asked ✓", color = green(), fontSize = 14.sp)
-                            else OutlinedButton(onClick = { sending = s }) { Text("Send") }
+                            if (s.person in asked) Text("Asked ✓", color = green(), fontSize = 13.sp)
                         }
                     }
                 }
-                Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(if (others.isEmpty() || asked.isNotEmpty()) "Done" else "Skip for now") }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f).height(52.dp)) { Text("Skip for now") }
+                    Button(
+                        enabled = ticked.isNotEmpty(), modifier = Modifier.weight(1f).height(52.dp),
+                        onClick = { queue.clear(); queue.addAll(others.map { it.person }.filter { it in ticked }) }
+                    ) { Text(if (ticked.isEmpty()) "Send" else "Send (${ticked.size})") }
+                }
             }
         }
     }
-    sending?.let { s ->
-        ReminderDialog(s.person, { u -> Reminder.splitRequest(s.person, t.merchant, t.amount, s.amount, u) }) { asked.add(s.person); sending = null }
+    val current = queue.firstOrNull()
+    val share = others.firstOrNull { it.person == current }
+    if (current != null && share != null) {
+        androidx.compose.runtime.key(current) {
+            val sent = remember { mutableStateOf(false) }
+            ReminderDialog(current, { u -> Reminder.splitRequest(current, t.merchant, t.amount, share.amount, u) },
+                onDismiss = {
+                    // sent → carry on to the next person; backed out → stop and return to this page unchanged
+                    if (sent.value) queue.removeAt(0) else queue.clear()
+                },
+                onSent = { sent.value = true; if (current !in asked) asked.add(current); ticked.remove(current) })
+        }
     }
 }

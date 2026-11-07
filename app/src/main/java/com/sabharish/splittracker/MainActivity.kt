@@ -180,7 +180,7 @@ fun App(vm: MainVm) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(titles[tab], fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (tab in 0..3) IconButton(onClick = { showNewSplit = true }) { Icon(Icons.Default.Add, contentDescription = "New split") }
+                    if (tab in 0..3) androidx.compose.material3.TextButton(onClick = { showNewSplit = true }) { Text("+ Split", fontWeight = FontWeight.SemiBold) }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                         Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
                     }

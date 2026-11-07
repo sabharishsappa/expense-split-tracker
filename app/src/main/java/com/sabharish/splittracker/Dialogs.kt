@@ -66,7 +66,18 @@ import androidx.compose.ui.window.DialogProperties
 // Full-screen "who was this for?" sheet
 // ---------------------------------------------------------------
 @Composable
-fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Unit, initial: List<String> = emptyList()) {
+fun TagSheet(
+    vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Unit, initial: List<String> = emptyList(),
+    /** Creating a brand-new split: title and amount are typed here, and nothing is stored until ✓. */
+    creating: Boolean = false,
+    groups: List<Groups.Group> = emptyList(),
+    onCreated: (Txn, List<String>) -> Unit = { _, _ -> }
+) {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var titleText by remember { mutableStateOf("") }
+    var amountText by remember { mutableStateOf("") }
+    val amt = if (creating) (amountText.replace(",", "").toDoubleOrNull() ?: 0.0) else t.amount
     val contacts by vm.contacts.collectAsState()
     val recents by vm.recents.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
@@ -81,9 +92,9 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
     var rename by remember { mutableStateOf(false) }
     var alreadyPaid by remember { mutableStateOf(false) }
     var splitAdded by remember { mutableStateOf(false) }
-    var rememberRule by remember { mutableStateOf(true) }
+    var rememberRule by remember { mutableStateOf(!creating) }
 
-    fun equal(): List<NewShare> = Repo.equalShares(t.amount, picked.toList(), alreadyPaid)
+    fun equal(): List<NewShare> = Repo.equalShares(amt, picked.toList(), alreadyPaid)
 
     fun fmt(v: Double) = String.format(java.util.Locale.US, "%.2f", v)
 
@@ -112,9 +123,9 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
         val nums = ArrayList<Double>()
         for (n in names) nums.add(vals[n]?.toDoubleOrNull() ?: return null)
         return when (splitMode) {
-            "PERCENT" -> if (Math.abs(nums.sum() - 100.0) > 0.01) null else Repo.weightedShares(t.amount, names, nums, alreadyPaid)
-            "PARTS" -> Repo.weightedShares(t.amount, names, nums, alreadyPaid)
-            else -> if (Math.abs(nums.sum() - t.amount) > 0.011) null
+            "PERCENT" -> if (Math.abs(nums.sum() - 100.0) > 0.01) null else Repo.weightedShares(amt, names, nums, alreadyPaid)
+            "PARTS" -> Repo.weightedShares(amt, names, nums, alreadyPaid)
+            else -> if (Math.abs(nums.sum() - amt) > 0.011) null
                     else names.mapIndexed { i, n -> NewShare(n, nums[i], n == Repo.ME || alreadyPaid) }
         }
     }
@@ -125,7 +136,7 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
     androidx.compose.runtime.LaunchedEffect(existing) {
         if (!loaded && existing.isNotEmpty()) {
             loaded = true
-            Logic.splitFromExisting(t.amount, existing)?.let { ex ->
+            Logic.splitFromExisting(amt, existing)?.let { ex ->
                 picked.clear(); picked.addAll(ex.people)
                 alreadyPaid = ex.allPaid
                 splitMode = ex.mode
@@ -152,23 +163,53 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
-                    Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
+                    if (creating) {
+                        Text("New split", Modifier.weight(1f).padding(horizontal = 6.dp), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    } else Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
                         Text(Repo.money(t.amount), fontSize = 26.sp, fontWeight = FontWeight.Bold)
                         Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                     }
                     FilledIconButton(
-                        enabled = shares != null, modifier = Modifier.size(52.dp),
+                        enabled = shares != null && amt > 0.004, modifier = Modifier.size(52.dp),
                         onClick = {
                             val sh = build() ?: return@FilledIconButton
-                            vm.tag(t, sh, category, rememberRule, splitAdded && othersInvolved)
-                            onSaved(if (!othersInvolved) "Tagged as yours" else "Saved")
-                            onDismiss()
+                            if (creating) {
+                                val people = sh.map { it.person }
+                                val title = titleText
+                                scope.launch {
+                                    val made = Repo.addManual(ctx, title, amt)
+                                    Repo.tag(ctx, made, sh, category, false, splitAdded && othersInvolved)
+                                    onCreated(made, people)
+                                }
+                            } else {
+                                vm.tag(t, sh, category, rememberRule, splitAdded && othersInvolved)
+                                onSaved(if (!othersInvolved) "Tagged as yours" else "Saved")
+                                onDismiss()
+                            }
                         }
                     ) { Icon(Icons.Default.Check, contentDescription = "Save") }
                 }
-                TextButton(onClick = { rename = true }) { Text("Rename merchant") }
+                if (!creating) TextButton(onClick = { rename = true }) { Text("Rename merchant") }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    if (creating) {
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(value = titleText, onValueChange = { titleText = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            label = { Text("What for?") }, placeholder = { Text("Badminton, Dinner, Trip…") })
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(value = amountText, onValueChange = { amountText = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Total amount ₹") },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                        if (groups.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                groups.forEach { g ->
+                                    Pill(g.name, { titleText = g.name; picked.clear(); picked.add(Repo.ME); picked.addAll(g.people); refill() },
+                                        selected = titleText == g.name, compact = true)
+                                }
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(14.dp))
                     Text("Tag", fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
@@ -236,7 +277,7 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                                 )
                             }
                             if (shares == null) Text(
-                                when (splitMode) { "PERCENT" -> "Percentages must add up to 100"; "PARTS" -> "Enter a number for each person"; else -> "Amounts must add up to ${Repo.money(t.amount)}" },
+                                when (splitMode) { "PERCENT" -> "Percentages must add up to 100"; "PARTS" -> "Enter a number for each person"; else -> "Amounts must add up to ${Repo.money(amt)}" },
                                 color = MaterialTheme.colorScheme.error, fontSize = 13.sp
                             )
                             Spacer(Modifier.height(6.dp))
@@ -264,7 +305,7 @@ fun TagSheet(vm: MainVm, t: Txn, onDismiss: () -> Unit, onSaved: (String) -> Uni
                             Checkbox(checked = splitAdded, onCheckedChange = { splitAdded = it }); Text("Added to PhonePe Split")
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!creating) Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = rememberRule, onCheckedChange = { rememberRule = it })
                         Text("Remember for ${t.merchant}")
                     }
@@ -385,7 +426,7 @@ fun SettleDialog(person: String, owed: Double, onDismiss: () -> Unit, onSave: (D
 // Reminder preview: edit, copy or share
 // ---------------------------------------------------------------
 @Composable
-fun ReminderDialog(person: String, build: (String) -> String, onDismiss: () -> Unit) {
+fun ReminderDialog(person: String, build: (String) -> String, onDismiss: () -> Unit, onSent: () -> Unit = {}) {
     val ctx = LocalContext.current
     val clip = LocalClipboardManager.current
     var upi by remember { mutableStateOf(Repo.getPref(ctx, "upi", "")) }
@@ -419,13 +460,13 @@ fun ReminderDialog(person: String, build: (String) -> String, onDismiss: () -> U
         confirmButton = {
             Button(enabled = wa != null, onClick = {
                 Repo.putPref(ctx, "upi", upi.trim()); Repo.savePhone(ctx, person, number)
-                sendWhatsApp(ctx, wa!!, text); onDismiss()
+                sendWhatsApp(ctx, wa!!, text); onSent(); onDismiss()
             }) { Text("WhatsApp") }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { Repo.putPref(ctx, "upi", upi.trim()); clip.setText(AnnotatedString(text)); onDismiss() }) { Text("Copy") }
-                TextButton(onClick = { Repo.putPref(ctx, "upi", upi.trim()); share(ctx, text); onDismiss() }) { Text("Other app") }
+                TextButton(onClick = { Repo.putPref(ctx, "upi", upi.trim()); clip.setText(AnnotatedString(text)); onSent(); onDismiss() }) { Text("Copy") }
+                TextButton(onClick = { Repo.putPref(ctx, "upi", upi.trim()); share(ctx, text); onSent(); onDismiss() }) { Text("Other app") }
             }
         }
     )
