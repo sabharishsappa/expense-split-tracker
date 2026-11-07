@@ -31,7 +31,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
 
     val customTags = MutableStateFlow(Logic.parseTags(Repo.getPref(app, "tags", "")))
     val hiddenTags = MutableStateFlow(Logic.parseTags(Repo.getPref(app, "hiddenTags", "")))
-    val tags: StateFlow<List<String>> = kotlinx.coroutines.flow.combine(customTags, hiddenTags, dao.tagCounts()) { c, h, n ->
+    val tags: StateFlow<List<String>> = kotlinx.coroutines.flow.combine(customTags, hiddenTags, dao.tagCounts(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)) { c, h, n ->
         Logic.orderByUse(Logic.allTags(c, h), n.associate { it.category to it.n }) }
         .hot(Logic.allTags(emptyList()))
 

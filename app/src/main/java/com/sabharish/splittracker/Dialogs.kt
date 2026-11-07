@@ -219,7 +219,10 @@ fun TagSheet(
                     Spacer(Modifier.height(14.dp))
                     Text("Tag", fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val tagScroll = rememberScrollState()
+                    // after a pick the chosen tag moves to the front, so bring the row back to the front too
+                    androidx.compose.runtime.LaunchedEffect(category) { tagScroll.animateScrollTo(0) }
+                    Row(Modifier.horizontalScroll(tagScroll), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val tagList by vm.tags.collectAsState()
                         var newTag by remember { mutableStateOf(false) }
                         Logic.selectedFirst(tagList, listOf(category).filter { it.isNotBlank() }).forEach { c -> Pill(c, { category = if (category == c) "" else c }, selected = category == c) }
@@ -239,7 +242,9 @@ fun TagSheet(
                         }, selected = picked.toList() == names, strong = picked.toList() == names)
                         Spacer(Modifier.height(8.dp))
                     }
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val peopleScroll = rememberScrollState()
+                    androidx.compose.runtime.LaunchedEffect(picked.toList()) { peopleScroll.animateScrollTo(0) }
+                    Row(Modifier.horizontalScroll(peopleScroll), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Logic.selectedFirst(peopleChips, picked.toList()).forEach { p -> Pill(if (p == Repo.ME) "Me" else p, { toggle(p) }, selected = picked.contains(p)) }
                     }
                     run {

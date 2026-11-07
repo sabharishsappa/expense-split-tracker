@@ -237,8 +237,9 @@ interface AppDao {
     @Query("SELECT * FROM txn WHERE kind IN ('SPEND','UPI_OUT') AND status != 'SELF' ORDER BY txnDate DESC LIMIT 80")
     suspend fun recentSpends(): List<Txn>
 
-    @Query("SELECT category, COUNT(*) AS n FROM txn WHERE category != '' GROUP BY category")
-    fun tagCounts(): Flow<List<TagCount>>
+    /** Use score: every use counts once, and uses since [since] count three times, so recent habits rise to the front. */
+    @Query("SELECT category, COUNT(*) + 2 * COALESCE(SUM(CASE WHEN txnDate >= :since THEN 1 ELSE 0 END), 0) AS n FROM txn WHERE category != '' GROUP BY category")
+    fun tagCounts(since: Long): Flow<List<TagCount>>
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'") suspend fun acctRulesList(): List<Rule>
     @Query("SELECT * FROM payable WHERE paid < amount - 0.005 ORDER BY date DESC")
     fun payables(): Flow<List<Payable>>
