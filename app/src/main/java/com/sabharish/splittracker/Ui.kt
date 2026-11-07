@@ -20,6 +20,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
@@ -167,6 +169,6 @@ fun SearchBox(value: String, onChange: (String) -> Unit, placeholder: String, mo
         value = value, onValueChange = onChange, singleLine = true,
         modifier = modifier.focusRequester(focus),
         placeholder = { Text(placeholder) },
-        leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = null) }
+        leadingIcon = { androidx.compose.material3.Icon(Icons.Default.Search, contentDescription = null) }
     )
 }

@@ -174,7 +174,8 @@ private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, on
 @Composable
 private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDone: () -> Unit) {
     val recents by vm.recents.collectAsState()
-    val groups = remember(Epoch.value) { Groups.decode(Repo.getPref(androidx.compose.ui.platform.LocalContext.current, "groups", "")) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val groups = remember(Epoch.value) { Groups.decode(Repo.getPref(ctx, "groups", "")) }
     var tagMenu by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     var tag by remember { mutableStateOf("") }
