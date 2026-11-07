@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
