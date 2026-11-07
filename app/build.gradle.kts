@@ -18,33 +18,27 @@ android {
     }
 
     // The signing key lives outside the repository. On GitHub it arrives through encrypted secrets
-    // (KEYSTORE_FILE is set by the workflow only when they exist). Everyone who builds without them gets
-    // an ordinary debug key, so a copy of this code can never produce an update for your installed app.
-    signingConfigs {
-        create("fixed") {
-            val ks = System.getenv("KEYSTORE_FILE")
-            if (!ks.isNullOrBlank()) {
-                storeFile = file(ks)
+    // (the workflow sets KEYSTORE_FILE only when they exist). Anyone else who builds this code gets an
+    // ordinary debug key, so a copy of the code can never produce an update for the installed app.
+    val keystorePath = System.getenv("KEYSTORE_FILE")
+    if (!keystorePath.isNullOrBlank()) {
+        signingConfigs {
+            create("fixed") {
+                storeFile = file(keystorePath)
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("KEY_ALIAS")
                 keyPassword = System.getenv("KEY_PASSWORD")
-            } else {
-                // legacy key, removed once the secrets are in place
-                storeFile = file("fixed.keystore")
-                storePassword = "splittracker"
-                keyAlias = "splittracker"
-                keyPassword = "splittracker"
             }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("fixed")
+            if (!keystorePath.isNullOrBlank()) signingConfig = signingConfigs.getByName("fixed")
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("fixed")
+            if (!keystorePath.isNullOrBlank()) signingConfig = signingConfigs.getByName("fixed")
         }
     }
     compileOptions {

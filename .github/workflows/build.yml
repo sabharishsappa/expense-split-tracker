@@ -33,7 +33,8 @@ jobs:
             echo "KEYSTORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
             echo "Signing with the private key from secrets"
           else
-            echo "No signing secrets found: using the legacy key"
+            echo "Signing secrets are missing: refusing to publish an APK signed with a throwaway key"
+            exit 1
           fi
       - name: Run unit tests
         run: gradle testDebugUnitTest --no-daemon --stacktrace
