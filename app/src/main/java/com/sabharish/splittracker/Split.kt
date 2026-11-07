@@ -105,16 +105,21 @@ private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
                                 Text(s.person, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                                 Text(Repo.money(s.amount), fontSize = 14.sp, color = muted())
                             }
-                            if (s.person in asked) Text("Asked ✓", color = green(), fontSize = 13.sp)
+                            if (s.person in asked) Pill("Asked ✓", {}, compact = true)
                         }
                     }
                 }
+                val leave = if (asked.isEmpty()) "Skip for now" else "Done"
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f).height(52.dp)) { Text("Skip for now") }
-                    Button(
-                        enabled = ticked.isNotEmpty(), modifier = Modifier.weight(1f).height(52.dp),
-                        onClick = { queue.clear(); queue.addAll(others.map { it.person }.filter { it in ticked }) }
-                    ) { Text(if (ticked.isEmpty()) "Send" else "Send (${ticked.size})") }
+                    if (asked.isNotEmpty() && ticked.isEmpty()) {
+                        Button(onClick = onClose, modifier = Modifier.weight(1f).height(52.dp)) { Text("Done") }
+                    } else {
+                        OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f).height(52.dp)) { Text(leave) }
+                        Button(
+                            enabled = ticked.isNotEmpty(), modifier = Modifier.weight(1f).height(52.dp),
+                            onClick = { queue.clear(); queue.addAll(others.map { it.person }.filter { it in ticked }) }
+                        ) { Text(if (ticked.isEmpty()) "Send" else "Send (${ticked.size})") }
+                    }
                 }
             }
         }
