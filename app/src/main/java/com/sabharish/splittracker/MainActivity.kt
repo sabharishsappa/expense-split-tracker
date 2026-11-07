@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -188,10 +190,10 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
                 Text(titles[tab], fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (tab in 0..3) Box {
-                        androidx.compose.material3.TextButton(onClick = { addMenu = true }) { Text("+ Add", fontWeight = FontWeight.SemiBold) }
+                        IconButton(onClick = { addMenu = true }) { Icon(Icons.Default.Add, contentDescription = "Add") }
                         androidx.compose.material3.DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Split a bill") }, onClick = { addMenu = false; showNewSplit = true })
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("Spent, received or moved") }, onClick = { addMenu = false; showEntry = true })
+                            androidx.compose.material3.DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, text = { Text("Split a bill") }, onClick = { addMenu = false; showNewSplit = true })
+                            androidx.compose.material3.DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }, text = { Text("Spent, received or moved") }, onClick = { addMenu = false; showEntry = true })
                         }
                     }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
