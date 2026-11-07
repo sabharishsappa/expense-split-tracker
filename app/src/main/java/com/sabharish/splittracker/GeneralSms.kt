@@ -41,7 +41,7 @@ object GeneralSms {
             val rest = text.substring(m.range.last + 1)
             val end = stop.find(rest)?.range?.first ?: rest.length
             val v = rest.substring(0, end).trim().trim('"', '\'', ':', '-')
-            if (v.length in 2..40 && !Regex("""^(?:your|a/?c|acct|account|beneficiary|the|you|bank|xx|x+\d|rs\b|inr\b|₹|\d)""", RegexOption.IGNORE_CASE).containsMatchIn(v)) return v
+            if (v.length in 2..40 && !Regex("""^(?:your|a/?c|acct|account|beneficiary|the|you|bank|x{2,}\d|rs\b|inr\b|₹|\d)""", RegexOption.IGNORE_CASE).containsMatchIn(v)) return v
         }
         return null
     }

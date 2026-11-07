@@ -16,7 +16,7 @@ object Banks {
         B("PNB", listOf("PNBSMS", "PUNBNB", "PNBBNK", "PNB"), listOf("Punjab National Bank", "PNB")),
         B("BOB", listOf("BOBTXN", "BOBSMS", "BOBCRD", "BARODA", "BOB"), listOf("Bank of Baroda", "BOB")),
         B("CANARA", listOf("CANBNK", "CANARA", "CNRB"), listOf("Canara Bank", "Canara")),
-        B("UNION", listOf("UNIONB", "UBOI", "UNIONBK"), listOf("Union Bank")),
+        B("UNION", listOf("UNIONB", "UBOI", "UNIONBK"), listOf("Union Bank of India", "Union Bank")),
         B("IDFC", listOf("IDFCFB", "IDFCBK", "IDFC"), listOf("IDFC FIRST", "IDFC")),
         B("INDUSIND", listOf("INDUSB", "INDUSI", "INDUSIND"), listOf("IndusInd")),
         B("YES", listOf("YESBNK", "YESBK", "YESBNK"), listOf("YES BANK")),
