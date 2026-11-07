@@ -225,7 +225,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
             val loaded by vm.loaded.collectAsState()
             if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() } else
             androidx.compose.foundation.pager.HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-                Box(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize()) {   // a Column, not a Box: page parts must stack, not overlap
                     when (page) {
                         0 -> HomeScreen(vm) { if (it == 11) { inboxSection = 3; tab = 1 } else { if (it == 1) inboxSection = 0; tab = it } }
                         1 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
