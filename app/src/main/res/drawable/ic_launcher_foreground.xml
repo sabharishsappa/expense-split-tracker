@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A coin split in two: the app's idea in one shape -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M52,30.08 A24,24 0 0 0 52,77.92 Z" />
+    <path android:fillColor="#99F6E4"
+        android:pathData="M56,30.08 A24,24 0 0 1 56,77.92 Z" />
+</vector>
