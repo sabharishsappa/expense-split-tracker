@@ -155,7 +155,7 @@ fun TagSheet(
     val owedToYou = (shares ?: emptyList()).filter { it.person != Repo.ME && !it.paid }.sumOf { it.amount }
     val othersInvolved = picked.any { it != Repo.ME }
 
-    val peopleChips = (listOf(Repo.ME) + picked.filter { it != Repo.ME && it !in recents } + recents).distinct()
+    val peopleChips = (listOf(Repo.ME) + picked.filter { it != Repo.ME && it !in recents } + recents.take(5)).distinct()
     val q = query.trim()
     val results = contacts.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }.take(8)
 

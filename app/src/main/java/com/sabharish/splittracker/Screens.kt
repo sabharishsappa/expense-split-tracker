@@ -307,7 +307,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
         fun toggle(p: String) { setSel(if (p in sel) sel - p else sel + p) }
         val s = sug
         val asBefore = if (s != null && s.action == "PEOPLE") s.people.split(",").filter { it.isNotBlank() } else emptyList()
-        val chips = (listOf(Repo.ME) + recents.filter { it !in asBefore }.take(4) + sel.filter { it != Repo.ME && it !in recents }).distinct()
+        val chips = (listOf(Repo.ME) + recents.filter { it !in asBefore }.take(3) + sel.filter { it != Repo.ME && it !in recents }).distinct()
         val ordered = Logic.selectedFirst(chips, sel.toList())
         val labelOf = chips.zip(firstNames(chips)).toMap().mapValues { if (it.key == Repo.ME) "Me" else it.value }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -318,11 +318,19 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
                 Pill("As before: $label", { setSel(asBefore) })
             }
             ordered.filter { it !in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }) }
-            groups.forEach { g ->
-                val on = g.people.all { it in sel }
-                Pill(g.name, { setSel(if (on) sel - g.people.toSet() else (sel + Repo.ME + g.people).distinct()) }, selected = on)
-            }
             Pill("More…", { onMore(t, sel.toList()) })
+        }
+        if (groups.isNotEmpty()) {
+            // saved groups sit in their own row, so they are not mistaken for people
+            Spacer(Modifier.height(10.dp))
+            Text("Groups", fontSize = 13.sp, color = muted())
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                groups.take(4).forEach { g ->
+                    val on = g.people.all { it in sel }
+                    Pill(g.name, { setSel(if (on) sel - g.people.toSet() else (sel + Repo.ME + g.people).distinct()) }, selected = on)
+                }
+            }
         }
         if (sel.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
