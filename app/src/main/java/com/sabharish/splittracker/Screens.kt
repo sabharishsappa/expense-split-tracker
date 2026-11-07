@@ -463,17 +463,12 @@ fun PendingScreen(vm: MainVm, q: String) {
     val aliases by vm.aliases.collectAsState()
     val allRows by vm.pending.collectAsState()
     val rows = if (q.isBlank()) allRows else allRows.filter { it.person.contains(q.trim(), true) || Repo.nameOnly(it.merchant, aliases).contains(q.trim(), true) || it.category.contains(q.trim(), true) }
-    var addSplit by remember { mutableStateOf(false) }
-    var manual by remember { mutableStateOf<Txn?>(null) }
-    var manualSaved by remember { mutableStateOf(false) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var settleFor by remember { mutableStateOf<String?>(null) }
     var remindFor by remember { mutableStateOf<String?>(null) }
     val grouped = remember(rows) { rows.groupBy { it.person } }
     val total = remember(rows) { rows.sumOf { it.amount - it.settled } }
     val ordered = remember(grouped) { grouped.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.toList() }
     val ticks = remember(Epoch.value) { mutableMapOf<String, androidx.compose.runtime.snapshots.SnapshotStateList<Long>>() }
-    val expandedPeople = remember { androidx.compose.runtime.mutableStateListOf<String>() }
 
     AppCard {
         Text("Owed to you", fontSize = 13.sp, color = muted())
@@ -481,8 +476,6 @@ fun PendingScreen(vm: MainVm, q: String) {
         Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
         val lent = Logic.lentTotal(rows)
         if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = teal())
-        Spacer(Modifier.height(6.dp))
-        OutlinedButton(onClick = { addSplit = true }) { Text("+ Add a split") }
     }
     Spacer(Modifier.height(12.dp))
     if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
@@ -501,9 +494,9 @@ fun PendingScreen(vm: MainVm, q: String) {
                 }
                 Spacer(Modifier.height(8.dp))
                 val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
-                val open = e.key in expandedPeople
-                val visible = if (open) e.value else e.value.take(2)
-                visible.forEach { r ->
+                // newest first; about three rows show, the rest scroll inside the card
+                Column(Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
+                e.value.sortedByDescending { it.txnDate }.forEach { r ->
                     Row(Modifier.fillMaxWidth().clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
                         verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
@@ -511,8 +504,6 @@ fun PendingScreen(vm: MainVm, q: String) {
                         Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
-                if (e.value.size > 2) TextButton(onClick = { if (open) expandedPeople.remove(e.key) else expandedPeople.add(e.key) }) {
-                    Text(if (open) "Show less" else "Show ${e.value.size - 2} more")
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -523,36 +514,6 @@ fun PendingScreen(vm: MainVm, q: String) {
                 }
             }
         }
-    }
-    if (addSplit) {
-        var amt by remember { mutableStateOf("") }
-        var what by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { addSplit = false },
-            title = { Text("Add a split") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("For money you paid that isn't in your messages, like cash.", fontSize = 13.sp, color = muted())
-                    OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount ₹") },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
-                    OutlinedTextField(value = what, onValueChange = { what = it }, singleLine = true, label = { Text("What was it for?") })
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = (amt.replace(",", "").toDoubleOrNull() ?: 0.0) > 0, onClick = {
-                    val v = amt.replace(",", "").toDouble(); val w = what
-                    addSplit = false
-                    scope.launch { manualSaved = false; manual = Repo.addManual(ctx, w, v) }
-                }) { Text("Next") }
-            },
-            dismissButton = { TextButton(onClick = { addSplit = false }) { Text("Cancel") } }
-        )
-    }
-    manual?.let { t ->
-        TagSheet(vm, t, onDismiss = {
-            if (!manualSaved) scope.launch { Repo.deleteManual(ctx, t.id) }
-            manual = null
-        }, onSaved = { manualSaved = true })
     }
     settleFor?.let { person ->
         val mine = rows.filter { it.person == person }

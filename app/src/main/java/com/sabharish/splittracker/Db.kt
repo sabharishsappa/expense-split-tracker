@@ -88,6 +88,8 @@ data class SummaryRow(
     val settled: Double
 )
 
+const val PENDING_SQL = "SELECT s.id AS shareId, s.txnId AS txnId, s.person AS person, s.amount AS amount, s.settled AS settled, t.merchant AS merchant, t.card AS card, t.txnDate AS txnDate, t.amount AS txnTotal, (SELECT COUNT(*) FROM share x WHERE x.txnId = t.id AND x.amount > 0.004) AS parts, t.category AS category FROM share s JOIN txn t ON t.id = s.txnId WHERE s.person != 'Me' AND s.settled < s.amount - 0.005 ORDER BY t.txnDate ASC"
+
 @Dao
 interface AppDao {
     @Query("SELECT * FROM txn") suspend fun allTxnsList(): List<Txn>
@@ -195,8 +197,11 @@ interface AppDao {
     @Query("SELECT person FROM share WHERE person != 'Me' GROUP BY person ORDER BY MAX(id) DESC LIMIT 8")
     fun recentPeople(): Flow<List<String>>
 
-    @Query("SELECT s.id AS shareId, s.txnId AS txnId, s.person AS person, s.amount AS amount, s.settled AS settled, t.merchant AS merchant, t.card AS card, t.txnDate AS txnDate, t.amount AS txnTotal, (SELECT COUNT(*) FROM share x WHERE x.txnId = t.id AND x.amount > 0.004) AS parts, t.category AS category FROM share s JOIN txn t ON t.id = s.txnId WHERE s.person != 'Me' AND s.settled < s.amount - 0.005 ORDER BY t.txnDate ASC")
+    @Query(PENDING_SQL)
     fun pending(): Flow<List<PendingRow>>
+    @Query(PENDING_SQL)
+    suspend fun pendingNow(): List<PendingRow>
+    @Query("SELECT * FROM txn WHERE id = :id") suspend fun txnById(id: Long): Txn?
 
     @Query("SELECT s.* FROM share s JOIN txn t ON t.id = s.txnId WHERE s.person = :p AND s.settled < s.amount - 0.005 ORDER BY t.txnDate ASC")
     suspend fun openShares(p: String): List<Share>

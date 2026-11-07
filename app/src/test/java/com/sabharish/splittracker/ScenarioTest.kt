@@ -101,7 +101,7 @@ class ScenarioTest {
                 val due = rows.sumOf { it.amount - it.settled }
                 assertTrue(text.startsWith("Hi Rajesh 👋"))
                 assertTrue("total shown", text.contains("Total pending: ${Logic.money(due)}"))
-                assertEquals(upi.isNotEmpty(), text.contains("to:\n$upi\n\n"))
+                assertEquals(upi.isNotEmpty(), text.contains("UPI ID:\n$upi\n\n"))
                 assertEquals(items > 8, text.contains("more"))
                 assertFalse(text.contains("null") || text.contains("NaN"))
                 assertFalse("no triple blank lines", text.contains("\n\n\n"))

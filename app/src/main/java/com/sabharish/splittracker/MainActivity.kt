@@ -2,6 +2,7 @@ package com.sabharish.splittracker
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +54,19 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    companion object { const val EXTRA_TXN = "txnId" }
+
+    private fun readIntent(i: Intent?) {
+        val id = i?.getLongExtra(EXTRA_TXN, 0L) ?: 0L
+        if (id > 0) { vm.openId.value = id; i?.removeExtra(EXTRA_TXN) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readIntent(intent)
+    }
+
     private val vm: MainVm by viewModels()
 
     private val perms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -67,6 +82,7 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.READ_CONTACTS, Manifest.permission.POST_NOTIFICATIONS
             )
         )
+        readIntent(intent)
         ThemeState.mode = Repo.getPref(this, "theme", "system")
         setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) } }
     }
@@ -99,6 +115,9 @@ class MainActivity : ComponentActivity() {
 fun App(vm: MainVm) {
     var tab by remember { mutableIntStateOf(0) }
     var inboxSection by remember { mutableIntStateOf(0) }
+    var showNewSplit by remember { mutableStateOf(false) }
+    var opened by remember { mutableStateOf<Txn?>(null) }
+    val openId by vm.openId.collectAsState()
     var searching by remember(tab) { mutableStateOf(false) }
     var query by remember(tab) { mutableStateOf("") }
     val spends by vm.inbox.collectAsState()
@@ -122,6 +141,16 @@ fun App(vm: MainVm) {
         }
     }
 
+    LaunchedEffect(openId) {
+        if (openId > 0) {
+            val t = vm.txnById(openId); vm.openId.value = 0
+            tab = 1
+            if (t != null) when {
+                t.kind == "UPI_IN" || t.kind == "REFUND" || t.status == "REPAID" -> inboxSection = 1
+                t.status == "INBOX" || t.status == "TAGGED" -> { inboxSection = 0; opened = t }
+            }
+        }
+    }
     androidx.activity.compose.BackHandler(enabled = tab != 0) { tab = 0 }
     val titles = listOf("Today", "Inbox", "Owed to you", "Transactions", "Summary")
     Scaffold(
@@ -151,6 +180,7 @@ fun App(vm: MainVm) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(titles[tab], fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (tab in 0..3) IconButton(onClick = { showNewSplit = true }) { Icon(Icons.Default.Add, contentDescription = "New split") }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                         Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
                     }
@@ -180,5 +210,7 @@ fun App(vm: MainVm) {
         vm.importHistory(from)
         welcome = false
     }
+    if (showNewSplit) NewSplitFlow(vm) { showNewSplit = false }
+    opened?.let { t -> TagSheet(vm, t, onDismiss = { opened = null }, onSaved = { undoable(t.id, it) }) }
     if (showSettings) SettingsDialog(vm) { showSettings = false }
 }

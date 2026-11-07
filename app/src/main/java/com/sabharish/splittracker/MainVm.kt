@@ -75,6 +75,10 @@ class MainVm(app: Application) : AndroidViewModel(app) {
 
     fun addFromStatement(s: StmtSource, l: StmtLine) = viewModelScope.launch(safe) { Repo.addFromStatement(getApplication(), s, l) }
 
+    /** Set when a notification is tapped: which transaction to open. */
+    val openId = MutableStateFlow(0L)
+    suspend fun txnById(id: Long): Txn? = dao.txnById(id)
+
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 

@@ -68,6 +68,20 @@ object Logic {
         return "Split ${selected.size} ways · ${money(per)} each"
     }
 
+    /**
+     * A received UPI payment that is clearly a repayment: the sender's name matches one person who owes you,
+     * and the amount is exactly one of their bills or exactly everything they owe. Returns those share ids, else null.
+     */
+    fun autoSettle(rows: List<PendingRow>, sender: String, amount: Double): List<Long>? {
+        val owing = rows.filter { it.person != ME && it.amount - it.settled > 0.004 }
+        val person = bestMatch(sender, owing.map { it.person }.distinct()) ?: return null
+        val mine = owing.filter { it.person == person }
+        val one = mine.filter { Math.abs((it.amount - it.settled) - amount) < 0.011 }
+        if (one.size == 1) return listOf(one[0].shareId)
+        if (one.size > 1) return null                       // two equal bills: let the user choose
+        return if (Math.abs(mine.sumOf { it.amount - it.settled } - amount) < 0.011) mine.map { it.shareId } else null
+    }
+
     /** Cash lent to people (tag "Lent"): what is still to come back. */
     fun lentTotal(rows: List<PendingRow>): Double =
         rows.filter { it.person != ME && it.category.equals("Lent", true) }.sumOf { it.amount - it.settled }
@@ -217,7 +231,47 @@ object RefundMatcher {
 }
 
 /** The message sent to someone who owes you money. */
+/** Groups you split with often ("Badminton" → Ravi, Kiran, Sai), remembered on this phone only. */
+object Groups {
+    data class Group(val name: String, val people: List<String>)
+    private const val MAX = 8
+
+    fun decode(raw: String): List<Group> = raw.lines().mapNotNull { l ->
+        val i = l.indexOf('|'); if (i <= 0) return@mapNotNull null
+        val people = l.substring(i + 1).split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (people.isEmpty()) null else Group(l.substring(0, i).trim(), people)
+    }
+    fun encode(gs: List<Group>) = gs.joinToString("\n") { it.name.replace("|", " ").replace("\n", " ") + "|" + it.people.joinToString(",") { p -> p.replace(",", " ") } }
+
+    /** Newest first; the same name replaces the older entry; people never include "Me". */
+    fun upsert(gs: List<Group>, name: String, people: List<String>): List<Group> {
+        val n = name.trim().take(24)
+        val others = people.filter { it != Logic.ME }.distinct()
+        if (n.isEmpty() || others.isEmpty()) return gs
+        return (listOf(Group(n, others)) + gs.filter { !it.name.equals(n, true) }).take(MAX)
+    }
+}
+
 object Reminder {
+    /** Tappable UPI payment link (opens GPay / PhonePe / Paytm with the amount filled in) — built on the phone, nothing is sent anywhere. */
+    fun upiLink(upi: String, amount: Double, note: String): String {
+        fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+        val id = upi.trim()
+        val amt = if (Math.abs(amount - Math.round(amount)) < 0.005) Math.round(amount).toString() else String.format(java.util.Locale.US, "%.2f", amount)
+        return "upi://pay?pa=${enc(id)}&pn=${enc(id.substringBefore("@"))}&am=$amt&cu=INR&tn=${enc(note.take(40))}"
+    }
+
+    private fun payBlock(upi: String, amount: Double, note: String): String =
+        if (upi.isBlank()) "" else "\n\nPay by tapping the link below:\n${upiLink(upi, amount, note)}\n\nOr pay to this UPI ID:\n${upi.trim()}"
+
+    /** The message for one person right after a split is created. */
+    fun splitRequest(person: String, title: String, total: Double, share: Double, upi: String): String {
+        val first = person.trim().substringBefore(" ")
+        val what = title.trim().ifEmpty { "our split" }
+        val pay = payBlock(upi, share, what)
+        return "Hi $first 👋\n\n$what · total ${Logic.money(total)}\nYour share: ${Logic.money(share)}$pay\n\nThank you!"
+    }
+
     fun build(person: String, rows: List<PendingRow>, aliases: Map<String, String>, upi: String, nowMs: Long): String {
         if (rows.isEmpty()) return ""
         val sorted = rows.sortedBy { it.txnDate }
@@ -242,7 +296,7 @@ object Reminder {
             }
         }
         val more = if (sorted.size > shown.size) "\n…and ${sorted.size - shown.size} more" else ""
-        val pay = if (upi.isNotBlank()) "\n\nPay via any UPI app (GPay, PhonePe, Paytm) to:\n${upi.trim()}" else ""
+        val pay = payBlock(upi, total, "Pending spends")
         val close = if (days > 30) "Could you please clear it this week? Thank you!" else "Thank you!"
         return "$intro\n\n$lines$more\n\nTotal pending: ${Logic.money(total)}$pay\n\n$close"
     }

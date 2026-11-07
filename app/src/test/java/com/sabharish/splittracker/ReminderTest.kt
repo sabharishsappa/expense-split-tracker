@@ -4,6 +4,7 @@ import com.sabharish.splittracker.TestUtil.ms
 import com.sabharish.splittracker.TestUtil.pending
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,12 +27,12 @@ class ReminderTest {
     @Test fun upiIdIsAddedWhenPresent() {
         val rows = listOf(pending("Rajesh", "Namma Irani", 37.5, nov6, total = 187.5, parts = 5))
         val text = Reminder.build("Rajesh", rows, emptyMap(), "me@okaxis", nov6 + day)
-        assertTrue(text.contains("Total pending: ₹37.50\n\nPay via any UPI app (GPay, PhonePe, Paytm) to:\nme@okaxis\n\nThank you!"))
+        assertTrue(text.contains("Total pending: ₹37.50\n\nPay by tapping the link below:\nupi://pay?pa=me%40okaxis&pn=me&am=37.50&cu=INR&tn=Pending%20spends\n\nOr pay to this UPI ID:\nme@okaxis\n\nThank you!"))
     }
 
     @Test fun noUpiLineWhenBlank() {
         val rows = listOf(pending("Rajesh", "Swiggy", 640.0, nov6))
-        assertFalse(Reminder.build("Rajesh", rows, emptyMap(), "  ", nov6 + day).contains("Pay via"))
+        assertFalse(Reminder.build("Rajesh", rows, emptyMap(), "  ", nov6 + day).contains("Pay by tapping"))
     }
 
     @Test fun fullySpentOnThemIsASingleLine() {
@@ -76,4 +77,54 @@ class ReminderTest {
     @Test fun nothingPendingGivesEmptyText() {
         assertEquals("", Reminder.build("Rajesh", emptyList(), emptyMap(), "", nov6))
     }
+}
+
+class SplitRequestTest {
+    @Test fun badmintonMessage() {
+        val m = Reminder.splitRequest("Ravi Kumar", "Badminton", 1200.0, 300.0, "me@okaxis")
+        assertTrue(m.startsWith("Hi Ravi 👋\n\nBadminton · total ₹1,200\nYour share: ₹300"))
+        assertTrue(m, m.contains("upi://pay?pa=me%40okaxis&pn=me&am=300&cu=INR&tn=Badminton"))
+        assertTrue(m.contains("Pay by tapping the link below"))
+        assertTrue(m.endsWith("Thank you!"))
+    }
+    @Test fun noUpiNoLink() = assertFalse(Reminder.splitRequest("Ravi", "Badminton", 1200.0, 300.0, " ").contains("upi://"))
+    @Test fun blankTitleHasFallback() = assertTrue(Reminder.splitRequest("Ravi", " ", 100.0, 50.0, "").contains("our split"))
+    @Test fun linkEscapesSpacesAndKeepsPaise() {
+        val l = Reminder.upiLink("a.b@ybl", 33.5, "Dinner at Taj")
+        assertTrue(l, l.contains("am=33.50") && l.contains("tn=Dinner%20at%20Taj") && l.contains("pa=a.b%40ybl"))
+    }
+}
+
+class AutoSettleTest {
+    private fun row(id: Long, person: String, amt: Double, settled: Double = 0.0) =
+        TestUtil.pending(person, "x", amt, 0L, settled = settled).copy(shareId = id)
+    @Test fun exactBillMatchesByName() =
+        assertEquals(listOf(2L), Logic.autoSettle(listOf(row(1, "Ravi Kumar", 100.0), row(2, "Ravi Kumar", 250.0)), "RAVI KUMAR K", 250.0))
+    @Test fun wholeBalanceMatches() =
+        assertEquals(listOf(1L, 2L), Logic.autoSettle(listOf(row(1, "Ravi Kumar", 100.0), row(2, "Ravi Kumar", 250.0)), "Ravi Kumar", 350.0))
+    @Test fun partlyPaidUsesRemainder() =
+        assertEquals(listOf(1L), Logic.autoSettle(listOf(row(1, "Ravi", 100.0, settled = 40.0)), "Ravi", 60.0))
+    @Test fun unknownNameNoMatch() = assertNull(Logic.autoSettle(listOf(row(1, "Ravi", 100.0)), "Someone Else", 100.0))
+    @Test fun oddAmountNoMatch() = assertNull(Logic.autoSettle(listOf(row(1, "Ravi", 100.0)), "Ravi", 90.0))
+    @Test fun twoEqualBillsAskTheUser() = assertNull(Logic.autoSettle(listOf(row(1, "Ravi", 100.0), row(2, "Ravi", 100.0)), "Ravi", 100.0))
+    @Test fun myOwnShareIsNeverSettled() = assertNull(Logic.autoSettle(listOf(row(1, "Me", 100.0)), "Me Myself", 100.0))
+}
+
+class GroupsTest {
+    @Test fun roundTrip() {
+        val g = Groups.upsert(Groups.upsert(emptyList(), "Badminton", listOf("Me", "Ravi", "Kiran")), "Trip", listOf("Sai"))
+        assertEquals(g, Groups.decode(Groups.encode(g)))
+        assertEquals("Trip", g[0].name); assertEquals(listOf("Ravi", "Kiran"), g[1].people)
+    }
+    @Test fun sameNameReplacesAndMovesToFront() {
+        val g = Groups.upsert(Groups.upsert(emptyList(), "Badminton", listOf("A")), "Trip", listOf("B"))
+        val h = Groups.upsert(g, "badminton", listOf("C"))
+        assertEquals(listOf("badminton", "Trip"), h.map { it.name }); assertEquals(listOf("C"), h[0].people)
+    }
+    @Test fun onlyMeOrNoNameIsIgnored() {
+        assertTrue(Groups.upsert(emptyList(), "X", listOf("Me")).isEmpty())
+        assertTrue(Groups.upsert(emptyList(), " ", listOf("A")).isEmpty())
+    }
+    @Test fun keepsAtMostEight() = assertEquals(8, (1..12).fold(emptyList<Groups.Group>()) { a, i -> Groups.upsert(a, "G$i", listOf("P$i")) }.size)
+    @Test fun badTextIsSkipped() = assertTrue(Groups.decode("nonsense\n|x\nA|").isEmpty())
 }

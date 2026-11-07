@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class SmsReceiver : BroadcastReceiver() {
+    private fun quietOld(at: Long) = System.currentTimeMillis() - at > 2 * 86_400_000L   // old messages delivered late never ping
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
         val msgs = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
@@ -25,7 +27,7 @@ class SmsReceiver : BroadcastReceiver() {
                     val bill = BillParser.parse(body)
                     if (bill != null) { Repo.ingestBill(app, bill, at); continue }
                     val p = SmsParser.parse(body)
-                    if (p != null) { val t = Repo.ingest(app, p, at, body); if (t != null) Repo.notifyNew(app, t) }
+                    if (p != null) { val t = Repo.ingest(app, p, at, body); if (t != null && !quietOld(at)) Repo.notifyNew(app, t) }
                     BalanceSms.parse(body)?.let { Repo.ingestBalance(app, it, at) }
                 }
             } catch (e: Throwable) {

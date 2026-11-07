@@ -17,7 +17,7 @@ data class BackupData(
 object Backup {
     const val VERSION = 1
     /** Settings worth keeping: UPI id, own-name words, custom tags, theme. */
-    val PREF_KEYS = listOf("upi", "selfnames", "tags", "hiddenTags", "theme")
+    val PREF_KEYS = listOf("upi", "selfnames", "tags", "hiddenTags", "theme", "groups")
 
     fun toJson(d: BackupData, now: Long): String {
         val o = JSONObject()

@@ -127,7 +127,18 @@ object Repo {
                     saved = saved.copy(status = "REFUND")
                 }
             }
-            if (saved.status == "INBOX") saved else null
+            if (p.kind == "UPI_IN" && saved.status == "INBOX") {
+                val rows = dao.pendingNow()
+                val ids = Logic.autoSettle(rows, p.merchant, p.amount)
+                val who = ids?.let { rows.firstOrNull { r -> r.shareId == it.first() }?.person }
+                if (ids != null && who != null) {
+                    for (sid in ids) { val sh = dao.share(sid) ?: continue; dao.setSettled(sid, sh.amount) }
+                    dao.insertSettlement(Settlement(person = who, amount = p.amount, date = System.currentTimeMillis(), mode = "UPI"))
+                    dao.setStatusNote(id, "REPAID", "Paid by $who · matched automatically")
+                    saved = saved.copy(status = "REPAID", note = "Paid by $who · matched automatically")
+                }
+            }
+            if (saved.status == "INBOX" || saved.status == "REPAID") saved else null
         }
     }
 
@@ -493,9 +504,15 @@ object Repo {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "New transactions", NotificationManager.IMPORTANCE_DEFAULT))
         }
         val open = PendingIntent.getActivity(
-            ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            ctx, t.id.toInt(),
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra(MainActivity.EXTRA_TXN, t.id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        if (t.status == "REPAID") {
+            val n = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(android.R.drawable.ic_menu_agenda)
+                .setContentTitle("${money(t.amount)} received ✓").setContentText(t.note).setContentIntent(open).setAutoCancel(true).build()
+            nm.notify(t.id.toInt(), n); return
+        }
         val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
         val title = if (incoming) "${money(t.amount)} received from ${t.merchant}" else "${money(t.amount)} at ${t.merchant}"
         val text = if (incoming) "${acct(t.bank, t.card)}: was this a repayment or a refund? Tap to match."
