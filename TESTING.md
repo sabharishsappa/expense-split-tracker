@@ -68,3 +68,8 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 ## Notifications, mail previews and swiping
 - `NotificationReaderTest`, `CrossSourceTest` – UPI-app wording, messages-app and mail-preview reading, only listed apps are read, and one payment seen by SMS + notification + bank app is kept once (the SMS takes over).
 - Manual checks on phone: Settings > Read notifications too > allow; pay with GPay/PhonePe and see one entry; swipe left/right between Home, Inbox, Owed, All, Summary.
+
+## Delete a transaction, Food tag, new icon
+- Open any transaction (Inbox or All) → "Delete" (red, top right) → confirm. It disappears with its split, and Settings > Import older messages does not bring it back.
+- The tag "Food Order" is now "Food" everywhere, including tagged spends and saved merchant rules.
+- App icon: a white rupee sign on a teal coin; the name under it reads "Expense Tracker".

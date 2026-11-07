@@ -152,6 +152,10 @@ interface AppDao {
     @Query("UPDATE txn SET category = :newName WHERE category = :oldName COLLATE NOCASE")
     suspend fun renameCategory(oldName: String, newName: String)
 
+    @Query("SELECT COUNT(*) FROM rule WHERE ruleKey = :k") suspend fun ruleCount(k: String): Int
+    @Query("DELETE FROM txn WHERE id = :id") suspend fun deleteTxnRow(id: Long)
+    @Query("UPDATE txn SET refundOf = 0 WHERE refundOf = :id") suspend fun unlinkRefunds(id: Long)
+
     @Query("UPDATE rule SET people = :newName WHERE action = 'CAT' AND people = :oldName COLLATE NOCASE")
     suspend fun renameCatRules(oldName: String, newName: String)
 

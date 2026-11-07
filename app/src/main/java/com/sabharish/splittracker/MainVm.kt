@@ -79,7 +79,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 
-    init { viewModelScope.launch(safe) { Repo.backfillCategories(getApplication()) } }
+    init { viewModelScope.launch(safe) { Repo.migrateNames(getApplication()); Repo.backfillCategories(getApplication()) } }
 
     fun loadContacts() = viewModelScope.launch(safe) { contacts.value = Repo.loadContacts(getApplication()) }
 
@@ -116,6 +116,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
             CrashLog.record(getApplication(), e); status.value = "Restore stopped — nothing on this phone was changed"; onDone(false); return@launch
         }
         if (n >= 0) {
+            Repo.migrateNames(getApplication())
             customTags.value = Logic.parseTags(Repo.getPref(getApplication(), "tags", ""))
             hiddenTags.value = Logic.parseTags(Repo.getPref(getApplication(), "hiddenTags", ""))
             ThemeState.mode = Repo.getPref(getApplication(), "theme", ThemeState.mode)
@@ -145,6 +146,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
         val both = Repo.markOwnTransfer(getApplication(), t)
         status.value = if (both) "Own transfer — both sides linked" else "Own transfer — left out of your spends"
     }
+    fun delete(t: Txn) = viewModelScope.launch(safe) { Repo.deleteTxn(getApplication(), t); status.value = "Transaction deleted" }
     fun ignore(t: Txn) = viewModelScope.launch(safe) { Repo.ignore(getApplication(), t) }
     fun setCategory(t: Txn, c: String) = viewModelScope.launch(safe) {
         val n = Repo.setCategory(getApplication(), t, c)

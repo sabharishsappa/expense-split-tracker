@@ -281,7 +281,7 @@ class LentTest {
     private fun row(person: String, amt: Double, cat: String, settled: Double = 0.0) =
         TestUtil.pending(person, "x", amt, 0L, settled = settled).copy(category = cat)
     @Test fun threeFriendsLentSixThousand() {
-        val rows = listOf(row("A", 1000.0, "Lent"), row("B", 2000.0, "Lent"), row("C", 3000.0, "Lent"), row("D", 500.0, "Food Order"))
+        val rows = listOf(row("A", 1000.0, "Lent"), row("B", 2000.0, "Lent"), row("C", 3000.0, "Lent"), row("D", 500.0, "Food"))
         org.junit.Assert.assertEquals(6000.0, Logic.lentTotal(rows), 0.001)
     }
     @Test fun partlyRepaidLoanCountsRemainder() =

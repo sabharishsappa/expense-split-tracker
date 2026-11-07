@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A rupee sign on a soft coin: money in, money out, all tracked -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#000000"
-        android:pathData="M52,30.08 A24,24 0 0 0 52,77.92 Z" />
-    <path android:fillColor="#000000"
-        android:pathData="M56,30.08 A24,24 0 0 1 56,77.92 Z" />
+    <path android:strokeColor="#000000" android:strokeWidth="5.5" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M41,36 H67 M41,45.5 H67 M43,36 H50 C63,36 63,55 50,55 H43 M45,55 L63,76" />
 </vector>

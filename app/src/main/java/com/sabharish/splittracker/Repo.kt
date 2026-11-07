@@ -75,6 +75,7 @@ object Repo {
         val db = Db.get(ctx)
         val dao = db.dao()
         return db.withTransaction {
+            if (dao.ruleCount(Logic.deletedKey(p.kind, p.amount, smsTime)) > 0) return@withTransaction null   // you deleted this one
             val dup = dao.near(p.kind, p.amount, p.card, p.merchant, smsTime - DEDUPE_MS, smsTime + DEDUPE_MS)
             if (dup > 0) {
                 if (body.isNotBlank()) dao.fillBody(p.kind, p.amount, p.card, p.merchant, smsTime - DEDUPE_MS, smsTime + DEDUPE_MS, body)
@@ -262,6 +263,27 @@ object Repo {
     suspend fun untag(ctx: Context, id: Long) {
         val db = Db.get(ctx); val dao = db.dao()
         db.withTransaction { dao.deleteShares(id); dao.setStatus(id, "INBOX") }
+    }
+
+    /** Removes the transaction and its split. A small note keeps the same message from coming back on a re-read. */
+    suspend fun deleteTxn(ctx: Context, t: Txn) {
+        val db = Db.get(ctx); val dao = db.dao()
+        db.withTransaction {
+            dao.deleteShares(t.id); dao.unlinkRefunds(t.id); dao.deleteTxnRow(t.id)
+            dao.putRule(Rule(Logic.deletedKey(t.kind, t.amount, t.smsTime), "DEL", ""))
+        }
+    }
+
+    /** Old tag names become their new names in saved transactions, rules and tag lists. Safe to repeat. */
+    suspend fun migrateNames(ctx: Context) {
+        val dao = Db.get(ctx).dao()
+        Categories.renamed.forEach { (old, new) ->
+            dao.renameCategory(old, new); dao.renameCatRules(old, new)
+            listOf("tags", "hiddenTags").forEach { k ->
+                val cur = Logic.parseTags(getPref(ctx, k, ""))
+                if (old in cur) putPref(ctx, k, Logic.joinTags(cur.map { if (it == old) new else it }.distinct()))
+            }
+        }
     }
 
     suspend fun ignore(ctx: Context, t: Txn) = Db.get(ctx).dao().setStatus(t.id, "IGNORED")

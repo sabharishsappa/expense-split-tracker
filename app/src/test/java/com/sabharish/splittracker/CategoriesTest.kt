@@ -10,8 +10,8 @@ class CategoriesTest {
     @Test fun quickCommerceIsGroceryButSwiggyIsFood() {
         assertEquals("Grocery", Categories.guess("Swiggy Instamart"))
         assertEquals("Grocery", Categories.guess("RSP*INSTAMART"))
-        assertEquals("Food Order", Categories.guess("SWIGGY"))
-        assertEquals("Food Order", Categories.guess("Zomato Ltd"))
+        assertEquals("Food", Categories.guess("SWIGGY"))
+        assertEquals("Food", Categories.guess("Zomato Ltd"))
     }
 
     @Test fun commonMerchants() {
@@ -47,6 +47,25 @@ class CategoriesTest {
 
     @Test fun builtInListEndsWithOther() {
         assertEquals("Other", Categories.all.last())
-        assertTrue(Categories.all.containsAll(listOf("Grocery", "Cab", "Dine Out", "Food Order")))
+        assertTrue(Categories.all.containsAll(listOf("Grocery", "Cab", "Dine Out", "Food")))
+    }
+}
+
+class TagRenameAndDeleteKeyTest {
+    @org.junit.Test fun foodOrderIsNowFood() {
+        org.junit.Assert.assertFalse("Food Order" in Categories.all)
+        org.junit.Assert.assertTrue("Food" in Categories.all)
+        org.junit.Assert.assertEquals("Food", Categories.renamed["Food Order"])
+    }
+    @org.junit.Test fun oldCustomTagNameIsMappedAndNotDuplicated() {
+        val tags = Logic.allTags(listOf("Food Order", "Pets"))
+        org.junit.Assert.assertEquals(1, tags.count { it == "Food" })
+        org.junit.Assert.assertTrue("Pets" in tags)
+    }
+    @org.junit.Test fun deletedKeyIsStableAndDistinguishes() {
+        val a = Logic.deletedKey("SPEND", 250.0, 1000L)
+        org.junit.Assert.assertEquals(a, Logic.deletedKey("SPEND", 250.004, 1000L))
+        org.junit.Assert.assertNotEquals(a, Logic.deletedKey("SPEND", 250.0, 1001L))
+        org.junit.Assert.assertNotEquals(a, Logic.deletedKey("UPI_OUT", 250.0, 1000L))
     }
 }

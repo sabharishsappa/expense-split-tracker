@@ -68,8 +68,8 @@ class FiltersTest {
     }
 
     @Test fun filtersCombine() {
-        val x = t(1, "Swiggy", 300.0, now, cat = "Food Order", kind = "UPI_OUT")
-        assertTrue(ok(x, TxnFilter(type = "UPI", tag = "Food Order", range = "This month", query = "swiggy 300")))
-        assertFalse(ok(x, TxnFilter(type = "UPI", tag = "Food Order", range = "Last month")))
+        val x = t(1, "Swiggy", 300.0, now, cat = "Food", kind = "UPI_OUT")
+        assertTrue(ok(x, TxnFilter(type = "UPI", tag = "Food", range = "This month", query = "swiggy 300")))
+        assertFalse(ok(x, TxnFilter(type = "UPI", tag = "Food", range = "Last month")))
     }
 }

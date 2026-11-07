@@ -197,11 +197,14 @@ object Logic {
         new.map { s -> if (s.paid) s.amount else minOf(old.firstOrNull { it.person == s.person }?.settled ?: 0.0, s.amount) }
 
     fun parseTags(s: String): List<String> = s.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    /** Key of the note that stops a deleted message coming back when old messages are read again. */
+    fun deletedKey(kind: String, amount: Double, smsTime: Long) = "del|$kind|${String.format(Locale.US, "%.2f", amount)}|$smsTime"
+
     fun joinTags(tags: List<String>): String = tags.joinToString(",")
 
     /** Built-in tags with your own tags placed before "Other". */
     fun allTags(custom: List<String>, hidden: List<String> = emptyList()): List<String> =
-        Categories.all.filter { it != "Other" && it !in hidden } + custom + "Other"
+        (Categories.all.filter { it != "Other" && it !in hidden } + custom.map { Categories.renamed[it] ?: it } + "Other").distinct()
 
     /** Most-used tags first (ties keep their original order); "Other" always last. */
     fun orderByUse(tags: List<String>, counts: Map<String, Int>): List<String> {

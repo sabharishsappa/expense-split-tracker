@@ -3,17 +3,20 @@ package com.sabharish.splittracker
 import java.util.Locale
 
 object Categories {
+    /** Tags that were renamed: old name → new name. Applied to saved data on start and after a restore. */
+    val renamed = mapOf("Food Order" to "Food")
+
     val all = listOf(
-        "Grocery", "Food Order", "Dine Out", "Cab", "Travel", "Shopping",
+        "Grocery", "Food", "Dine Out", "Cab", "Travel", "Shopping",
         "Bills", "Fuel", "Entertainment", "Health", "Lent", "Other"
     )
 
     private val rules: List<Pair<String, List<String>>> = listOf(
-        // Quick-commerce first, so "Swiggy Instamart" is Grocery and plain "Swiggy" is Food Order
+        // Quick-commerce first, so "Swiggy Instamart" is Grocery and plain "Swiggy" is Food
         "Grocery" to listOf("instamart", "blinkit", "zepto", "bigbasket", "big basket", "jiomart", "dmart", "avenue super",
             "ratnadeep", "supermarket", "super market", "supermart", "more retail", "nature's basket", "provision",
             "kirana", "vegetable", "fresh", "reliance smart", "spencer"),
-        "Food Order" to listOf("swiggy", "zomato", "eatsure", "faasos", "box8", "domino", "pizza hut", "kfc", "mcdonald"),
+        "Food" to listOf("swiggy", "zomato", "eatsure", "faasos", "box8", "domino", "pizza hut", "kfc", "mcdonald"),
         "Cab" to listOf("uber", "ola ", "olacabs", "ola money", "rapido", "namma yatri", "blusmart", "meru", "cab"),
         "Travel" to listOf("irctc", "railway", "makemytrip", "goibibo", "agoda", "redbus", "yatra", "indigo", "air india",
             "airline", "bmtc", "metro", "ksrtc", "quest trav", "cleartrip", "ixigo", "abhibus", "hotel"),

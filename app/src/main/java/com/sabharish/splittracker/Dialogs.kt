@@ -92,6 +92,7 @@ fun TagSheet(
     val vals = remember { mutableStateMapOf<String, String>() }
     val aliases by vm.aliases.collectAsState()
     var rename by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var alreadyPaid by remember { mutableStateOf(false) }
     var splitAdded by remember { mutableStateOf(false) }
     var rememberRule by remember { mutableStateOf(!creating) }
@@ -196,7 +197,18 @@ fun TagSheet(
                         }
                     ) { Icon(Icons.Default.Check, contentDescription = "Save") }
                 }
-                if (!creating) TextButton(onClick = { rename = true }) { Text("Rename merchant") }
+                if (!creating) Row {
+                    TextButton(onClick = { rename = true }) { Text("Rename merchant") }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }
+                if (confirmDelete) AlertDialog(
+                    onDismissRequest = { confirmDelete = false },
+                    title = { Text("Delete this transaction?") },
+                    text = { Text("${t.merchant} · ${Repo.money(t.amount)}\nIt is removed together with its split. Use this for duplicates or entries you don't want. It won't come back when messages are read again.") },
+                    confirmButton = { TextButton(onClick = { confirmDelete = false; vm.delete(t); onDismiss() }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+                    dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+                )
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     if (creating) {
                         Spacer(Modifier.height(10.dp))
