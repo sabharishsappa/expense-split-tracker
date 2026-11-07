@@ -255,7 +255,11 @@ object Groups {
 object Reminder {
     /** Tappable UPI payment link (opens GPay / PhonePe / Paytm with the amount filled in) — built on the phone, nothing is sent anywhere. */
     fun upiLink(upi: String, amount: Double, note: String): String {
-        fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+        // plain percent-encoding done by hand: no network classes are used anywhere in this app
+        fun enc(s: String) = s.toByteArray(Charsets.UTF_8).joinToString("") { b ->
+            val c = (b.toInt() and 0xFF).toChar()
+            if (c.isLetterOrDigit() && c.code < 128 || c in "-_.~") c.toString() else String.format("%%%02X", b.toInt() and 0xFF)
+        }
         val id = upi.trim()
         val amt = if (Math.abs(amount - Math.round(amount)) < 0.005) Math.round(amount).toString() else String.format(java.util.Locale.US, "%.2f", amount)
         return "upi://pay?pa=${enc(id)}&pn=${enc(id.substringBefore("@"))}&am=$amt&cu=INR&tn=${enc(note.take(40))}"
