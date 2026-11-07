@@ -10,7 +10,8 @@ data class BackupData(
     val settlements: List<Settlement>,
     val rules: List<Rule>,
     val prefs: Map<String, String>,
-    val bills: List<Bill> = emptyList()
+    val bills: List<Bill> = emptyList(),
+    val payables: List<Payable> = emptyList()
 )
 
 /** Pure JSON (de)serialisation. No Android classes besides org.json. */
@@ -51,6 +52,10 @@ object Backup {
             d.bills.forEach { b -> put(JSONObject().put("id", b.id).put("bank", b.bank).put("card", b.card).put("total", b.total)
                 .put("minDue", b.minDue).put("dueDate", b.dueDate).put("smsTime", b.smsTime).put("paid", b.paid)) }
         })
+        o.put("payables", JSONArray().apply {
+            d.payables.forEach { p -> put(JSONObject().put("id", p.id).put("person", p.person).put("amount", p.amount)
+                .put("paid", p.paid).put("date", p.date).put("note", p.note).put("txnId", p.txnId)) }
+        })
         o.put("prefs", JSONObject().apply { d.prefs.forEach { (k, v) -> put(k, v) } })
         return o.toString()
     }
@@ -83,6 +88,8 @@ object Backup {
                 },
                 rules = arr("rules") { j -> Rule(j.getString("key"), j.getString("action"), j.getString("people")) },
                 prefs = prefs,
+                payables = arr("payables") { j -> Payable(j.getLong("id"), j.getString("person"), j.getDouble("amount"), j.getDouble("paid"),
+                    j.getLong("date"), j.optString("note"), j.optLong("txnId")) },
                 bills = arr("bills") { j -> Bill(j.getLong("id"), j.getString("bank"), j.getString("card"), j.getDouble("total"),
                     j.getDouble("minDue"), j.getLong("dueDate"), j.getLong("smsTime"), j.optBoolean("paid")) }
             )

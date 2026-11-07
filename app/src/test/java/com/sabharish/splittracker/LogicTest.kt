@@ -289,3 +289,23 @@ class LentTest {
     @Test fun lentTagIsBuiltIn() = org.junit.Assert.assertTrue(Categories.all.contains("Lent"))
     @Test fun otherStaysLast() = org.junit.Assert.assertEquals("Other", Categories.all.last())
 }
+
+class PayableTest {
+    private fun p(person: String, amt: Double, paid: Double = 0.0) = Payable(person = person, amount = amt, paid = paid, date = 0L)
+    @Test fun totalsPerPersonBiggestFirst() {
+        val r = Logic.owedByYou(listOf(p("Ravi", 500.0), p("Sai", 2000.0), p("Ravi", 300.0, paid = 100.0)))
+        org.junit.Assert.assertEquals(listOf("Sai" to 2000.0, "Ravi" to 700.0), r)
+    }
+    @Test fun clearedDebtsDisappear() = org.junit.Assert.assertTrue(Logic.owedByYou(listOf(p("Ravi", 500.0, paid = 500.0))).isEmpty())
+    @Test fun payingNeverGoesOverTheDebt() = org.junit.Assert.assertEquals(500.0, Logic.paidAfter(500.0, 100.0, 9999.0), 0.001)
+    @Test fun partialPaymentAdds() = org.junit.Assert.assertEquals(350.0, Logic.paidAfter(500.0, 100.0, 250.0), 0.001)
+    @Test fun negativePaymentIgnored() = org.junit.Assert.assertEquals(100.0, Logic.paidAfter(500.0, 100.0, -50.0), 0.001)
+}
+
+class BackupPayablesTest {
+    @Test fun payablesSurviveBackup() {
+        val x = Payable(3, "Ravi", 500.0, 100.0, 77L, "Borrowed", 9L)
+        val back = Backup.fromJson(Backup.toJson(BackupData(emptyList(), emptyList(), emptyList(), emptyList(), emptyMap(), emptyList(), listOf(x)), 1L))!!
+        org.junit.Assert.assertEquals(listOf(x), back.payables)
+    }
+}

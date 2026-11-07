@@ -87,6 +87,21 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun loadContacts() = viewModelScope.launch(safe) { contacts.value = Repo.loadContacts(getApplication()) }
 
     val dueBills = dao.dueBills().hot(emptyList())
+    val payables = dao.payables().hot(emptyList())
+    fun borrowed(t: Txn, person: String) = viewModelScope.launch(safe) { Repo.borrowed(getApplication(), t, person); status.value = "Noted — you owe $person ${Logic.money(t.amount)}" }
+    fun receivedFor(t: Txn, reason: String) = viewModelScope.launch(safe) { Repo.receivedFor(getApplication(), t, reason) }
+    fun addPayable(person: String, amount: Double) = viewModelScope.launch(safe) { Repo.addPayable(getApplication(), person, amount, "Added by hand") }
+    /** A payment to one person clears their oldest debts first. */
+    fun payPerson(list: List<Payable>, amount: Double) = viewModelScope.launch(safe) {
+        var left = amount
+        for (p in list.sortedBy { it.date }) {
+            if (left <= 0.004) break
+            val due = p.amount - p.paid
+            val pay = Math.min(due, left)
+            Repo.payPayable(getApplication(), p.id, pay); left -= pay
+        }
+    }
+    fun payPayable(id: Long, amount: Double) = viewModelScope.launch(safe) { Repo.payPayable(getApplication(), id, amount) }
     fun billPaid(id: Long, paid: Boolean = true) = viewModelScope.launch(safe) { Repo.setBillPaid(getApplication(), id, paid) }
 
     fun importDays(days: Int) = importHistory(System.currentTimeMillis() - days * Bills.DAY)

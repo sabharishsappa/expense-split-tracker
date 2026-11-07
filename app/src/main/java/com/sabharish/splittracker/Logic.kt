@@ -82,6 +82,14 @@ object Logic {
         return if (Math.abs(mine.sumOf { it.amount - it.settled } - amount) < 0.011) mine.map { it.shareId } else null
     }
 
+    /** New paid total after paying [add] towards a debt: never below what was paid, never above the debt. */
+    fun paidAfter(total: Double, paid: Double, add: Double): Double =
+        Math.round(Math.min(total, Math.max(paid, paid + add)) * 100) / 100.0
+
+    /** What you still owe, per person, biggest first. */
+    fun owedByYou(list: List<Payable>): List<Pair<String, Double>> =
+        list.groupBy { it.person }.map { (p, v) -> p to v.sumOf { it.amount - it.paid } }.filter { it.second > 0.004 }.sortedByDescending { it.second }
+
     /** Cash lent to people (tag "Lent"): what is still to come back. */
     fun lentTotal(rows: List<PendingRow>): Double =
         rows.filter { it.person != ME && it.category.equals("Lent", true) }.sumOf { it.amount - it.settled }

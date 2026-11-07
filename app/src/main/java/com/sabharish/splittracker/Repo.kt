@@ -379,6 +379,26 @@ object Repo {
             txnDate = l.date, smsTime = l.date, status = "INBOX", note = "Added from statement"))
     }
 
+    // ---------- money you owe ----------
+    /** The money received in [t] was borrowed: you will need to pay [person] back. */
+    suspend fun borrowed(ctx: Context, t: Txn, person: String) {
+        val db = Db.get(ctx); val dao = db.dao()
+        db.withTransaction {
+            dao.insertPayable(Payable(person = person, amount = t.amount, date = t.txnDate, note = "Borrowed", txnId = t.id))
+            dao.setStatusNote(t.id, "RECEIVED", "Borrowed from $person · you owe this back")
+        }
+    }
+    /** Money received for some other reason (salary, gift, sale…): out of the Inbox, reason kept as a note. */
+    suspend fun receivedFor(ctx: Context, t: Txn, reason: String) = Db.get(ctx).dao().setStatusNote(t.id, "RECEIVED", reason)
+    suspend fun addPayable(ctx: Context, person: String, amount: Double, note: String) {
+        Db.get(ctx).dao().insertPayable(Payable(person = person, amount = amount, date = System.currentTimeMillis(), note = note))
+    }
+    /** You paid [amount] towards this debt (capped at what is left). */
+    suspend fun payPayable(ctx: Context, id: Long, amount: Double) {
+        val dao = Db.get(ctx).dao(); val p = dao.payable(id) ?: return
+        dao.setPayablePaid(id, Logic.paidAfter(p.amount, p.paid, amount))
+    }
+
     // ---------- entries made by hand ----------
     /** A spend that has no SMS (cash, another app). Starts untagged so the normal split page can finish it. */
     suspend fun addManual(ctx: Context, title: String, amount: Double): Txn {
@@ -438,7 +458,7 @@ object Repo {
     suspend fun exportBackup(ctx: Context): String {
         val dao = Db.get(ctx).dao()
         val prefs = Backup.PREF_KEYS.associateWith { getPref(ctx, it, "") }.filterValues { it.isNotEmpty() }
-        val json = Backup.toJson(BackupData(dao.allTxnsList(), dao.allSharesList(), dao.allSettlementsList(), dao.allRulesList(), prefs, dao.allBills()), System.currentTimeMillis())
+        val json = Backup.toJson(BackupData(dao.allTxnsList(), dao.allSharesList(), dao.allSettlementsList(), dao.allRulesList(), prefs, dao.allBills(), dao.allPayables()), System.currentTimeMillis())
         putPref(ctx, "lastBackup", System.currentTimeMillis().toString())
         return json
     }
@@ -447,12 +467,13 @@ object Repo {
     suspend fun restoreBackup(ctx: Context, text: String): Int {
         val d = Backup.fromJson(text) ?: return -1
         val dao = Db.get(ctx).dao()
-        dao.wipeShares(); dao.wipeSettlements(); dao.wipeRules(); dao.wipeTxns(); dao.wipeBills()
+        dao.wipeShares(); dao.wipeSettlements(); dao.wipeRules(); dao.wipeTxns(); dao.wipeBills(); dao.wipePayables()
         d.txns.forEach { dao.restoreTxn(it) }
         d.shares.forEach { dao.restoreShare(it) }
         d.settlements.forEach { dao.restoreSettlement(it) }
         d.rules.forEach { dao.putRule(it) }
         d.bills.forEach { dao.restoreBill(it) }
+        d.payables.forEach { dao.restorePayable(it) }
         d.prefs.forEach { (k, v) -> putPref(ctx, k, v) }
         return d.txns.size
     }

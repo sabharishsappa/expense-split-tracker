@@ -350,6 +350,7 @@ private fun MoneyInList(vm: MainVm, items: List<Txn>) {
 private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String>, onPick: (Txn) -> Unit, onLink: (Txn) -> Unit) {
     val aliases by vm.aliases.collectAsState()
     var confirm by remember { mutableStateOf<String?>(null) }
+    var borrowPick by remember { mutableStateOf(false) }
     val guess by produceState<Txn?>(null, t.id) { value = if (t.kind == "REFUND") vm.suggestRefund(t) else null }
     AppCard {
         TxnHeader(t, aliases, incoming = true)
@@ -365,12 +366,17 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
                 others.forEachIndexed { i, p -> Pill(labels[i], { confirm = p }) }
                 Pill("Someone else…", { onPick(t) })
             }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { onLink(t) }) { Text("It's a refund") }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) }
+            Spacer(Modifier.height(10.dp))
+            Text("Or it was…", fontSize = 13.sp, color = muted())
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill("Borrowed — I'll pay back", { borrowPick = true })
+                Pill("Salary", { vm.receivedFor(t, "Received: Salary") })
+                Pill("Gift", { vm.receivedFor(t, "Received: Gift") })
+                Pill("Other", { vm.receivedFor(t, "Received: Other") })
+                Pill("Refund", { onLink(t) })
             }
+            Row { Spacer(Modifier.weight(1f)); TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) } }
         } else {
             val g = guess
             if (g != null) {
@@ -392,6 +398,7 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
             Row { Spacer(Modifier.weight(1f)); TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) } }
         }
     }
+    if (borrowPick) PersonPickerDialog(vm, "Who lent you this?", { borrowPick = false }) { vm.borrowed(t, it); borrowPick = false }
     confirm?.let { person ->
         AlertDialog(
             onDismissRequest = { confirm = null },
@@ -463,6 +470,11 @@ fun PendingScreen(vm: MainVm, q: String) {
     val aliases by vm.aliases.collectAsState()
     val allRows by vm.pending.collectAsState()
     val rows = if (q.isBlank()) allRows else allRows.filter { it.person.contains(q.trim(), true) || Repo.nameOnly(it.merchant, aliases).contains(q.trim(), true) || it.category.contains(q.trim(), true) }
+    val owe by vm.payables.collectAsState()
+    val oweBy = remember(owe) { Logic.owedByYou(owe) }
+    var payFor by remember { mutableStateOf<String?>(null) }
+    var addOwe by remember { mutableStateOf(false) }
+    var addOweFor by remember { mutableStateOf<String?>(null) }
     var settleFor by remember { mutableStateOf<String?>(null) }
     var remindFor by remember { mutableStateOf<String?>(null) }
     val grouped = remember(rows) { rows.groupBy { it.person } }
@@ -475,11 +487,32 @@ fun PendingScreen(vm: MainVm, q: String) {
         Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (total > 0) teal() else muted())
         Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
         val lent = Logic.lentTotal(rows)
+        TextButton(onClick = { addOwe = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("+ I owe someone") }
         if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = teal())
     }
     Spacer(Modifier.height(12.dp))
     if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+        if (oweBy.isNotEmpty()) {
+            item(key = "owe-head") {
+                Text("You owe · ${Repo.money(oweBy.sumOf { it.second })}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+            items(oweBy, key = { "owe-" + it.first }) { (person, amt) ->
+                AppCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Avatar(person, 36)
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                            Text(person, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                            Text("You need to pay", fontSize = 12.sp, color = muted())
+                        }
+                        Text(Repo.money(amt), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.size(8.dp))
+                        OutlinedButton(onClick = { payFor = person }) { Text("Paid") }
+                    }
+                }
+            }
+            item(key = "owe-gap") { Spacer(Modifier.height(4.dp)); Text("Owed to you", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+        }
         items(ordered, key = { it.key }) { e ->
             val owed = e.value.sumOf { it.amount - it.settled }
             val days = daysSince(e.value.minOf { it.txnDate })
@@ -514,6 +547,31 @@ fun PendingScreen(vm: MainVm, q: String) {
                 }
             }
         }
+    }
+    payFor?.let { person ->
+        val list = owe.filter { it.person == person }
+        val due = list.sumOf { it.amount - it.paid }
+        var amt by remember(person) { mutableStateOf(due.toString().removeSuffix(".0")) }
+        AlertDialog(
+            onDismissRequest = { payFor = null },
+            title = { Text("Paid to $person") },
+            text = { OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount ₹ (you owe ${Repo.money(due)})") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)) },
+            confirmButton = { TextButton(enabled = (amt.replace(",", "").toDoubleOrNull() ?: 0.0) > 0, onClick = { vm.payPerson(list, amt.replace(",", "").toDouble()); payFor = null }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { payFor = null }) { Text("Cancel") } }
+        )
+    }
+    if (addOwe) PersonPickerDialog(vm, "Who do you owe?", { addOwe = false }) { addOweFor = it; addOwe = false }
+    addOweFor?.let { person ->
+        var amt by remember(person) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { addOweFor = null },
+            title = { Text("You owe $person") },
+            text = { OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount ₹") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)) },
+            confirmButton = { TextButton(enabled = (amt.replace(",", "").toDoubleOrNull() ?: 0.0) > 0, onClick = { vm.addPayable(person, amt.replace(",", "").toDouble()); addOweFor = null }) { Text("Add") } },
+            dismissButton = { TextButton(onClick = { addOweFor = null }) { Text("Cancel") } }
+        )
     }
     settleFor?.let { person ->
         val mine = rows.filter { it.person == person }

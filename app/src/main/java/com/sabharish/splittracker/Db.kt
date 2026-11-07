@@ -77,6 +77,14 @@ data class PendingRow(
     val category: String = ""     // the tag you gave
 )
 
+/** Money you owe someone (you borrowed it, or they paid for you). */
+@Entity(tableName = "payable")
+data class Payable(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val person: String, val amount: Double, val paid: Double = 0.0,
+    val date: Long, val note: String = "", val txnId: Long = 0
+)
+
 data class TagCount(val category: String, val n: Int)
 
 data class SummaryRow(
@@ -224,6 +232,14 @@ interface AppDao {
     @Query("SELECT category, COUNT(*) AS n FROM txn WHERE category != '' GROUP BY category")
     fun tagCounts(): Flow<List<TagCount>>
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'") suspend fun acctRulesList(): List<Rule>
+    @Query("SELECT * FROM payable WHERE paid < amount - 0.005 ORDER BY date DESC")
+    fun payables(): Flow<List<Payable>>
+    @Query("SELECT * FROM payable") suspend fun allPayables(): List<Payable>
+    @Insert suspend fun insertPayable(p: Payable): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restorePayable(p: Payable)
+    @Query("UPDATE payable SET paid = :paid WHERE id = :id") suspend fun setPayablePaid(id: Long, paid: Double)
+    @Query("SELECT * FROM payable WHERE id = :id") suspend fun payable(id: Long): Payable?
+    @Query("DELETE FROM payable") suspend fun wipePayables()
     @Query("SELECT * FROM bill WHERE paid = 0 ORDER BY dueDate")
     fun dueBills(): Flow<List<Bill>>
     @Query("SELECT * FROM bill WHERE paid = 0")
@@ -236,6 +252,12 @@ interface AppDao {
     @Query("DELETE FROM bill") suspend fun wipeBills()
     @Query("SELECT * FROM txn WHERE category = '' AND kind IN ('SPEND','UPI_OUT')")
     suspend fun uncategorised(): List<Txn>
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `payable` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `person` TEXT NOT NULL, `amount` REAL NOT NULL, `paid` REAL NOT NULL, `date` INTEGER NOT NULL, `note` TEXT NOT NULL, `txnId` INTEGER NOT NULL)")
+    }
 }
 
 val MIGRATION_4_5 = object : Migration(4, 5) {
@@ -264,7 +286,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class, Bill::class], version = 5, exportSchema = false)
+@Database(entities = [Txn::class, Share::class, Settlement::class, Rule::class, Bill::class, Payable::class], version = 6, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): AppDao
 
@@ -272,7 +294,7 @@ abstract class Db : RoomDatabase() {
         @Volatile private var inst: Db? = null
         fun get(ctx: Context): Db = inst ?: synchronized(this) {
             inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "splittracker.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build().also { inst = it }
         }
     }

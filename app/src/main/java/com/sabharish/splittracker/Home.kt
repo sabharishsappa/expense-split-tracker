@@ -51,6 +51,8 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
         .mapValues { e -> e.value.sumOf { it.amount - it.settled } }.filterValues { it > 0.004 }
     val accounts by vm.accounts.collectAsState()
     val bills by vm.dueBills.collectAsState()
+    val payables by vm.payables.collectAsState()
+    val oweList = remember(payables) { Logic.owedByYou(payables) }
     var payingBill by remember { mutableStateOf<Bill?>(null) }
     var checking by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<AccountView?>(null) }
@@ -88,6 +90,18 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             }
         }
         if (bills.isNotEmpty()) item { BillsCard(bills) { b -> payingBill = b } }
+        if (oweList.isNotEmpty()) item {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface).clickable { go(2) }.padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("You owe people", fontSize = 13.sp, color = muted())
+                    Text(Logic.money(oweList.sumOf { it.second }), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                }
+                Text("${oweList.size} ${if (oweList.size == 1) "person" else "people"} ›", fontSize = 13.sp, color = muted())
+            }
+        }
         item {
             val all by vm.all.collectAsState()
             val now = System.currentTimeMillis()
