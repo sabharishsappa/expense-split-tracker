@@ -253,26 +253,17 @@ object Groups {
 }
 
 object Reminder {
-    /** Tappable UPI payment link (opens GPay / PhonePe / Paytm with the amount filled in) — built on the phone, nothing is sent anywhere. */
-    fun upiLink(upi: String, amount: Double, note: String): String {
-        // plain percent-encoding done by hand: no network classes are used anywhere in this app
-        fun enc(s: String) = s.toByteArray(Charsets.UTF_8).joinToString("") { b ->
-            val c = (b.toInt() and 0xFF).toChar()
-            if (c.isLetterOrDigit() && c.code < 128 || c in "-_.~") c.toString() else String.format("%%%02X", b.toInt() and 0xFF)
-        }
-        val id = upi.trim()
-        val amt = if (Math.abs(amount - Math.round(amount)) < 0.005) Math.round(amount).toString() else String.format(java.util.Locale.US, "%.2f", amount)
-        return "upi://pay?pa=${enc(id)}&pn=${enc(id.substringBefore("@"))}&am=$amt&cu=INR&tn=${enc(note.take(40))}"
-    }
+    private fun payBlock(upi: String): String =
+        if (upi.isBlank()) "" else "
 
-    private fun payBlock(upi: String, amount: Double, note: String): String =
-        if (upi.isBlank()) "" else "\n\nPay by tapping the link below:\n${upiLink(upi, amount, note)}\n\nOr pay to this UPI ID:\n${upi.trim()}"
+Pay by clicking the UPI ID below:
+${upi.trim()}"
 
     /** The message for one person right after a split is created. */
     fun splitRequest(person: String, title: String, total: Double, share: Double, upi: String): String {
         val first = person.trim().substringBefore(" ")
         val what = title.trim().ifEmpty { "our split" }
-        val pay = payBlock(upi, share, what)
+        val pay = payBlock(upi)
         return "Hi $first 👋\n\n$what · total ${Logic.money(total)}\nYour share: ${Logic.money(share)}$pay\n\nThank you!"
     }
 
@@ -300,7 +291,7 @@ object Reminder {
             }
         }
         val more = if (sorted.size > shown.size) "\n…and ${sorted.size - shown.size} more" else ""
-        val pay = payBlock(upi, total, "Pending spends")
+        val pay = payBlock(upi)
         val close = if (days > 30) "Could you please clear it this week? Thank you!" else "Thank you!"
         return "$intro\n\n$lines$more\n\nTotal pending: ${Logic.money(total)}$pay\n\n$close"
     }

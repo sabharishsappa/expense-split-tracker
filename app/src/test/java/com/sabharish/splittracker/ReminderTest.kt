@@ -27,12 +27,12 @@ class ReminderTest {
     @Test fun upiIdIsAddedWhenPresent() {
         val rows = listOf(pending("Rajesh", "Namma Irani", 37.5, nov6, total = 187.5, parts = 5))
         val text = Reminder.build("Rajesh", rows, emptyMap(), "me@okaxis", nov6 + day)
-        assertTrue(text.contains("Total pending: ₹37.50\n\nPay by tapping the link below:\nupi://pay?pa=me%40okaxis&pn=me&am=37.50&cu=INR&tn=Pending%20spends\n\nOr pay to this UPI ID:\nme@okaxis\n\nThank you!"))
+        assertTrue(text.contains("Total pending: ₹37.50\n\nPay by clicking the UPI ID below:\nme@okaxis\n\nThank you!"))
     }
 
     @Test fun noUpiLineWhenBlank() {
         val rows = listOf(pending("Rajesh", "Swiggy", 640.0, nov6))
-        assertFalse(Reminder.build("Rajesh", rows, emptyMap(), "  ", nov6 + day).contains("Pay by tapping"))
+        assertFalse(Reminder.build("Rajesh", rows, emptyMap(), "  ", nov6 + day).contains("Pay by clicking"))
     }
 
     @Test fun fullySpentOnThemIsASingleLine() {
@@ -83,16 +83,12 @@ class SplitRequestTest {
     @Test fun badmintonMessage() {
         val m = Reminder.splitRequest("Ravi Kumar", "Badminton", 1200.0, 300.0, "me@okaxis")
         assertTrue(m.startsWith("Hi Ravi 👋\n\nBadminton · total ₹1,200\nYour share: ₹300"))
-        assertTrue(m, m.contains("upi://pay?pa=me%40okaxis&pn=me&am=300&cu=INR&tn=Badminton"))
-        assertTrue(m.contains("Pay by tapping the link below"))
+        assertTrue(m, m.contains("Pay by clicking the UPI ID below:\nme@okaxis\n\nThank you!"))
+        assertFalse(m.contains("upi://"))
         assertTrue(m.endsWith("Thank you!"))
     }
-    @Test fun noUpiNoLink() = assertFalse(Reminder.splitRequest("Ravi", "Badminton", 1200.0, 300.0, " ").contains("upi://"))
+    @Test fun noUpiNoPayLine() = assertFalse(Reminder.splitRequest("Ravi", "Badminton", 1200.0, 300.0, " ").contains("Pay by"))
     @Test fun blankTitleHasFallback() = assertTrue(Reminder.splitRequest("Ravi", " ", 100.0, 50.0, "").contains("our split"))
-    @Test fun linkEscapesSpacesAndKeepsPaise() {
-        val l = Reminder.upiLink("a.b@ybl", 33.5, "Dinner at Taj")
-        assertTrue(l, l.contains("am=33.50") && l.contains("tn=Dinner%20at%20Taj") && l.contains("pa=a.b%40ybl"))
-    }
 }
 
 class AutoSettleTest {
