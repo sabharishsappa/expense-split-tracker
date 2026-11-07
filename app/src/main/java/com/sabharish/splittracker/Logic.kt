@@ -254,10 +254,7 @@ object Groups {
 
 object Reminder {
     private fun payBlock(upi: String): String =
-        if (upi.isBlank()) "" else "
-
-Pay by clicking the UPI ID below:
-${upi.trim()}"
+        if (upi.isBlank()) "" else "\n\nPay by clicking the UPI ID below:\n${upi.trim()}"
 
     /** The message for one person right after a split is created. */
     fun splitRequest(person: String, title: String, total: Double, share: Double, upi: String): String {
