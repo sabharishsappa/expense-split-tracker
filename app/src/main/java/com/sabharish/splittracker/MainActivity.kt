@@ -190,7 +190,7 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
                 Text(titles[tab], fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (tab in 0..3) {
-                        IconButton(onClick = { showNewSplit = true }) { Icon(Icons.Default.Share, contentDescription = "Split a bill") }
+                        IconButton(onClick = { showNewSplit = true }) { Icon(SplitIcon, contentDescription = "Split a bill") }
                         IconButton(onClick = { showEntry = true }) { Icon(Icons.Default.AddCircle, contentDescription = "Add an expense") }
                     }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {

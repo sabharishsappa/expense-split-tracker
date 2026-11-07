@@ -172,3 +172,15 @@ fun SearchBox(value: String, onChange: (String) -> Unit, placeholder: String, mo
         leadingIcon = { androidx.compose.material3.Icon(Icons.Default.Search, contentDescription = null) }
     )
 }
+
+/** The usual "split" symbol: one path forking into two. */
+val SplitIcon: androidx.compose.ui.graphics.vector.ImageVector by lazy {
+    androidx.compose.ui.graphics.vector.ImageVector.Builder(
+        name = "Split", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f
+    ).addPath(
+        pathData = androidx.compose.ui.graphics.vector.addPathNodes(
+            "M14,4l2.29,2.29l-2.88,2.88l1.42,1.42l2.88,-2.88L20,10V4H14z M10,4H4v6l2.29,-2.29l4.71,4.7V20h2v-8.41l-5.29,-5.3L10,4z"
+        ),
+        fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+    ).build()
+}
