@@ -97,16 +97,16 @@ private fun AppCard(onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = 
 /** Merchant (with its friendly name) on the left, amount on the right, one detail line below. */
 @Composable
 private fun TxnHeader(t: Txn, aliases: Map<String, String>, incoming: Boolean = false, trailing: @Composable () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Column(Modifier.weight(1f)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
             Text(Repo.title(t.merchant, aliases), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 13.sp, color = muted())
         }
         Text(
             (if (incoming) "+" else "") + Repo.money(t.amount),
-            fontSize = 22.sp, fontWeight = FontWeight.Bold, color = if (incoming) green() else MaterialTheme.colorScheme.onSurface
+            fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = if (incoming) green() else MaterialTheme.colorScheme.onSurface
         )
-        trailing()
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { trailing() }
     }
 }
 
@@ -527,7 +527,7 @@ fun PendingScreen(vm: MainVm, q: String) {
         }
     }
     remindFor?.let { person ->
-        ReminderDialog(person, { upi -> Reminder.build(person, rows.filter { it.person == person }, aliases, upi, System.currentTimeMillis()) }) { remindFor = null }
+        ReminderDialog(person, { upi -> Reminder.build(person, rows.filter { it.person == person }, aliases, upi, System.currentTimeMillis()) }, onDismiss = { remindFor = null })
     }
 }
 
