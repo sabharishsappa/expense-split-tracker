@@ -621,7 +621,9 @@ fun AllScreen(vm: MainVm, q: String) {
     val tags by vm.tags.collectAsState()
     val byTxn = shares.groupBy { it.txnId }
     val now = System.currentTimeMillis()
-    val shown = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) }
+    val filtered = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) }
+    val merged = remember(filtered) { Transfers.merge(filtered) }   // an own transfer is one entry, not two
+    val shown = merged.shown
     Spacer(Modifier.height(6.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterPill("Type", Filters.types, f.type) { f0 = f0.copy(type = it) }
@@ -649,7 +651,7 @@ fun AllScreen(vm: MainVm, q: String) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(shown, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliases, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases) { sheetFor = it }
+            else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id]) { sheetFor = it }
         }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
@@ -669,9 +671,21 @@ private fun FilterPill(title: String, options: List<String>, selected: String, o
 }
 
 @Composable
-private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, String>, onChange: (Txn) -> Unit) {
+private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, String>, partner: Txn? = null, onChange: (Txn) -> Unit) {
     var moreMenu by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf(false) }
+    if (t.status == "SELF" && partner != null) {
+        AppCard {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text("Own transfer", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 13.sp, color = muted())
+                }
+                Text(Repo.money(t.amount), fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+        return
+    }
     val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
     val spendLike = t.kind == "SPEND" || t.kind == "UPI_OUT"
     val state = when (t.status) {

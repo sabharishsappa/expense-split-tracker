@@ -47,3 +47,35 @@ class EntriesTest {
         assertNull(TransferMatcher.find(out, listOf(txn("UPI_IN", "HDFC", "1234", 100.0, now + 1000)), Entries.DAYS3))
     }
 }
+
+class TransfersMergeTest {
+    private fun row(id: Long, kind: String, bank: String, card: String, amt: Double, at: Long, status: String = "SELF") =
+        Txn(id = id, bank = bank, card = card, kind = kind, amount = amt, merchant = "x", txnDate = at, smsTime = at, status = status)
+
+    @Test fun debitAndCreditShowAsOneEntry() {
+        val rows = listOf(row(1, "UPI_OUT", "HDFC", "1234", 500.0, 1000), row(2, "UPI_IN", "KOTAK", "9999", 500.0, 1500))
+        val m = Transfers.merge(rows)
+        assertEquals(listOf(1L), m.shown.map { it.id }); assertEquals(2L, m.partner[1L]!!.id)
+    }
+    @Test fun movedEntriesMergeToo() {
+        val (o, i) = Entries.moved("HDFC|1234", Accounts.CASH, "A", "Cash", 100.0, 5000)
+        val m = Transfers.merge(listOf(o.copy(id = 1), i.copy(id = 2)))
+        assertEquals(1, m.shown.size)
+    }
+    @Test fun twoSameAmountTransfersPairByCloseness() {
+        val rows = listOf(
+            row(1, "UPI_OUT", "HDFC", "1234", 200.0, 0), row(2, "UPI_OUT", "HDFC", "1234", 200.0, 100_000_000),
+            row(3, "UPI_IN", "KOTAK", "9999", 200.0, 100_000_500), row(4, "UPI_IN", "KOTAK", "9999", 200.0, 500)
+        )
+        val m = Transfers.merge(rows)
+        assertEquals(4L, m.partner[1L]!!.id); assertEquals(3L, m.partner[2L]!!.id); assertEquals(listOf(1L, 2L), m.shown.map { it.id })
+    }
+    @Test fun sameAccountNeverPairsAndLoneEntriesStay() {
+        val rows = listOf(row(1, "UPI_OUT", "HDFC", "1234", 50.0, 0), row(2, "UPI_IN", "HDFC", "1234", 50.0, 10), row(3, "UPI_OUT", "SBI", "1111", 70.0, 0))
+        assertEquals(3, Transfers.merge(rows).shown.size)
+    }
+    @Test fun ordinaryEntriesAreUntouched() {
+        val rows = listOf(row(1, "UPI_OUT", "HDFC", "1234", 50.0, 0, "TAGGED"), row(2, "UPI_IN", "KOTAK", "9999", 50.0, 10, "RECEIVED"))
+        assertEquals(2, Transfers.merge(rows).shown.size)
+    }
+}

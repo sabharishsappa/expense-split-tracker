@@ -135,3 +135,20 @@ object Entries {
         Txn(bank = bankOf(toKey), card = lastOf(toKey), kind = "UPI_IN", amount = amount, merchant = "From $fromLabel",
             txnDate = now, smsTime = now, status = "SELF", note = OWN)
 }
+
+/** An own transfer is stored as a debit and a credit (so both balances stay right) but shown as one entry. */
+object Transfers {
+    data class Merged(val shown: List<Txn>, val partner: Map<Long, Txn>)
+
+    fun merge(rows: List<Txn>, window: Long = Entries.DAYS3): Merged {
+        val ins = rows.filter { it.status == "SELF" && it.kind == "UPI_IN" }.toMutableList()
+        val partner = mutableMapOf<Long, Txn>()
+        val hidden = mutableSetOf<Long>()
+        for (o in rows.filter { it.status == "SELF" && it.kind == "UPI_OUT" }) {
+            val m = ins.filter { abs(it.amount - o.amount) < 0.011 && (it.bank != o.bank || it.card != o.card) && abs(it.smsTime - o.smsTime) <= window }
+                .minByOrNull { abs(it.smsTime - o.smsTime) } ?: continue
+            ins.remove(m); partner[o.id] = m; hidden += m.id
+        }
+        return Merged(rows.filter { it.id !in hidden }, partner)
+    }
+}
