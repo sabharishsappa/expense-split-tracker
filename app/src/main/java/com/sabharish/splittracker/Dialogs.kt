@@ -622,6 +622,14 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                             if (rules.size > 40) Text("…and ${rules.size - 40} more", fontSize = 12.sp, color = muted())
                         }
                     }
+                    val listenerOn = remember(Perm.tick) { Repo.notificationAccessOn(ctx) }
+                    Section("Read notifications too", "Also notes payments shown in notifications from Google Pay, PhonePe, Paytm, your bank apps, your messages app and mail apps like Gmail. A payment that arrives by text and by notification is counted once. Mail is read only through its notification preview, so the amount must appear there. Nothing leaves this phone.") {
+                        Text(if (listenerOn) "✓ On" else "Off", fontWeight = FontWeight.SemiBold, color = if (listenerOn) green() else muted())
+                        OutlinedButton(onClick = { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) {
+                            Text(if (listenerOn) "Manage notification access" else "Allow notification access")
+                        }
+                        if (!listenerOn) Text("If Android says the setting is restricted, open Settings > Apps > Split Tracker > ⋮ > Allow restricted settings, then try again.", fontSize = 12.sp, color = muted())
+                    }
                     var check by remember { mutableStateOf<Diagnostics.ReadCheck?>(null) }
                     var checking by remember { mutableStateOf(false) }
                     Section("Message reading check", "Finds out why some bank messages may not show up. Nothing is saved or sent anywhere.") {

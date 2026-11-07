@@ -39,6 +39,7 @@ object Repo {
     /** "SBI ••6674" for cards/accounts with digits, plain bank name otherwise. */
     fun acct(bank: String, card: String): String {
         val b = bankNames[bank] ?: bank
+        if (bank == "UPI") return card   // seen in a UPI app: Google Pay, PhonePe…
         return if (card.isNotEmpty() && card.all { it.isDigit() }) "$b ••$card" else b
     }
 
@@ -78,6 +79,13 @@ object Repo {
             if (dup > 0) {
                 if (body.isNotBlank()) dao.fillBody(p.kind, p.amount, p.card, p.merchant, smsTime - DEDUPE_MS, smsTime + DEDUPE_MS, body)
                 return@withTransaction null
+            }
+            // the same payment may also arrive by notification, bank app or email: keep one entry
+            val near = dao.sameAmount(p.kind, p.amount - 0.011, p.amount + 0.011, smsTime - CrossSource.WINDOW_MS, smsTime + CrossSource.WINDOW_MS)
+            when (val d = CrossSource.decide(near, p, body, smsTime)) {
+                is CrossSource.Decision.Drop -> return@withTransaction null
+                is CrossSource.Decision.Upgrade -> { dao.upgradeFromSms(d.twin.id, p.bank, p.card, d.merchant, body); return@withTransaction null }
+                else -> {}
             }
             val isUpi = p.kind.startsWith("UPI")
             var status = when (p.kind) {
@@ -576,6 +584,21 @@ object Repo {
         added
     }
 
+    /** A payment seen in a notification (UPI app, bank app, messages app, mail preview). */
+    suspend fun ingestNotification(ctx: Context, pkg: String, title: String, text: String, postedAt: Long): Txn? {
+        val r = NotificationReader.read(pkg, title, text) ?: return null
+        val at = if (postedAt > 0) postedAt else System.currentTimeMillis()
+        r.bill?.let { ingestBill(ctx, it, at) }
+        r.balance?.let { ingestBalance(ctx, it, at) }
+        val p = r.parsed ?: return null
+        val t = ingest(ctx, p, at, r.body)
+        if (t != null && System.currentTimeMillis() - at < 2 * 86_400_000L) notifyNew(ctx, t)
+        return t
+    }
+
+    fun notificationAccessOn(ctx: Context): Boolean =
+        androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
+
     /** Looks at the last 90 days of messages without saving anything, to say why some may not show up. */
     suspend fun readCheck(ctx: Context): Diagnostics.ReadCheck = withContext(Dispatchers.IO) {
         val sms = hasPermission(ctx, Manifest.permission.READ_SMS)
@@ -597,7 +620,7 @@ object Repo {
                 }
             }
         } catch (e: Exception) { CrashLog.record(ctx, e) }
-        Diagnostics.ReadCheck(sms, recv, notif, total, scanned, good, bad, senders.entries.sortedByDescending { it.value }.take(5).map { it.key }, Build.VERSION.SDK_INT)
+        Diagnostics.ReadCheck(sms, recv, notif, total, scanned, good, bad, senders.entries.sortedByDescending { it.value }.take(5).map { it.key }, Build.VERSION.SDK_INT, notificationAccessOn(ctx))
     }
 
     suspend fun loadContacts(ctx: Context): List<String> = withContext(Dispatchers.IO) {

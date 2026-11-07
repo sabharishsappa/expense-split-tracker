@@ -113,3 +113,64 @@ class ReadCheckTest {
     @Test fun anonymiseKeepsShapeButHidesNumbersAndHandles() =
         assertEquals("Rs.999.99 debited from A/c XX9999 to name@bank", Diagnostics.anonymise("Rs.500.00 debited from A/c XX1234 to ravi@okhdfc"))
 }
+
+class NotificationReaderTest {
+    private fun upi(t: String, label: String = "Google Pay") = NotificationReader.parseUpiApp(t, label)
+
+    @Test fun paidInAUpiApp() {
+        val r = upi("Payment successful. Paid ₹500.00 to Swiggy")!!
+        assertEquals("UPI_OUT", r.kind); assertEquals(500.0, r.amount, 0.001); assertEquals("Swiggy", r.merchant); assertEquals("UPI", r.bank); assertEquals("Google Pay", r.card)
+    }
+    @Test fun receivedInAUpiApp() {
+        val r = upi("Received ₹1,200 from Ravi Kumar", "PhonePe")!!
+        assertEquals("UPI_IN", r.kind); assertEquals(1200.0, r.amount, 0.001); assertEquals("Ravi Kumar", r.merchant)
+    }
+    @Test fun nameFirstWording() {
+        val r = upi("Money received. Ravi Kumar paid you ₹300")!!
+        assertEquals("UPI_IN", r.kind); assertEquals(300.0, r.amount, 0.001); assertEquals("Ravi Kumar", r.merchant)
+    }
+    @Test fun requestsOffersAndFailuresAreIgnored() {
+        assertNull(upi("Payment request of ₹500 from Ravi"))
+        assertNull(upi("Cashback of ₹10 received from Paytm"))
+        assertNull(upi("Payment of ₹500 to Swiggy failed"))
+        assertNull(upi("Open the app for rewards"))
+    }
+    @Test fun messagesAppNotificationReadsLikeAnSms() {
+        val r = NotificationReader.read("com.google.android.apps.messaging", "AX-AXISBK-S", "INR 500.00 debited A/c no. XX1234 12-11-25, 10:15:30 UPI/P2M/312345678901/SWIGGY Not you? SMS BLOCKUPI Cust ID to 18002026 - Axis Bank")!!
+        assertEquals("AXIS", r.parsed!!.bank); assertTrue(r.body.startsWith(NotificationReader.PREFIX))
+    }
+    @Test fun mailPreviewNeedsABankNameAndAPayment() {
+        assertNotNull(NotificationReader.read("com.google.android.gm", "HDFC Bank InstaAlerts", "Rs.450.00 spent on HDFC Bank Card ending 1234 at AMAZON on 12-11-25")?.parsed)
+        assertNull(NotificationReader.read("com.google.android.gm", "Newsletter", "Rs 500 debited from A/c XX1234"))
+    }
+    @Test fun otherAppsAreNeverRead() {
+        assertNull(NotificationReader.read("com.example.shopping", "Order", "Paid ₹500 to Swiggy"))
+        assertFalse(NotificationReader.isWatched("com.example.shopping")); assertTrue(NotificationReader.isWatched("com.phonepe.app"))
+    }
+}
+
+class CrossSourceTest {
+    private val p = Parsed("HDFC", "UPI_OUT", 500.0, "1234", "SWIGGY", null)
+    private fun row(bank: String, body: String, at: Long, merchant: String = "Swiggy") =
+        Txn(id = at, bank = bank, card = if (bank == "UPI") "Google Pay" else "1234", kind = "UPI_OUT", amount = 500.0, merchant = merchant, txnDate = at, smsTime = at, status = "INBOX", body = body)
+    private val notifBody = NotificationReader.PREFIX + " · Google Pay] Paid"
+
+    @Test fun nothingNearInserts() = assertTrue(CrossSource.decide(emptyList(), p, "sms text", 0) is CrossSource.Decision.Insert)
+    @Test fun smsTakesOverAnEntryThatStartedAsANotification() {
+        val d = CrossSource.decide(listOf(row("UPI", notifBody, 1000)), p, "sms text", 2000)
+        assertTrue(d is CrossSource.Decision.Upgrade); assertEquals("Swiggy", (d as CrossSource.Decision.Upgrade).merchant)
+    }
+    @Test fun smsFillsAMissingMerchant() {
+        val d = CrossSource.decide(listOf(row("UPI", notifBody, 1000, merchant = "Unknown")), p, "sms text", 2000) as CrossSource.Decision.Upgrade
+        assertEquals("SWIGGY", d.merchant)
+    }
+    @Test fun twoSmsOfTheSameAmountAreBothKept() = assertTrue(CrossSource.decide(listOf(row("HDFC", "earlier sms", 1000)), p, "sms text", 2000) is CrossSource.Decision.Insert)
+    @Test fun notificationAfterSmsIsDropped() = assertTrue(CrossSource.decide(listOf(row("HDFC", "sms text", 1000)), Parsed("UPI", "UPI_OUT", 500.0, "PhonePe", "Swiggy", null), NotificationReader.PREFIX + " · PhonePe] Paid", 2000) is CrossSource.Decision.Drop)
+    @Test fun repeatedNotificationIsDropped() = assertTrue(CrossSource.decide(listOf(row("UPI", notifBody, 1000)), Parsed("UPI", "UPI_OUT", 500.0, "PhonePe", "Swiggy", null), NotificationReader.PREFIX + " · PhonePe] Paid", 2000) is CrossSource.Decision.Drop)
+    @Test fun notificationWithRealAccountUpgradesAnAppNotification() =
+        assertTrue(CrossSource.decide(listOf(row("UPI", notifBody, 1000)), p, NotificationReader.PREFIX + " · Messages] x", 2000) is CrossSource.Decision.Upgrade)
+    @Test fun sameAmountLaterThanTwoMinutesIsAnotherPayment() =
+        assertTrue(CrossSource.decide(listOf(row("UPI", notifBody, 0)), Parsed("UPI", "UPI_OUT", 500.0, "PhonePe", "Swiggy", null), NotificationReader.PREFIX + " · PhonePe] Paid", 5 * 60_000L) is CrossSource.Decision.Insert)
+    @Test fun upiAppEntriesAreNotAccounts() =
+        assertTrue(Accounts.detected(listOf(row("UPI", notifBody, 1), row("HDFC", "sms", 2))).none { it.first == "UPI" })
+}

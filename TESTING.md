@@ -64,3 +64,7 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - `BackupCompleteTest` – many splits for one person survive, every setting (UPI id, tags, saved phone numbers, groups, start date) and flag is stored, and the "what is inside" summary shown before restoring.
 - Saving reads the file back and compares counts; restoring checks counts inside the same all-or-nothing step.
 - Manual check on phone: save a backup, read the summary in the confirmation when restoring it.
+
+## Notifications, mail previews and swiping
+- `NotificationReaderTest`, `CrossSourceTest` – UPI-app wording, messages-app and mail-preview reading, only listed apps are read, and one payment seen by SMS + notification + bank app is kept once (the SMS takes over).
+- Manual checks on phone: Settings > Read notifications too > allow; pay with GPay/PhonePe and see one entry; swipe left/right between Home, Inbox, Owed, All, Summary.

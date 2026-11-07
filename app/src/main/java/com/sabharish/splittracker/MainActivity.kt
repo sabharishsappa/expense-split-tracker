@@ -126,6 +126,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
+    // swipe left / right moves between the five pages; the bottom bar and swiping stay in step
+    val pager = androidx.compose.foundation.pager.rememberPagerState(pageCount = { 5 })
+    LaunchedEffect(tab) { if (pager.currentPage != tab) pager.animateScrollToPage(tab) }
+    LaunchedEffect(pager) { androidx.compose.runtime.snapshotFlow { pager.settledPage }.collect { if (it != tab) tab = it } }
     var inboxSection by remember { mutableIntStateOf(0) }
     var showNewSplit by remember { mutableStateOf(false) }
     var showEntry by remember { mutableStateOf(false) }
@@ -209,12 +213,16 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
             Spacer(Modifier.height(6.dp))
             val loaded by vm.loaded.collectAsState()
             if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() } else
-            when (tab) {
-                0 -> HomeScreen(vm) { if (it == 11) { inboxSection = 3; tab = 1 } else { if (it == 1) inboxSection = 0; tab = it } }
-                1 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
-                2 -> PendingScreen(vm, query)
-                3 -> AllScreen(vm, query)
-                else -> SummaryScreen(vm)
+            androidx.compose.foundation.pager.HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+                Box(Modifier.fillMaxSize()) {
+                    when (page) {
+                        0 -> HomeScreen(vm) { if (it == 11) { inboxSection = 3; tab = 1 } else { if (it == 1) inboxSection = 0; tab = it } }
+                        1 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
+                        2 -> PendingScreen(vm, query)
+                        3 -> AllScreen(vm, query)
+                        else -> SummaryScreen(vm)
+                    }
+                }
             }
         }
     }

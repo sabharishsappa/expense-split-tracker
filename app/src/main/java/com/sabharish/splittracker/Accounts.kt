@@ -24,7 +24,7 @@ object Accounts {
 
     /** Accounts that show up in UPI messages (these carry the account's last digits). */
     fun detected(txns: List<Txn>): List<Pair<String, String>> =
-        txns.filter { it.kind == "UPI_IN" || it.kind == "UPI_OUT" || (it.kind == "REFUND" && it.merchant == "UPI reversal") }
+        txns.filter { it.bank != "UPI" && (it.kind == "UPI_IN" || it.kind == "UPI_OUT" || (it.kind == "REFUND" && it.merchant == "UPI reversal")) }
             .map { it.bank to it.card }.distinct().sortedBy { it.first + it.second }
 
     /** Which account a transaction moved money in or out of, if any. Debit card spends belong to the bank's only account. */

@@ -271,7 +271,8 @@ object Diagnostics {
     data class ReadCheck(
         val smsAllowed: Boolean, val receiveAllowed: Boolean, val notificationsAllowed: Boolean,
         val inboxTotal: Int, val scanned: Int, val recognised: Int, val unrecognised: Int,
-        val unrecognisedSenders: List<String>, val sdk: Int
+        val unrecognisedSenders: List<String>, val sdk: Int,
+        val notificationReadingOn: Boolean = false
     )
 
     /** Plain-language reasons why messages might not be showing up, most important first. */
@@ -289,6 +290,8 @@ object Diagnostics {
         if (r.unrecognised > 0) add("${r.unrecognised} look like bank transactions but were not understood" +
             (if (r.unrecognisedSenders.isNotEmpty()) " (from ${r.unrecognisedSenders.joinToString(", ")})" else "") +
             ". Use \"Copy without numbers\" below and send them to the developer.")
+        if (!r.notificationReadingOn && (r.recognised == 0 || r.unrecognised > 0))
+            add("Tip: turn on \"Read notifications too\" in Settings. It catches payments from Google Pay, PhonePe, your bank app and mail previews, even when texts can't be read.")
         if (!r.receiveAllowed) add("New messages will not be caught as they arrive: allow \"Receive SMS\" for the app.")
         if (!r.notificationsAllowed) add("Notifications are off, so you will not get a ping for new payments.")
     }

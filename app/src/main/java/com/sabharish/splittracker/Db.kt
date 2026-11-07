@@ -164,6 +164,10 @@ interface AppDao {
     @Query("SELECT * FROM rule WHERE ruleKey LIKE 'acct|%'")
     fun acctRules(): Flow<List<Rule>>
 
+    @Query("SELECT * FROM txn WHERE kind = :kind AND amount BETWEEN :lo AND :hi AND smsTime BETWEEN :from AND :to ORDER BY smsTime")
+    suspend fun sameAmount(kind: String, lo: Double, hi: Double, from: Long, to: Long): List<Txn>
+    @Query("UPDATE txn SET bank = :bank, card = :card, merchant = :merchant, body = :body WHERE id = :id")
+    suspend fun upgradeFromSms(id: Long, bank: String, card: String, merchant: String, body: String)
     @Query("UPDATE txn SET body = :body WHERE body = '' AND kind = :kind AND amount = :amount AND card = :card AND merchant = :merchant AND smsTime BETWEEN :from AND :to")
     suspend fun fillBody(kind: String, amount: Double, card: String, merchant: String, from: Long, to: Long, body: String)
 
