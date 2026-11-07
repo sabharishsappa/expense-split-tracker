@@ -189,3 +189,17 @@ val SplitIcon: androidx.compose.ui.graphics.vector.ImageVector by lazy {
         fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
     ).build()
 }
+
+
+/** Screen-edge space (status bar, navigation bar, keyboard) measured in the main window. Dialog windows don't
+ *  reliably receive insets, so full-screen pages read it from here instead of from their own window. */
+val LocalScreenInsets = androidx.compose.runtime.compositionLocalOf<androidx.compose.foundation.layout.PaddingValues> { androidx.compose.foundation.layout.PaddingValues() }
+
+@androidx.compose.runtime.Composable
+fun FullScreenDialog(onDismiss: () -> Unit, content: @androidx.compose.runtime.Composable () -> Unit) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        content = content
+    )
+}

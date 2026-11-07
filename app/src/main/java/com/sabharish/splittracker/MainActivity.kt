@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -126,6 +127,14 @@ class MainActivity : ComponentActivity() {
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalScreenInsets provides androidx.compose.foundation.layout.WindowInsets.safeDrawing.asPaddingValues()
+    ) { AppBody(vm, askPermissions) }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
     // swipe left / right moves between the five pages; the bottom bar and swiping stay in step
     val pager = androidx.compose.foundation.pager.rememberPagerState(pageCount = { 5 })

@@ -78,8 +78,8 @@ private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
     val queue = remember { mutableStateListOf<String>() }     // people still to message in this go
     val upi = Repo.getPref(ctx, "upi", "")
     val allTicked = others.isNotEmpty() && others.all { it.person in ticked }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = MaterialTheme.colorScheme.background) {
+    FullScreenDialog(onClose) {
+        Surface(Modifier.fillMaxSize().padding(LocalScreenInsets.current), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 Text("Split saved", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
                 Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 15.sp, color = muted())
