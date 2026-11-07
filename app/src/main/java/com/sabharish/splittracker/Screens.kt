@@ -540,7 +540,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text("Remind", maxLines = 1) }
+                    Button(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
                     OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
                         Text(if (ticked.isEmpty()) "Mark all paid" else "Paid · ${ticked.size} · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}", maxLines = 1)
                     }
@@ -585,7 +585,10 @@ fun PendingScreen(vm: MainVm, q: String) {
         }
     }
     remindFor?.let { person ->
-        ReminderDialog(person, { upi -> Reminder.build(person, rows.filter { it.person == person }, aliases, upi, System.currentTimeMillis()) }, onDismiss = { remindFor = null })
+        val chosen = (ticks[person]?.toSet() ?: emptySet())
+        // ticked bills only; with nothing ticked, everything that person owes
+        val forThem = rows.filter { it.person == person && (chosen.isEmpty() || it.shareId in chosen) }
+        ReminderDialog(person, { upi -> Reminder.build(person, forThem, aliases, upi, System.currentTimeMillis()) }, onDismiss = { remindFor = null })
     }
 }
 
