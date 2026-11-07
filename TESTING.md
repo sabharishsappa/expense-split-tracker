@@ -1,4 +1,4 @@
-# Kharcha — manual test checklist
+# Expense Tracker — manual test checklist
 
 Tick each line as you try it on your phone. "Expect" is what should happen.
 

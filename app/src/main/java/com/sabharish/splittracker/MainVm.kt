@@ -120,7 +120,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
             hiddenTags.value = Logic.parseTags(Repo.getPref(getApplication(), "hiddenTags", ""))
             ThemeState.mode = Repo.getPref(getApplication(), "theme", ThemeState.mode)
         }
-        status.value = if (n >= 0) "Restored $n transactions, tags, people and settings" else "That file is not a Kharcha backup"
+        status.value = if (n >= 0) "Restored $n transactions, tags, people and settings" else "That file is not a Expense Tracker backup"
         onDone(n >= 0)
     }
 

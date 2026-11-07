@@ -552,7 +552,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 val info = remember(text) { Backup.describe(text) }
                 val at = remember(text) { Backup.savedAt(text) }
                 Text(
-                    if (info == null) "This file is not a Kharcha backup."
+                    if (info == null) "This file is not a Expense Tracker backup."
                     else "Saved ${if (at > 0) Repo.shortDate(at) else "earlier"}\n$info\n\nEverything on this phone is replaced by it. If this is not what you expect, cancel and pick a newer file."
                 )
             },
@@ -598,7 +598,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     Section("Backup & restore", "Saves transactions, bills, tags, people, rules and settings to one file. Restore replaces what is on this phone.") {
                         Text(if (last > 0) "Last backup: ${Repo.shortDate(last)}" else "No backup yet", fontSize = 14.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { saveFile.launch("Kharcha-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
+                            OutlinedButton(onClick = { saveFile.launch("ExpenseTracker-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
                             OutlinedButton(onClick = { openFile.launch(arrayOf("*/*")) }) { Text("Restore") }
                         }
                         if (note.isNotEmpty()) Text(note, fontSize = 13.sp, color = teal())
@@ -633,7 +633,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                         OutlinedButton(onClick = { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) {
                             Text(if (listenerOn) "Manage notification access" else "Allow notification access")
                         }
-                        if (!listenerOn) Text("If Android says the setting is restricted, open Settings > Apps > Kharcha > ⋮ > Allow restricted settings, then try again.", fontSize = 12.sp, color = muted())
+                        if (!listenerOn) Text("If Android says the setting is restricted, open Settings > Apps > Expense Tracker > ⋮ > Allow restricted settings, then try again.", fontSize = 12.sp, color = muted())
                     }
                     var check by remember { mutableStateOf<Diagnostics.ReadCheck?>(null) }
                     var checking by remember { mutableStateOf(false) }
@@ -803,7 +803,7 @@ fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long)
         if (uri != null) scope.launch {
             busy = true; problem = null
             val text = try { withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" } } catch (e: Exception) { CrashLog.record(ctx, e); "" }
-            if (Backup.describe(text) == null) { busy = false; problem = "That file is not a Kharcha backup. Pick the backup file you saved earlier." }
+            if (Backup.describe(text) == null) { busy = false; problem = "That file is not a Expense Tracker backup. Pick the backup file you saved earlier." }
             else onRestore(text) { ok -> busy = false; if (!ok) problem = "Couldn't restore from that file. Nothing was changed." }
         } }
     if (step == "choice") {
