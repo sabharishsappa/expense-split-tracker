@@ -788,7 +788,36 @@ fun PeopleSelectDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onDone:
 /** First launch: from when should old messages be brought in? Later ones always arrive live. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun WelcomeDialog(onPick: (Long) -> Unit) {
+fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long) -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var step by remember { mutableStateOf("choice") }
+    var problem by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            busy = true; problem = null
+            val text = try { withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" } } catch (e: Exception) { CrashLog.record(ctx, e); "" }
+            if (Backup.describe(text) == null) { busy = false; problem = "That file is not a Split Tracker backup. Pick the backup file you saved earlier." }
+            else onRestore(text) { ok -> busy = false; if (!ok) problem = "Couldn't restore from that file. Nothing was changed." }
+        } }
+    if (step == "choice") {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Welcome 👋") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Is this your first time, or do you have a backup file from before?", fontWeight = FontWeight.SemiBold)
+                    Text("Restoring brings back your transactions, people, tags, name and settings, so there is nothing to set up again.", fontSize = 13.sp, color = muted())
+                    if (busy) Text("Restoring…", color = teal())
+                    problem?.let { Text(it, fontSize = 13.sp, color = amber()) }
+                }
+            },
+            confirmButton = { TextButton(enabled = !busy, onClick = { step = "new" }) { Text("I'm new") } },
+            dismissButton = { TextButton(enabled = !busy, onClick = { openBackup.launch(arrayOf("*/*")) }) { Text("Restore backup") } }
+        )
+        return
+    }
     val options = remember { Bills.trackFromOptions(System.currentTimeMillis()) }
     var sel by remember { mutableStateOf(options.getOrNull(1)?.second ?: options.first().second) }
     var picking by remember { mutableStateOf(false) }

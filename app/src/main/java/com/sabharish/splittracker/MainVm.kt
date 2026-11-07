@@ -111,9 +111,9 @@ class MainVm(app: Application) : AndroidViewModel(app) {
 
     suspend fun backupText(): String { val t = Repo.exportBackup(getApplication()); lastBackup.value = System.currentTimeMillis(); return t }
 
-    fun restore(text: String) = viewModelScope.launch(safe) {
+    fun restore(text: String, onDone: (Boolean) -> Unit = {}) = viewModelScope.launch(safe) {
         val n = try { Repo.restoreBackup(getApplication(), text) } catch (e: IllegalStateException) {
-            CrashLog.record(getApplication(), e); status.value = "Restore stopped — nothing on this phone was changed"; return@launch
+            CrashLog.record(getApplication(), e); status.value = "Restore stopped — nothing on this phone was changed"; onDone(false); return@launch
         }
         if (n >= 0) {
             customTags.value = Logic.parseTags(Repo.getPref(getApplication(), "tags", ""))
@@ -121,6 +121,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
             ThemeState.mode = Repo.getPref(getApplication(), "theme", ThemeState.mode)
         }
         status.value = if (n >= 0) "Restored $n transactions, tags, people and settings" else "That file is not a Split Tracker backup"
+        onDone(n >= 0)
     }
 
     fun clearStatus() { status.value = "" }

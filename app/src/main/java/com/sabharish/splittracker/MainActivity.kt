@@ -239,12 +239,21 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     }
     val appCtx = androidx.compose.ui.platform.LocalContext.current
     var welcome by remember { mutableStateOf(Repo.getPref(appCtx, "trackFrom", "").isEmpty() && !appCtx.getSharedPreferences("st", Context.MODE_PRIVATE).getBoolean("imported2", false)) }
-    if (welcome) WelcomeDialog { from ->
-        Repo.putPref(appCtx, "trackFrom", from.toString())
-        welcome = false
-        askPermissions()
-    }
     var askName by remember { mutableStateOf(Repo.getPref(appCtx, "selfAsked", "").isEmpty()) }
+    if (welcome) WelcomeDialog(
+        onRestore = { text, done ->
+            // a restored phone already has its name and settings, so skip the name question too
+            vm.restore(text) { ok ->
+                if (ok) { Repo.putPref(appCtx, "selfAsked", "1"); askName = false; welcome = false; askPermissions() }
+                done(ok)
+            }
+        },
+        onPick = { from ->
+            Repo.putPref(appCtx, "trackFrom", from.toString())
+            welcome = false
+            askPermissions()
+        }
+    )
     if (!welcome && askName) NameDialog { n ->
         if (n.isNotEmpty()) Repo.putPref(appCtx, "selfnames", n)
         Repo.putPref(appCtx, "selfAsked", "1"); askName = false
