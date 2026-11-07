@@ -174,6 +174,7 @@ private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, on
 @Composable
 private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDone: () -> Unit) {
     val recents by vm.recents.collectAsState()
+    val groups = remember(Epoch.value) { Groups.decode(Repo.getPref(androidx.compose.ui.platform.LocalContext.current, "groups", "")) }
     var tagMenu by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     var tag by remember { mutableStateOf("") }
@@ -196,6 +197,12 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDo
                 Logic.selectedFirst(chips, people.toList()).forEach { p ->
                     Pill(if (p == Repo.ME) "Me" else p.substringBefore(" "), { if (p in people) people.remove(p) else people.add(p) }, selected = p in people, compact = true)
                 }
+                groups.forEach { g ->
+                    val on = g.people.all { it in people }
+                    Pill(g.name, {
+                        if (on) people.removeAll(g.people.toSet()) else (listOf(Repo.ME) + g.people).forEach { if (it !in people) people.add(it) }
+                    }, selected = on, compact = true)
+                }
                 Pill("More", { more = true }, compact = true)
             }
             Spacer(Modifier.size(8.dp))
@@ -213,6 +220,7 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDo
 
 @Composable
 private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> Unit) {
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
     val recents by vm.recents.collectAsState()
     var sheetFor by remember { mutableStateOf<Pair<Txn, List<String>>?>(null) }
     // chosen people live here, not inside each card, so scrolling or searching never loses them
@@ -226,6 +234,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         return
     }
     val aliasesNow by vm.aliases.collectAsState()
+    val groups = remember(Epoch.value) { Groups.decode(Repo.getPref(appCtx, "groups", "")) }
     val picked = remember(Epoch.value) { mutableStateListOf<Long>() }
     var selecting by remember(Epoch.value) { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = selecting) { picked.clear(); selecting = false }
@@ -245,10 +254,10 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliasesNow, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else SpendCard(t, vm, recents, undoable, sel = chosenBy[t.id] ?: emptyList(), setSel = { chosenBy[t.id] = it }, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen }
+            else SpendCard(t, vm, recents, groups, undoable, sel = chosenBy[t.id] ?: emptyList(), setSel = { chosenBy[t.id] = it }, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen }
         }
     }
-    sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen) }
+    sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen, groups = groups) }
     if (confirmAll) {
         AlertDialog(
             onDismissRequest = { confirmAll = false },
@@ -261,7 +270,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
 }
 
 @Composable
-private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long, String) -> Unit, sel: List<String>, setSel: (List<String>) -> Unit, onSimilar: () -> Unit = {}, onSelect: () -> Unit = {}, onMore: (Txn, List<String>) -> Unit) {
+private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Groups.Group>, undoable: (Long, String) -> Unit, sel: List<String>, setSel: (List<String>) -> Unit, onSimilar: () -> Unit = {}, onSelect: () -> Unit = {}, onMore: (Txn, List<String>) -> Unit) {
     val aliases by vm.aliases.collectAsState()
     val sug by produceState<Rule?>(null, t.id) { value = vm.suggestion(t) }
     var catMenu by remember { mutableStateOf(false) }
@@ -306,6 +315,10 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, undoable: (Long
                 Pill("As before: $label", { setSel(asBefore) })
             }
             ordered.filter { it !in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }) }
+            groups.forEach { g ->
+                val on = g.people.all { it in sel }
+                Pill(g.name, { setSel(if (on) sel - g.people.toSet() else (sel + Repo.ME + g.people).distinct()) }, selected = on)
+            }
             Pill("More…", { onMore(t, sel.toList()) })
         }
         if (sel.isNotEmpty()) {

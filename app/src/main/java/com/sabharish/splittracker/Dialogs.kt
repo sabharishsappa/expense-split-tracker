@@ -382,8 +382,7 @@ fun PersonPickerDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onPick:
         title = { Text(title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true,
-                    label = { Text("Search or type a name") }, modifier = Modifier.fillMaxWidth())
+                SearchBox(query, { query = it }, "Search or type a name")
                 if (q.isNotEmpty() && pool.none { it.equals(q, true) }) {
                     Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.fillMaxWidth().clickable { onPick(q) }.padding(vertical = 10.dp))
@@ -526,7 +525,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
             note = try {
                 val text = vm.backupText()
                 withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } }
-                "Backup saved"
+                "Backup saved · " + (Backup.describe(text) ?: "")
             } catch (e: Exception) { CrashLog.record(ctx, e); "Couldn't save the backup file" }
         }
     }
@@ -541,8 +540,15 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
         AlertDialog(
             onDismissRequest = { confirmRestore = null },
             title = { Text("Restore this backup?") },
-            text = { Text("Everything on this phone is replaced by the backup.") },
-            confirmButton = { TextButton(onClick = { vm.restore(text); confirmRestore = null; onDismiss() }) { Text("Restore") } },
+            text = {
+                val info = remember(text) { Backup.describe(text) }
+                val at = remember(text) { Backup.savedAt(text) }
+                Text(
+                    if (info == null) "This file is not a Split Tracker backup."
+                    else "Saved ${if (at > 0) Repo.shortDate(at) else "earlier"}\n$info\n\nEverything on this phone is replaced by it. If this is not what you expect, cancel and pick a newer file."
+                )
+            },
+            confirmButton = { TextButton(enabled = remember(text) { Backup.describe(text) != null }, onClick = { vm.restore(text); confirmRestore = null; onDismiss() }) { Text("Restore") } },
             dismissButton = { TextButton(onClick = { confirmRestore = null }) { Text("Cancel") } }
         )
     }
@@ -739,8 +745,7 @@ fun PeopleSelectDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onDone:
         title = { Text(title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true,
-                    label = { Text("Search or type a name") }, modifier = Modifier.fillMaxWidth())
+                SearchBox(query, { query = it }, "Search or type a name")
                 if (q.isNotEmpty() && pool.none { it.equals(q, true) }) {
                     Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.fillMaxWidth().clickable { chosen.add(q); query = "" }.padding(vertical = 10.dp))

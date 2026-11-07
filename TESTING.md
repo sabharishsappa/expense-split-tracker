@@ -59,3 +59,8 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - `DiagnosticsTest` – which unread messages are worth listing under Settings > Messages I couldn't read.
 - Restore runs in one database transaction and keeps `before_restore.json` first; the database file is copied before an upgrade.
 - Manual checks on phone: deny SMS permission (banner shows), first launch (welcome, then permissions, then name), "Wrong match? Undo" on an auto-matched payment.
+
+## Complete backups
+- `BackupCompleteTest` – many splits for one person survive, every setting (UPI id, tags, saved phone numbers, groups, start date) and flag is stored, and the "what is inside" summary shown before restoring.
+- Saving reads the file back and compares counts; restoring checks counts inside the same all-or-nothing step.
+- Manual check on phone: save a backup, read the summary in the confirmation when restoring it.

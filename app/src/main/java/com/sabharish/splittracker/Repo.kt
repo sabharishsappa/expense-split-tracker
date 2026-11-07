@@ -502,8 +502,16 @@ object Repo {
     // ---------- backup ----------
     suspend fun exportBackup(ctx: Context): String {
         val dao = Db.get(ctx).dao()
-        val prefs = Backup.PREF_KEYS.associateWith { getPref(ctx, it, "") }.filterValues { it.isNotEmpty() }
-        val json = Backup.toJson(BackupData(dao.allTxnsList(), dao.allSharesList(), dao.allSettlementsList(), dao.allRulesList(), prefs, dao.allBills(), dao.allPayables()), System.currentTimeMillis())
+        // every setting you have made: UPI id, tags, saved phone numbers, groups, start date, streak, theme…
+        val all = prefs(ctx).all
+        val prefs = all.entries.filter { it.value is String && Backup.keep(it.key) && (it.value as String).isNotEmpty() }.associate { it.key to it.value as String }
+        val flags = all.entries.filter { it.value is Boolean && Backup.keep(it.key) }.associate { it.key to it.value as Boolean }
+        val data = BackupData(dao.allTxnsList(), dao.allSharesList(), dao.allSettlementsList(), dao.allRulesList(), prefs, dao.allBills(), dao.allPayables(), flags)
+        val json = Backup.toJson(data, System.currentTimeMillis())
+        // read it back before trusting it: a backup that cannot be read is worse than none
+        val back = Backup.fromJson(json)
+        check(back != null && back.txns.size == data.txns.size && back.shares.size == data.shares.size &&
+            back.rules.size == data.rules.size && back.settlements.size == data.settlements.size && back.prefs == data.prefs && back.flags == data.flags) { "Backup check failed" }
         putPref(ctx, "lastBackup", System.currentTimeMillis().toString())
         return json
     }
@@ -522,8 +530,18 @@ object Repo {
             d.rules.forEach { dao.putRule(it) }
             d.bills.forEach { dao.restoreBill(it) }
             d.payables.forEach { dao.restorePayable(it) }
+            // all of it must be there, or nothing changes
+            check(dao.allTxnsList().size == d.txns.size && dao.allSharesList().size == d.shares.size &&
+                dao.allSettlementsList().size == d.settlements.size && dao.allRulesList().size == d.rules.size) { "Restore check failed" }
         }
-        d.prefs.forEach { (k, v) -> putPref(ctx, k, v) }
+        prefs(ctx).edit().apply {
+            d.prefs.forEach { (k, v) -> putString(k, v) }
+            d.flags.forEach { (k, v) -> putBoolean(k, v) }
+            // an older backup has no start date: use the oldest restored message, and do not show the welcome again
+            if (d.prefs["trackFrom"].isNullOrEmpty() && getPref(ctx, "trackFrom", "").isEmpty())
+                putString("trackFrom", (d.txns.minOfOrNull { it.smsTime } ?: System.currentTimeMillis()).toString())
+            putBoolean("imported2", true)
+        }.apply()
         return d.txns.size
     }
 

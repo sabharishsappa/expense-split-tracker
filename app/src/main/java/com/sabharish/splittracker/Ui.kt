@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -154,4 +155,18 @@ fun SmsBanner() {
             ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + ctx.packageName)))
         }) { Text("Open settings") }
     }
+}
+
+
+/** The one search field used everywhere: it takes the cursor as soon as it appears, so you can type straight away. */
+@Composable
+fun SearchBox(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier.fillMaxWidth()) {
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    androidx.compose.material3.OutlinedTextField(
+        value = value, onValueChange = onChange, singleLine = true,
+        modifier = modifier.focusRequester(focus),
+        placeholder = { Text(placeholder) },
+        leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = null) }
+    )
 }

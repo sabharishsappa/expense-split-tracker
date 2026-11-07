@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
@@ -123,7 +124,6 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
     var inboxSection by remember { mutableIntStateOf(0) }
     var showNewSplit by remember { mutableStateOf(false) }
-    var addMenu by remember { mutableStateOf(false) }
     var showEntry by remember { mutableStateOf(false) }
     var opened by remember { mutableStateOf<Txn?>(null) }
     val openId by vm.openId.collectAsState()
@@ -189,12 +189,9 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(titles[tab], fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (tab in 0..3) Box {
-                        IconButton(onClick = { addMenu = true }) { Icon(Icons.Default.Add, contentDescription = "Add") }
-                        androidx.compose.material3.DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
-                            androidx.compose.material3.DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, text = { Text("Split a bill") }, onClick = { addMenu = false; showNewSplit = true })
-                            androidx.compose.material3.DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }, text = { Text("Spent, received or moved") }, onClick = { addMenu = false; showEntry = true })
-                        }
+                    if (tab in 0..3) {
+                        IconButton(onClick = { showNewSplit = true }) { Icon(Icons.Default.Share, contentDescription = "Split a bill") }
+                        IconButton(onClick = { showEntry = true }) { Icon(Icons.Default.AddCircle, contentDescription = "Add an expense") }
                     }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                         Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
@@ -203,10 +200,7 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
                 }
             }
             if (searching && tab in 1..3) {
-                androidx.compose.material3.OutlinedTextField(
-                    value = query, onValueChange = { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text(if (tab == 2) "Search a person or bill" else "Name, amount, tag or message") }
-                )
+                SearchBox(query, { query = it }, if (tab == 2) "Search a person or bill" else "Name, amount, tag or message")
             }
             Spacer(Modifier.height(6.dp))
             val loaded by vm.loaded.collectAsState()

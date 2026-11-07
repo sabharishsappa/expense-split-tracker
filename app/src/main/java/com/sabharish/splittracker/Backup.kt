@@ -11,7 +11,8 @@ data class BackupData(
     val rules: List<Rule>,
     val prefs: Map<String, String>,
     val bills: List<Bill> = emptyList(),
-    val payables: List<Payable> = emptyList()
+    val payables: List<Payable> = emptyList(),
+    val flags: Map<String, Boolean> = emptyMap()
 )
 
 /** Pure JSON (de)serialisation. No Android classes besides org.json. */
@@ -19,6 +20,25 @@ object Backup {
     const val VERSION = 1
     /** Settings worth keeping: UPI id, own-name words, custom tags, theme. */
     val PREF_KEYS = listOf("upi", "selfnames", "tags", "hiddenTags", "theme", "groups")
+
+    /** Only these are left out: they describe this phone, not you. Everything else you set is saved. */
+    private val SKIP = setOf("lastBackup", "unparsed")
+    fun keep(key: String) = key !in SKIP
+
+    /** What a backup holds, in words, so it can be checked before restoring and after saving. */
+    fun describe(text: String): String? {
+        val d = fromJson(text) ?: return null
+        val people = d.shares.map { it.person }.filter { it != Logic.ME }.distinct().size
+        val tags = Logic.parseTags(d.prefs["tags"] ?: "").size
+        val parts = mutableListOf(
+            "${d.txns.size} transactions", "${d.shares.size} split shares", "$people people",
+            "${d.rules.size} remembered choices", "$tags own tags"
+        )
+        if (d.bills.isNotEmpty()) parts += "${d.bills.size} bills"
+        if (d.payables.isNotEmpty()) parts += "${d.payables.size} amounts you owe"
+        parts += if ((d.prefs["upi"] ?: "").isNotBlank()) "UPI ID saved" else "no UPI ID"
+        return parts.joinToString(" · ")
+    }
 
     fun toJson(d: BackupData, now: Long): String {
         val o = JSONObject()
@@ -57,6 +77,7 @@ object Backup {
                 .put("paid", p.paid).put("date", p.date).put("note", p.note).put("txnId", p.txnId)) }
         })
         o.put("prefs", JSONObject().apply { d.prefs.forEach { (k, v) -> put(k, v) } })
+        o.put("flags", JSONObject().apply { d.flags.forEach { (k, v) -> put(k, v) } })
         return o.toString()
     }
 
@@ -70,7 +91,10 @@ object Backup {
             }
             val prefs = mutableMapOf<String, String>()
             o.optJSONObject("prefs")?.let { p -> p.keys().forEach { k -> prefs[k] = p.getString(k) } }
+            val flags = mutableMapOf<String, Boolean>()
+            o.optJSONObject("flags")?.let { p -> p.keys().forEach { k -> flags[k] = p.getBoolean(k) } }
             BackupData(
+                flags = flags,
                 txns = arr("txns") { j ->
                     Txn(id = j.getLong("id"), bank = j.getString("bank"), card = j.getString("card"), kind = j.getString("kind"),
                         amount = j.getDouble("amount"), merchant = j.getString("merchant"), txnDate = j.getLong("txnDate"),
