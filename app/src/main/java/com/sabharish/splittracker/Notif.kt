@@ -114,3 +114,33 @@ object CrossSource {
         return if (twin.bank == "UPI" && p.bank != "UPI") Decision.Upgrade(twin, twin.merchant) else Decision.Drop
     }
 }
+
+
+/**
+ * Two bank messages about one payment must never become two entries. The same SMS can reach the app twice
+ * (live, then again when old messages are read: the two clocks differ by seconds or minutes), and a bank may
+ * also send two alerts for one swipe. Both cases are caught here. Notification copies are handled by [CrossSource].
+ */
+object Dedupe {
+    const val BODY_WINDOW_MS = 30 * 60_000L     // the very same message text, this close in time
+    const val ALERT_WINDOW_MS = 90_000L          // two alerts, same card and amount, this close
+
+    private fun isNotif(t: Txn) = t.body.startsWith(NotificationReader.PREFIX)
+    private fun norm(s: String) = s.lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+
+    private fun similar(a: String, b: String): Boolean {
+        val x = norm(a); val y = norm(b)
+        if (x.isEmpty() || y.isEmpty() || x == "unknown" || y == "unknown") return true
+        return x == y || x.contains(y) || y.contains(x)
+    }
+
+    /** [existing]: entries of the same kind and amount near [at]. */
+    fun isDuplicate(existing: List<Txn>, p: Parsed, body: String, at: Long): Boolean {
+        if (body.startsWith(NotificationReader.PREFIX)) return false
+        return existing.filter { !isNotif(it) }.any { e ->
+            val dt = kotlin.math.abs(e.smsTime - at)
+            (body.isNotBlank() && e.body == body && dt <= BODY_WINDOW_MS) ||
+                (p.card.isNotBlank() && e.card == p.card && dt <= ALERT_WINDOW_MS && similar(e.merchant, p.merchant))
+        }
+    }
+}

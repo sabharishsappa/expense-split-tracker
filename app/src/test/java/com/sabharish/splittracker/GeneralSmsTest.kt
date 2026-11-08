@@ -174,3 +174,32 @@ class CrossSourceTest {
     @Test fun upiAppEntriesAreNotAccounts() =
         assertTrue(Accounts.detected(listOf(row("UPI", notifBody, 1), row("HDFC", "sms", 2))).none { it.first == "UPI" })
 }
+
+
+class DedupeTest {
+    private fun e(id: Long, at: Long, body: String, card: String = "1234", merchant: String = "SWIGGY", amt: Double = 250.0) =
+        Txn(id = id, bank = "HDFC", card = card, kind = "SPEND", amount = amt, merchant = merchant, txnDate = at, smsTime = at, status = "INBOX", body = body)
+    private fun p(card: String = "1234", merchant: String = "SWIGGY", amt: Double = 250.0) = Parsed("HDFC", "SPEND", amt, merchant, card, null)
+
+    @org.junit.Test fun sameMessageReadTwiceWithDifferentClocksIsOne() {
+        val first = e(1, 1_000_000, "Rs 250 spent on card 1234 at SWIGGY")
+        org.junit.Assert.assertTrue(Dedupe.isDuplicate(listOf(first), p(), "Rs 250 spent on card 1234 at SWIGGY", 1_000_000 + 5 * 60_000))
+    }
+    @org.junit.Test fun twoAlertsForOneSwipeAreOne() {
+        val first = e(1, 1_000_000, "HDFC alert: Rs 250 at SWIGGY BANGALORE", merchant = "SWIGGY BANGALORE")
+        org.junit.Assert.assertTrue(Dedupe.isDuplicate(listOf(first), p(merchant = "SWIGGY"), "Card 1234 used Rs 250 SWIGGY", 1_000_000 + 40_000))
+    }
+    @org.junit.Test fun twoRealPurchasesMinutesApartStayTwo() {
+        val first = e(1, 1_000_000, "Rs 25 spent on card 1234 at CHAI 10:01", amt = 25.0, merchant = "CHAI")
+        org.junit.Assert.assertFalse(Dedupe.isDuplicate(listOf(first), p(amt = 25.0, merchant = "CHAI"), "Rs 25 spent on card 1234 at CHAI 10:09", 1_000_000 + 8 * 60_000))
+    }
+    @org.junit.Test fun differentCardOrMerchantStaysSeparate() {
+        val first = e(1, 1_000_000, "a")
+        org.junit.Assert.assertFalse(Dedupe.isDuplicate(listOf(first), p(card = "9999"), "b", 1_000_000 + 10_000))
+        org.junit.Assert.assertFalse(Dedupe.isDuplicate(listOf(first), p(merchant = "UBER"), "c", 1_000_000 + 10_000))
+    }
+    @org.junit.Test fun notificationCopiesAreLeftToCrossSource() {
+        val notif = e(1, 1_000_000, NotificationReader.PREFIX + " · Messages] Rs 250")
+        org.junit.Assert.assertFalse(Dedupe.isDuplicate(listOf(notif), p(), "Rs 250 spent", 1_000_000 + 10_000))
+    }
+}

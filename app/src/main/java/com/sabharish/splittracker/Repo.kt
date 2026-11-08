@@ -82,7 +82,9 @@ object Repo {
                 return@withTransaction null
             }
             // the same payment may also arrive by notification, bank app or email: keep one entry
-            val near = dao.sameAmount(p.kind, p.amount - 0.011, p.amount + 0.011, smsTime - CrossSource.WINDOW_MS, smsTime + CrossSource.WINDOW_MS)
+            val cands = dao.sameAmount(p.kind, p.amount - 0.011, p.amount + 0.011, smsTime - Dedupe.BODY_WINDOW_MS, smsTime + Dedupe.BODY_WINDOW_MS)
+            if (Dedupe.isDuplicate(cands, p, body, smsTime)) return@withTransaction null
+            val near = cands.filter { Math.abs(it.smsTime - smsTime) <= CrossSource.WINDOW_MS }
             when (val d = CrossSource.decide(near, p, body, smsTime)) {
                 is CrossSource.Decision.Drop -> return@withTransaction null
                 is CrossSource.Decision.Upgrade -> { dao.upgradeFromSms(d.twin.id, p.bank, p.card, d.merchant, body); return@withTransaction null }

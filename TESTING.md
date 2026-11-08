@@ -84,3 +84,8 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - A tagged spend shows tag and people in one row; all-yours shows "Mine".
 - ⋮ on any card (Inbox spend, All list, own transfer) has Delete; own transfer deletes both halves.
 - Long-press any card in All to start selecting; Select mode has Delete for the ticked ones.
+
+## No duplicates
+- The same bank SMS read twice (live, then Settings > Import older messages) gives one entry.
+- Two alerts for one card swipe (same card, amount, similar shop, within 90 seconds) give one entry.
+- Two genuine purchases of the same amount minutes apart stay two.
