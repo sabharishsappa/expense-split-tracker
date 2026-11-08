@@ -157,13 +157,18 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
 
 /** Compact row shown while selecting: tick, merchant, amount. */
 @Composable
-private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, onToggle: () -> Unit) {
+private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, partner: Txn? = null, onToggle: () -> Unit) {
     AppCard {
         Row(Modifier.fillMaxWidth().clickable(onClick = onToggle), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = checked, onCheckedChange = { onToggle() })
             Column(Modifier.weight(1f)) {
-                Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("${Repo.shortDate(t.txnDate)} · ${if (t.category.isBlank()) "no tag" else t.category}", fontSize = 12.sp, color = muted())
+                if (partner != null) {
+                    Text("Own transfer", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
+                } else {
+                    Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${Repo.shortDate(t.txnDate)} · ${if (t.category.isBlank()) "no tag" else t.category}", fontSize = 12.sp, color = muted())
+                }
             }
             Text(Repo.money(t.amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
@@ -172,7 +177,8 @@ private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, on
 
 /** Group edit: choose a tag and/or people in one row, then the single ✓ applies it to every ticked bill. */
 @Composable
-private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDone: () -> Unit) {
+private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDone: () -> Unit, partners: Map<Long, Txn> = emptyMap()) {
+    var confirmDelete by remember { mutableStateOf(false) }
     val recents by vm.recents.collectAsState()
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val groups = remember(Epoch.value) { Groups.decode(Repo.getPref(ctx, "groups", "")) }
@@ -186,6 +192,7 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDo
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (picked.isEmpty()) "Select bills" else "${picked.size} selected · ${Repo.money(picked.sumOf { it.amount })}", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             TextButton(onClick = onSelectAll) { Text("Select all") }
+            if (picked.isNotEmpty()) TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             TextButton(onClick = onDone) { Text("Cancel") }
         }
         Spacer(Modifier.height(6.dp))
@@ -207,7 +214,7 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDo
                 Pill("More", { more = true }, compact = true)
             }
             Spacer(Modifier.size(8.dp))
-            FilledIconButton(enabled = ready, modifier = Modifier.size(44.dp), onClick = { vm.bulkApply(picked, tag, people.toList()); onDone() }) {
+            FilledIconButton(enabled = ready, modifier = Modifier.size(44.dp), onClick = { vm.bulkApply(picked.filter { it.status != "SELF" }, tag, people.toList()); onDone() }) {
                 Icon(Icons.Default.Check, contentDescription = "Apply to all")
             }
         }
@@ -217,6 +224,7 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDo
         }
     }
     if (more) PeopleSelectDialog(vm, "Who were these for?", { more = false }) { chosen -> chosen.forEach { if (it !in people) people.add(it) }; more = false }
+    if (confirmDelete) ConfirmDelete(picked.size, { confirmDelete = false }) { confirmDelete = false; vm.deleteAll(picked + picked.mapNotNull { partners[it.id] }); onDone() }
 }
 
 @Composable
@@ -280,6 +288,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
     var moreMenu by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf(false) }
     var refundFor by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     fun quick(shares: List<NewShare>, label: String) {
         vm.tag(t, shares, t.category, false, false)
         undoable(t.id, label)
@@ -295,6 +304,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
                     DropdownMenuItem(text = { Text("Payment failed") }, onClick = { moreMenu = false; vm.markFailed(t) })
                     if (t.kind == "UPI_OUT") DropdownMenuItem(text = { Text("Own transfer") }, onClick = { moreMenu = false; vm.ownTransfer(t) })
                     DropdownMenuItem(text = { Text("Not a spend (skip)") }, onClick = { moreMenu = false; vm.ignore(t) })
+                    DropdownMenuItem(text = { Text("Delete", color = MaterialTheme.colorScheme.error) }, onClick = { moreMenu = false; confirmDelete = true })
                 }
             }
         }
@@ -349,6 +359,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
     }
     if (rename) AliasDialog(t.merchant, aliases[Repo.aliasKey(t.merchant).removePrefix("alias|")] ?: "", { rename = false }) { vm.setAlias(t.merchant, it); rename = false }
     if (refundFor) RefundDialog(t, { refundFor = false }) { a -> refundFor = false; vm.refunded(t, a) }
+    if (confirmDelete) ConfirmDelete(1, { confirmDelete = false }) { confirmDelete = false; vm.deleteAll(listOf(t)) }
 }
 
 @Composable
@@ -668,13 +679,13 @@ fun AllScreen(vm: MainVm, q: String) {
         Spacer(Modifier.height(6.dp))
         BulkBar(vm, pickedTxns,
             onSelectAll = { picked.clear(); picked.addAll(shown.map { it.id }) },
-            onDone = { picked.clear(); selecting = false })
+            onDone = { picked.clear(); selecting = false }, partners = merged.partner)
     } else TextButton(onClick = { selecting = true }) { Text("Select") }
     Spacer(Modifier.height(4.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(shown, key = { it.id }) { t ->
-            if (selecting) SelectRow(t, aliases, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id]) { sheetFor = it }
+            if (selecting) SelectRow(t, aliases, t.id in picked, merged.partner[t.id]) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
+            else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id], onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { sheetFor = it }
         }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
@@ -694,17 +705,26 @@ private fun FilterPill(title: String, options: List<String>, selected: String, o
 }
 
 @Composable
-private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, String>, partner: Txn? = null, onChange: (Txn) -> Unit) {
+private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, String>, partner: Txn? = null, onSelect: () -> Unit = {}, onChange: (Txn) -> Unit) {
     var moreMenu by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val deleteItem: @Composable () -> Unit = {
+        DropdownMenuItem(text = { Text("Delete", color = MaterialTheme.colorScheme.error) }, onClick = { moreMenu = false; confirmDelete = true })
+    }
+    if (confirmDelete) ConfirmDelete(1, { confirmDelete = false }) { confirmDelete = false; vm.deleteAll(listOfNotNull(t, partner)) }
     if (t.status == "SELF" && partner != null) {
-        AppCard {
+        AppCard(onLongClick = onSelect) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 8.dp)) {
                     Text("Own transfer", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 13.sp, color = muted())
                 }
                 Text(Repo.money(t.amount), fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Box {
+                    IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                    DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) { deleteItem() }
+                }
             }
         }
         return
@@ -721,33 +741,34 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
         "BILLPAY" -> "Card bill payment"
         else -> ""
     }
-    AppCard(onClick = if (spendLike && t.status != "REVERSED") ({ onChange(t) }) else null) {
+    AppCard(onLongClick = onSelect, onClick = if (spendLike && t.status != "REVERSED") ({ onChange(t) }) else null) {
         TxnHeader(t, aliases, incoming) {
-            if (spendLike) Box {
+            Box {
                 IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                    if (t.status == "TAGGED" || t.status == "INBOX") DropdownMenuItem(text = { Text("Change who / tag") }, onClick = { moreMenu = false; onChange(t) })
-                    DropdownMenuItem(text = { Text("Rename merchant") }, onClick = { moreMenu = false; rename = true })
-                    if (t.status != "FAILED" && t.status != "REVERSED") DropdownMenuItem(text = { Text("Payment failed") }, onClick = { moreMenu = false; vm.markFailed(t) })
+                    if (spendLike) {
+                        if (t.status == "TAGGED" || t.status == "INBOX") DropdownMenuItem(text = { Text("Change who / tag") }, onClick = { moreMenu = false; onChange(t) })
+                        DropdownMenuItem(text = { Text("Rename merchant") }, onClick = { moreMenu = false; rename = true })
+                        if (t.status != "FAILED" && t.status != "REVERSED") DropdownMenuItem(text = { Text("Payment failed") }, onClick = { moreMenu = false; vm.markFailed(t) })
+                    }
+                    deleteItem()
                 }
             }
         }
         if (state.isNotEmpty()) Text(state, fontSize = 13.sp, color = if (t.status == "INBOX" || t.status == "FAILED") amber() else muted())
         if (t.note.isNotBlank()) Text(t.note, fontSize = 13.sp, color = muted())
         if (t.status == "REPAID" && t.note.contains("matched automatically")) TextButton(onClick = { vm.undoAutoSettle(t) }) { Text("Wrong match? Undo") }
-        if (spendLike) {
-            Spacer(Modifier.height(6.dp))
-            Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { onChange(t) })
-        }
         val live = ss.filter { it.amount > 0.004 }
-        if (live.isNotEmpty()) {
+        if (spendLike || live.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
-            // same chip look as the Inbox card and the edit page
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                live.forEach { s ->
+            // tag and people sit in one compact row; a spend that is all yours just says "Mine"
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (spendLike) Pill(if (t.category.isBlank()) "+ Add tag" else t.category, { onChange(t) }, compact = true)
+                if (live.isNotEmpty() && live.all { it.person == Repo.ME }) Pill("Mine", { onChange(t) }, compact = true)
+                else live.forEach { s ->
                     val label = if (s.person == Repo.ME) "Me" else s.person.substringBefore(" ")
                     val st = if (s.person == Repo.ME) "" else if (s.settled >= s.amount - 0.005) " ✓ paid" else " · owes ${Repo.money(s.amount - s.settled)}"
-                    Pill("$label ${Repo.money(s.amount)}$st", { onChange(t) })
+                    Pill("$label ${Repo.money(s.amount)}$st", { onChange(t) }, compact = true)
                 }
             }
         }
@@ -847,4 +868,17 @@ fun SummaryScreen(vm: MainVm) {
         }
         if (inMonth.isEmpty()) item { Text("Nothing tagged for this month yet.", color = muted(), fontSize = 15.sp) }
     }
+}
+
+
+/** One confirmation for deleting one or many transactions (an own transfer counts as one). */
+@Composable
+private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (count == 1) "Delete this transaction?" else "Delete $count transactions?") },
+        text = { Text("They are removed together with their splits. Use this for duplicates or entries you don't want. They won't come back when messages are read again.") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }

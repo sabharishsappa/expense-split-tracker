@@ -148,6 +148,10 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     }
     fun delete(t: Txn) = viewModelScope.launch(safe) { Repo.deleteTxn(getApplication(), t); status.value = "Transaction deleted" }
     fun refunded(t: Txn, amount: Double) = viewModelScope.launch(safe) { Repo.markRefunded(getApplication(), t, amount); status.value = "Refund marked as received" }
+    fun deleteAll(list: List<Txn>) = viewModelScope.launch(safe) {
+        list.forEach { Repo.deleteTxn(getApplication(), it) }
+        status.value = if (list.size == 1) "Transaction deleted" else "${list.size} transactions deleted"
+    }
     fun ignore(t: Txn) = viewModelScope.launch(safe) { Repo.ignore(getApplication(), t) }
     fun setCategory(t: Txn, c: String) = viewModelScope.launch(safe) {
         val n = Repo.setCategory(getApplication(), t, c)

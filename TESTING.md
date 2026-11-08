@@ -79,3 +79,8 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - "Refund received" is in a spend's ⋮ menu, in the transaction sheet, and on each card in Refunds. Full amount closes it; a smaller amount reduces what you spent.
 - Owed page scrolls as one list; each person shows three bills, "Show all" opens the rest.
 - App name is "Paisa Log".
+
+## Compact cards, delete from lists
+- A tagged spend shows tag and people in one row; all-yours shows "Mine".
+- ⋮ on any card (Inbox spend, All list, own transfer) has Delete; own transfer deletes both halves.
+- Long-press any card in All to start selecting; Select mode has Delete for the ticked ones.
