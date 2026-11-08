@@ -1,4 +1,4 @@
-# Expense Tracker — manual test checklist
+# Paisa Log — manual test checklist
 
 Tick each line as you try it on your phone. "Expect" is what should happen.
 
@@ -72,4 +72,10 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 ## Delete a transaction, Food tag, new icon
 - Open any transaction (Inbox or All) → "Delete" (red, top right) → confirm. It disappears with its split, and Settings > Import older messages does not bring it back.
 - The tag "Food Order" is now "Food" everywhere, including tagged spends and saved merchant rules.
-- App icon: a white rupee sign on a teal coin; the name under it reads "Expense Tracker".
+- App icon: a white rupee sign on a teal coin; the name under it reads "Paisa Log".
+
+## Refund received, Refunds tab, Owed scrolling, name
+- Inbox always shows a "Refunds" tab, with a message when it is empty.
+- "Refund received" is in a spend's ⋮ menu, in the transaction sheet, and on each card in Refunds. Full amount closes it; a smaller amount reduces what you spent.
+- Owed page scrolls as one list; each person shows three bills, "Show all" opens the rest.
+- App name is "Paisa Log".

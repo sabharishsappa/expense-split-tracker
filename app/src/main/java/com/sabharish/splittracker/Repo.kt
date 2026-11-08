@@ -194,6 +194,19 @@ object Repo {
         }
     }
 
+    /** Refund received that the app did not see: the money is back, so the spend (or part of it) no longer counts. */
+    suspend fun markRefunded(ctx: Context, t: Txn, amount: Double) {
+        val db = Db.get(ctx); val dao = db.dao()
+        db.withTransaction {
+            val ratio = minOf(1.0, amount / t.amount)
+            if (ratio <= 0.0) return@withTransaction
+            for (s in dao.sharesFor(t.id)) dao.setShareAmount(s.id, Math.round(s.amount * (1 - ratio) * 100) / 100.0)
+            val full = ratio > 0.995
+            dao.setRefund(t.id, 0, if (full) "REVERSED" else t.status,
+                if (full) "Refund received (marked by you)" else "Partial refund ${money(amount)} received (marked by you)")
+        }
+    }
+
     suspend fun unfail(ctx: Context, id: Long) = Db.get(ctx).dao().setStatus(id, "INBOX")
 
     suspend fun linkRefund(ctx: Context, refundId: Long, originalId: Long) {

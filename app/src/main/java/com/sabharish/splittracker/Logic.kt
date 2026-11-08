@@ -282,8 +282,8 @@ object Diagnostics {
     fun verdict(r: ReadCheck): List<String> = buildList {
         if (!r.smsAllowed) {
             add("The app is not allowed to read messages, so nothing can appear.")
-            if (r.sdk >= 33) add("Android blocks this for apps installed from a file. Open Settings > Apps > Expense Tracker, tap the ⋮ menu, choose \"Allow restricted settings\", then allow SMS under Permissions.")
-            else add("Open Settings > Apps > Expense Tracker > Permissions and allow SMS.")
+            if (r.sdk >= 33) add("Android blocks this for apps installed from a file. Open Settings > Apps > Paisa Log, tap the ⋮ menu, choose \"Allow restricted settings\", then allow SMS under Permissions.")
+            else add("Open Settings > Apps > Paisa Log > Permissions and allow SMS.")
             return@buildList
         }
         if (r.inboxTotal == 0) add("Reading is allowed but this phone shows no messages to the app. Check that the bank texts arrive in the normal Messages app, not a separate Business or Promotions inbox.")

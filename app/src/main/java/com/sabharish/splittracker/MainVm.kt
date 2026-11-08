@@ -121,7 +121,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
             hiddenTags.value = Logic.parseTags(Repo.getPref(getApplication(), "hiddenTags", ""))
             ThemeState.mode = Repo.getPref(getApplication(), "theme", ThemeState.mode)
         }
-        status.value = if (n >= 0) "Restored $n transactions, tags, people and settings" else "That file is not a Expense Tracker backup"
+        status.value = if (n >= 0) "Restored $n transactions, tags, people and settings" else "That file is not a Paisa Log backup"
         onDone(n >= 0)
     }
 
@@ -147,6 +147,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
         status.value = if (both) "Own transfer — both sides linked" else "Own transfer — left out of your spends"
     }
     fun delete(t: Txn) = viewModelScope.launch(safe) { Repo.deleteTxn(getApplication(), t); status.value = "Transaction deleted" }
+    fun refunded(t: Txn, amount: Double) = viewModelScope.launch(safe) { Repo.markRefunded(getApplication(), t, amount); status.value = "Refund marked as received" }
     fun ignore(t: Txn) = viewModelScope.launch(safe) { Repo.ignore(getApplication(), t) }
     fun setCategory(t: Txn, c: String) = viewModelScope.launch(safe) {
         val n = Repo.setCategory(getApplication(), t, c)

@@ -1,4 +1,4 @@
-# Expense Tracker
+# Paisa Log
 
 Android app that reads your bank SMS, asks whose spend it was, and tracks who owes you.
 All data stays on the phone (local database). Only the last 4 card digits are stored.

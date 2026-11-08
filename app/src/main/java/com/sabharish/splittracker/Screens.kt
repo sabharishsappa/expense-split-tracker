@@ -123,7 +123,7 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
     val spends = allSpends.search(); val money = allMoney.search(); val auto = allAuto.search(); val failed = allFailed.search()
     val tabs = buildList {
         add("Spent" to spends.size); add("Received" to money.size); add("Auto" to auto.size)
-        if (failed.isNotEmpty() || section == 3) add("Refunds" to failed.size)
+        add("Refunds" to failed.size)
     }
     androidx.compose.material3.ScrollableTabRow(
         selectedTabIndex = section.coerceAtMost(tabs.size - 1), edgePadding = 0.dp,
@@ -279,6 +279,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
     var catMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf(false) }
+    var refundFor by remember { mutableStateOf(false) }
     fun quick(shares: List<NewShare>, label: String) {
         vm.tag(t, shares, t.category, false, false)
         undoable(t.id, label)
@@ -290,6 +291,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                     DropdownMenuItem(text = { Text("Select same merchant") }, onClick = { moreMenu = false; onSimilar() })
                     DropdownMenuItem(text = { Text("Rename merchant") }, onClick = { moreMenu = false; rename = true })
+                    DropdownMenuItem(text = { Text("Refund received") }, onClick = { moreMenu = false; refundFor = true })
                     DropdownMenuItem(text = { Text("Payment failed") }, onClick = { moreMenu = false; vm.markFailed(t) })
                     if (t.kind == "UPI_OUT") DropdownMenuItem(text = { Text("Own transfer") }, onClick = { moreMenu = false; vm.ownTransfer(t) })
                     DropdownMenuItem(text = { Text("Not a spend (skip)") }, onClick = { moreMenu = false; vm.ignore(t) })
@@ -346,6 +348,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
         }
     }
     if (rename) AliasDialog(t.merchant, aliases[Repo.aliasKey(t.merchant).removePrefix("alias|")] ?: "", { rename = false }) { vm.setAlias(t.merchant, it); rename = false }
+    if (refundFor) RefundDialog(t, { refundFor = false }) { a -> refundFor = false; vm.refunded(t, a) }
 }
 
 @Composable
@@ -464,6 +467,8 @@ private fun AutoList(vm: MainVm, items: List<Txn>) {
 @Composable
 private fun FailedList(vm: MainVm, items: List<Txn>) {
     val aliases by vm.aliases.collectAsState()
+    var refundFor by remember { mutableStateOf<Txn?>(null) }
+    refundFor?.let { t -> RefundDialog(t, { refundFor = null }) { a -> refundFor = null; vm.refunded(t, a) } }
     if (items.isEmpty()) {
         Text("No failed payments. Mark one from its ⋮ menu; it closes when the refund arrives.", color = muted(), fontSize = 15.sp)
         return
@@ -481,7 +486,10 @@ private fun FailedList(vm: MainVm, items: List<Txn>) {
                     fontSize = 13.sp, color = if (d > 10) amber() else muted()
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { vm.unfail(t.id) }) { Text("It didn't fail") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { refundFor = t }) { Text("Refund received") }
+                    OutlinedButton(onClick = { vm.unfail(t.id) }) { Text("It didn't fail") }
+                }
             }
         }
     }
@@ -506,17 +514,21 @@ fun PendingScreen(vm: MainVm, q: String) {
     val ordered = remember(grouped) { grouped.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.toList() }
     val ticks = remember(Epoch.value) { mutableMapOf<String, androidx.compose.runtime.snapshots.SnapshotStateList<Long>>() }
 
-    AppCard {
-        Text("Owed to you", fontSize = 13.sp, color = muted())
-        Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (total > 0) teal() else muted())
-        Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
-        val lent = Logic.lentTotal(rows)
-        TextButton(onClick = { addOwe = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("+ I owe someone") }
-        if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = teal())
-    }
-    Spacer(Modifier.height(12.dp))
-    if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+        item(key = "owed-head") {
+            Column {
+        AppCard {
+            Text("Owed to you", fontSize = 13.sp, color = muted())
+            Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (total > 0) teal() else muted())
+            Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
+            val lent = Logic.lentTotal(rows)
+            TextButton(onClick = { addOwe = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("+ I owe someone") }
+            if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = teal())
+        }
+        Spacer(Modifier.height(12.dp))
+        if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
+            }
+        }
         if (oweBy.isNotEmpty()) {
             item(key = "owe-head") {
                 Text("You owe · ${Repo.money(oweBy.sumOf { it.second })}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -551,16 +563,18 @@ fun PendingScreen(vm: MainVm, q: String) {
                 }
                 Spacer(Modifier.height(8.dp))
                 val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
-                // newest first; about three rows show, the rest scroll inside the card
-                Column(Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
-                e.value.sortedByDescending { it.txnDate }.forEach { r ->
+                // newest first; three rows show, "Show all" opens the rest (no scrolling inside a scrolling list)
+                var expanded by remember(e.key) { mutableStateOf(false) }
+                val sorted = remember(e.value) { e.value.sortedByDescending { it.txnDate } }
+                Column {
+                (if (expanded) sorted else sorted.take(3)).forEach { r ->
                     Row(Modifier.fillMaxWidth().clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
                         verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
                         Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
                         Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
-                }
+                    if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}") }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -93,6 +93,7 @@ fun TagSheet(
     val aliases by vm.aliases.collectAsState()
     var rename by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var refundFor by remember { mutableStateOf(false) }
     var alreadyPaid by remember { mutableStateOf(false) }
     var splitAdded by remember { mutableStateOf(false) }
     var rememberRule by remember { mutableStateOf(!creating) }
@@ -199,9 +200,11 @@ fun TagSheet(
                 }
                 if (!creating) Row {
                     TextButton(onClick = { rename = true }) { Text("Rename merchant") }
+                    if (t.kind == "SPEND" || t.kind == "UPI_OUT") TextButton(onClick = { refundFor = true }) { Text("Refund received") }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 }
+                if (refundFor) RefundDialog(t, { refundFor = false }) { a -> refundFor = false; vm.refunded(t, a); onDismiss() }
                 if (confirmDelete) AlertDialog(
                     onDismissRequest = { confirmDelete = false },
                     title = { Text("Delete this transaction?") },
@@ -564,7 +567,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 val info = remember(text) { Backup.describe(text) }
                 val at = remember(text) { Backup.savedAt(text) }
                 Text(
-                    if (info == null) "This file is not a Expense Tracker backup."
+                    if (info == null) "This file is not a Paisa Log backup."
                     else "Saved ${if (at > 0) Repo.shortDate(at) else "earlier"}\n$info\n\nEverything on this phone is replaced by it. If this is not what you expect, cancel and pick a newer file."
                 )
             },
@@ -610,7 +613,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     Section("Backup & restore", "Saves transactions, bills, tags, people, rules and settings to one file. Restore replaces what is on this phone.") {
                         Text(if (last > 0) "Last backup: ${Repo.shortDate(last)}" else "No backup yet", fontSize = 14.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { saveFile.launch("ExpenseTracker-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
+                            OutlinedButton(onClick = { saveFile.launch("PaisaLog-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
                             OutlinedButton(onClick = { openFile.launch(arrayOf("*/*")) }) { Text("Restore") }
                         }
                         if (note.isNotEmpty()) Text(note, fontSize = 13.sp, color = teal())
@@ -645,7 +648,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                         OutlinedButton(onClick = { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) {
                             Text(if (listenerOn) "Manage notification access" else "Allow notification access")
                         }
-                        if (!listenerOn) Text("If Android says the setting is restricted, open Settings > Apps > Expense Tracker > ⋮ > Allow restricted settings, then try again.", fontSize = 12.sp, color = muted())
+                        if (!listenerOn) Text("If Android says the setting is restricted, open Settings > Apps > Paisa Log > ⋮ > Allow restricted settings, then try again.", fontSize = 12.sp, color = muted())
                     }
                     var check by remember { mutableStateOf<Diagnostics.ReadCheck?>(null) }
                     var checking by remember { mutableStateOf(false) }
@@ -815,7 +818,7 @@ fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long)
         if (uri != null) scope.launch {
             busy = true; problem = null
             val text = try { withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" } } catch (e: Exception) { CrashLog.record(ctx, e); "" }
-            if (Backup.describe(text) == null) { busy = false; problem = "That file is not a Expense Tracker backup. Pick the backup file you saved earlier." }
+            if (Backup.describe(text) == null) { busy = false; problem = "That file is not a Paisa Log backup. Pick the backup file you saved earlier." }
             else onRestore(text) { ok -> busy = false; if (!ok) problem = "Couldn't restore from that file. Nothing was changed." }
         } }
     if (step == "choice") {
@@ -881,5 +884,27 @@ fun NameDialog(onDone: (String) -> Unit) {
         },
         confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onDone(name.trim()) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = { onDone("") }) { Text("Skip") } }
+    )
+}
+
+
+/** Manual "refund received": the full amount by default, or a smaller one for a part refund. */
+@Composable
+fun RefundDialog(t: Txn, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+    var amt by remember { mutableStateOf(t.amount.toString().removeSuffix(".0")) }
+    val v = amt.replace(",", "").toDoubleOrNull() ?: 0.0
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Refund received") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 13.sp, color = muted())
+                OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount refunded ₹") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                Text("The full amount closes it. A smaller amount reduces what you spent.", fontSize = 12.sp, color = muted())
+            }
+        },
+        confirmButton = { TextButton(enabled = v > 0 && v <= t.amount + 0.011, onClick = { onSave(v) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
