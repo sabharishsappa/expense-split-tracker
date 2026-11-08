@@ -574,6 +574,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                         Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
                         Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
+                }
                     if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}") }
                 }
                 Spacer(Modifier.height(10.dp))
