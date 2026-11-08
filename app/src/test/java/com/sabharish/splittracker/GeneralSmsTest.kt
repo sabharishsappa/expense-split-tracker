@@ -179,7 +179,7 @@ class CrossSourceTest {
 class DedupeTest {
     private fun e(id: Long, at: Long, body: String, card: String = "1234", merchant: String = "SWIGGY", amt: Double = 250.0) =
         Txn(id = id, bank = "HDFC", card = card, kind = "SPEND", amount = amt, merchant = merchant, txnDate = at, smsTime = at, status = "INBOX", body = body)
-    private fun p(card: String = "1234", merchant: String = "SWIGGY", amt: Double = 250.0) = Parsed("HDFC", "SPEND", amt, merchant, card, null)
+    private fun p(card: String = "1234", merchant: String = "SWIGGY", amt: Double = 250.0) = Parsed("HDFC", "SPEND", amt, card, merchant, null)
 
     @org.junit.Test fun sameMessageReadTwiceWithDifferentClocksIsOne() {
         val first = e(1, 1_000_000, "Rs 250 spent on card 1234 at SWIGGY")
