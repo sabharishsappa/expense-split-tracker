@@ -203,3 +203,15 @@ class DedupeTest {
         org.junit.Assert.assertFalse(Dedupe.isDuplicate(listOf(notif), p(), "Rs 250 spent", 1_000_000 + 10_000))
     }
 }
+
+
+class AutoTagTest {
+    private fun h(vararg a: Double) = a.map { AutoTag.Past(it, 0) }
+    @org.junit.Test fun usualAmountAfterTwoMineIsAuto() = org.junit.Assert.assertTrue(AutoTag.allowed(h(30.0, 25.0), 30.0))
+    @org.junit.Test fun oneEarlierTagIsNotEnough() = org.junit.Assert.assertFalse(AutoTag.allowed(h(30.0), 30.0))
+    @org.junit.Test fun bigAmountForTwoIsAsked() = org.junit.Assert.assertFalse(AutoTag.allowed(h(30.0, 25.0, 30.0), 60.0))
+    @org.junit.Test fun anySharedHistoryMeansAsk() =
+        org.junit.Assert.assertFalse(AutoTag.allowed(listOf(AutoTag.Past(30.0, 0), AutoTag.Past(30.0, 0), AutoTag.Past(60.0, 1)), 30.0))
+    @org.junit.Test fun smallRiseIsFine() = org.junit.Assert.assertTrue(AutoTag.allowed(h(40.0, 40.0), 48.0))
+    @org.junit.Test fun noHistoryAsks() = org.junit.Assert.assertFalse(AutoTag.allowed(emptyList(), 10.0))
+}

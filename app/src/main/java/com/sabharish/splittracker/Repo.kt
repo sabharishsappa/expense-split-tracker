@@ -122,7 +122,10 @@ object Repo {
 
             if ((p.kind == "SPEND" || p.kind == "UPI_OUT") && status == "INBOX") {
                 val rule = dao.rule(merchantKey(p.merchant, p.card))
-                val mine = (rule != null && rule.action == "MINE") || (rule == null && Categories.defaultMine(p.merchant))
+                // "mine" is assumed only when the history is clear and the amount is usual; otherwise you are asked
+                val mine = (rule != null && rule.action == "MINE" &&
+                    AutoTag.allowed(dao.pastTags(p.merchant, p.card).map { AutoTag.Past(it.amount, it.others) }, p.amount)) ||
+                    (rule == null && Categories.defaultMine(p.merchant))
                 if (mine) {
                     dao.insertShare(Share(txnId = id, person = ME, amount = p.amount, settled = p.amount))
                     dao.setStatus(id, "TAGGED")

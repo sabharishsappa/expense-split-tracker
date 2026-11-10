@@ -88,6 +88,7 @@ data class Payable(
 data class AcctPair(val bank: String, val card: String)
 
 data class TagCount(val category: String, val n: Int)
+data class PastTagRow(val amount: Double, val others: Int)
 
 data class SummaryRow(
     val card: String,
@@ -151,6 +152,9 @@ interface AppDao {
 
     @Query("UPDATE txn SET category = :newName WHERE category = :oldName COLLATE NOCASE")
     suspend fun renameCategory(oldName: String, newName: String)
+
+    @Query("SELECT t.amount AS amount, (SELECT COUNT(*) FROM share s WHERE s.txnId = t.id AND s.person != 'Me' AND s.amount > 0.004) AS others FROM txn t WHERE t.merchant = :merchant AND t.card = :card AND t.status = 'TAGGED' AND t.kind IN ('SPEND','UPI_OUT') ORDER BY t.smsTime DESC LIMIT 12")
+    suspend fun pastTags(merchant: String, card: String): List<PastTagRow>
 
     @Query("SELECT COUNT(*) FROM rule WHERE ruleKey = :k") suspend fun ruleCount(k: String): Int
     @Query("DELETE FROM txn WHERE id = :id") suspend fun deleteTxnRow(id: Long)

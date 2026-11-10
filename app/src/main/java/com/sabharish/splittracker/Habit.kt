@@ -46,3 +46,22 @@ object Habit {
         else -> "$inbox spends left to sort"
     }
 }
+
+
+/**
+ * When may a new spend be tagged "mine" without asking? Only when the history says it is safe:
+ * the same shop was always yours alone, at least twice, and this amount is in the usual range.
+ * A bigger amount (a bus ticket for two, a dinner for friends) is asked about, not assumed.
+ */
+object AutoTag {
+    data class Past(val amount: Double, val others: Int)   // others = people other than you who had a share
+
+    const val MIN_HISTORY = 2
+    const val MAX_RISE = 1.25
+
+    fun allowed(history: List<Past>, amount: Double): Boolean {
+        if (history.size < MIN_HISTORY) return false
+        if (history.any { it.others > 0 }) return false
+        return amount <= history.maxOf { it.amount } * MAX_RISE + 0.011
+    }
+}

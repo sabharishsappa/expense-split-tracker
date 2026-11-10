@@ -318,14 +318,14 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
         Spacer(Modifier.height(6.dp))
         fun toggle(p: String) { setSel(if (p in sel) sel - p else sel + p) }
         val s = sug
-        val asBefore = if (s != null && s.action == "PEOPLE") s.people.split(",").filter { it.isNotBlank() } else emptyList()
+        val asBefore = if (s != null && s.action == "PEOPLE") s.people.split(",").filter { it.isNotBlank() } else if (s != null && s.action == "MINE") listOf(Repo.ME) else emptyList()
         val chips = (listOf(Repo.ME) + recents.filter { it !in asBefore }.take(3) + sel.filter { it != Repo.ME && it !in recents }).distinct()
         val ordered = Logic.selectedFirst(chips, sel.toList())
         val labelOf = chips.zip(firstNames(chips)).toMap().mapValues { if (it.key == Repo.ME) "Me" else it.value }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ordered.filter { it in sel }.forEach { p -> Pill(labelOf[p] ?: p, { toggle(p) }, selected = true) }
             if (asBefore.isNotEmpty() && sel != asBefore) {
-                val label = firstNames(asBefore.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
+                val label = if (asBefore == listOf(Repo.ME)) "mine" else firstNames(asBefore.filter { it != Repo.ME }).joinToString(" + ").ifEmpty { "You" } +
                     if (asBefore.contains(Repo.ME)) " & you" else ""
                 Pill("As before: $label", { setSel(asBefore) })
             }

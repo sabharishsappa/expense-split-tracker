@@ -89,3 +89,6 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - The same bank SMS read twice (live, then Settings > Import older messages) gives one entry.
 - Two alerts for one card swipe (same card, amount, similar shop, within 90 seconds) give one entry.
 - Two genuine purchases of the same amount minutes apart stay two.
+
+## Auto "mine" only when safe
+- A shop is tagged mine automatically only after 2+ earlier spends there that were yours alone, never shared, and only if the new amount is no more than 25% above the largest earlier one. Otherwise it sits in the Inbox with an "As before: mine" shortcut.
