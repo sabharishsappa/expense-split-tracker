@@ -114,7 +114,13 @@ object LockRule {
 
 /** A `upi://pay` link: opens the payer's own UPI app with the amount filled in. Built here, never sent anywhere by this app. */
 object UpiLink {
-    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20").replace("%40", "@")
+    /** Percent-encoding by hand (letters, digits and - _ . ~ @ stay as they are). */
+    private fun enc(s: String) = buildString {
+        for (b in s.toByteArray(Charsets.UTF_8)) {
+            val c = (b.toInt() and 0xFF).toChar()
+            if (c.isLetterOrDigit() && c.code < 128 || c in "-_.~@") append(c) else append("%%%02X".format(b.toInt() and 0xFF))
+        }
+    }
     fun build(upi: String, amount: Double, note: String): String =
         "upi://pay?pa=${enc(upi.trim())}&am=${"%.2f".format(java.util.Locale.ENGLISH, amount)}&cu=INR&tn=${enc(note.trim().ifEmpty { "Payment" })}"
 }
