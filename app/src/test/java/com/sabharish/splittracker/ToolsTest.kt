@@ -167,3 +167,27 @@ class InboxOrderTest {
     @Test fun biggest() = assertEquals(listOf(2L, 1L, 3L), InboxOrder.sort(l, "Biggest").map { it.id })
     @Test fun oldest() = assertEquals(listOf(1L, 3L, 2L), InboxOrder.sort(l, "Oldest").map { it.id })
 }
+
+class CryptTest {
+    @Test fun roundTrip() {
+        val env = Crypt.encrypt("""{"txns":[1,2,3]}""", "correct horse")
+        assertTrue(Crypt.isEncrypted(env))
+        assertEquals("""{"txns":[1,2,3]}""", Crypt.decrypt(env, "correct horse"))
+    }
+    @Test fun wrongPassphraseGivesNull() = assertNull(Crypt.decrypt(Crypt.encrypt("secret", "right-one"), "wrong-one"))
+    @Test fun sameTextEncryptsDifferentlyEachTime() = assertTrue(Crypt.encrypt("x", "pass12") != Crypt.encrypt("x", "pass12"))
+    @Test fun damagedFileGivesNull() = assertNull(Crypt.decrypt("PLENC1:not-base64!!", "pass12"))
+    @Test fun plainTextIsNotEncrypted() = assertFalse(Crypt.isEncrypted("{\"version\":1}"))
+}
+
+class DigestTest {
+    private fun at(h: Int, m: Int = 0) = Calendar.getInstance().apply { clear(); set(2026, 10, 11, h, m, 0) }.timeInMillis
+    @Test fun laterTodayWhenBeforeNinePm() = assertEquals(at(21), Digest.nextTrigger(at(18)))
+    @Test fun tomorrowWhenPastNinePm() = assertEquals(at(21) + 86_400_000L, Digest.nextTrigger(at(22)))
+    @Test fun nothingToSayMeansNoNotification() = assertNull(Digest.message(0, 0.0))
+    @Test fun messageJoinsParts() {
+        assertEquals("3 to review · ₹1,240 spent today", Digest.message(3, 1240.0))
+        assertEquals("2 to review", Digest.message(2, 0.0))
+        assertEquals("₹50 spent today", Digest.message(0, 50.0))
+    }
+}

@@ -177,3 +177,51 @@ object Bookmarks {
 
     fun label(b: Bookmark) = "${Entries.emoji(b.category)} ${b.title.ifBlank { b.category }} ${Logic.money(b.amount)}"
 }
+
+/** Password-protects backup files: PBKDF2 key from your passphrase, AES-256-GCM. A wrong passphrase gives null, never garbage. */
+object Crypt {
+    const val MAGIC = "PLENC1:"
+    private const val ITER = 120_000
+
+    fun isEncrypted(s: String) = s.startsWith(MAGIC)
+
+    private fun key(pass: String, salt: ByteArray): javax.crypto.spec.SecretKeySpec {
+        val f = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        return javax.crypto.spec.SecretKeySpec(f.generateSecret(javax.crypto.spec.PBEKeySpec(pass.toCharArray(), salt, ITER, 256)).encoded, "AES")
+    }
+
+    fun encrypt(plain: String, pass: String): String {
+        val rnd = java.security.SecureRandom()
+        val salt = ByteArray(16).also { rnd.nextBytes(it) }; val iv = ByteArray(12).also { rnd.nextBytes(it) }
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(javax.crypto.Cipher.ENCRYPT_MODE, key(pass, salt), javax.crypto.spec.GCMParameterSpec(128, iv))
+        return MAGIC + java.util.Base64.getEncoder().encodeToString(salt + iv + c.doFinal(plain.toByteArray(Charsets.UTF_8)))
+    }
+
+    fun decrypt(env: String, pass: String): String? = try {
+        val raw = java.util.Base64.getDecoder().decode(env.removePrefix(MAGIC).trim())
+        val salt = raw.copyOfRange(0, 16); val iv = raw.copyOfRange(16, 28); val body = raw.copyOfRange(28, raw.size)
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(javax.crypto.Cipher.DECRYPT_MODE, key(pass, salt), javax.crypto.spec.GCMParameterSpec(128, iv))
+        String(c.doFinal(body), Charsets.UTF_8)
+    } catch (e: Exception) { null }
+}
+
+/** The evening summary: when it fires and what it says. */
+object Digest {
+    const val KEY = "digest"
+    const val HOUR = 21
+
+    fun nextTrigger(now: Long, hour: Int = HOUR): Long {
+        val c = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+        if (c.timeInMillis <= now) c.add(Calendar.DAY_OF_MONTH, 1)
+        return c.timeInMillis
+    }
+
+    /** Null when there is nothing worth a notification. */
+    fun message(toReview: Int, spentToday: Double): String? =
+        listOfNotNull(
+            toReview.takeIf { it > 0 }?.let { "$it to review" },
+            spentToday.takeIf { it > 0.004 }?.let { "${Logic.money(it)} spent today" }
+        ).joinToString(" · ").ifEmpty { null }
+}

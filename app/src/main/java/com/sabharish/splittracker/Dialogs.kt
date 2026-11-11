@@ -95,6 +95,7 @@ fun TagSheet(
     var confirmDelete by remember { mutableStateOf(false) }
     var refundFor by remember { mutableStateOf(false) }
     var editEntry by remember { mutableStateOf(false) }
+    var showReceipt by remember { mutableStateOf(false) }
     var alreadyPaid by remember { mutableStateOf(false) }
     var splitAdded by remember { mutableStateOf(false) }
     var rememberRule by remember { mutableStateOf(!creating) }
@@ -200,12 +201,16 @@ fun TagSheet(
                     ) { Icon(Icons.Default.Check, contentDescription = "Save") }
                 }
                 if (!creating) Row {
-                    if (Entries.isHand(t)) TextButton(onClick = { editEntry = true }) { Text("Edit") }
                     TextButton(onClick = { rename = true }) { Text("Rename merchant") }
                     if (t.kind == "SPEND" || t.kind == "UPI_OUT") TextButton(onClick = { refundFor = true }) { Text("Refund received") }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 }
+                if (!creating) Row {
+                    if (Entries.isHand(t)) TextButton(onClick = { editEntry = true }) { Text("Edit") }
+                    TextButton(onClick = { showReceipt = true }) { Text(if (Receipts.has(LocalContext.current, t.id)) "Receipt ✓" else "Add receipt") }
+                }
+                if (showReceipt) ReceiptDialog(t.id) { showReceipt = false }
                 if (editEntry) AddEntryDialog(vm, edit = t) { editEntry = false; onDismiss() }
                 if (refundFor) RefundDialog(t, { refundFor = false }) { a -> refundFor = false; vm.refunded(t, a); onDismiss() }
                 if (confirmDelete) AlertDialog(
@@ -546,11 +551,13 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val last by vm.lastBackup.collectAsState()
     var note by remember { mutableStateOf("") }
     var confirmRestore by remember { mutableStateOf<String?>(null) }
+    var askPass by remember { mutableStateOf<String?>(null) }
+    askPass?.let { enc -> PassphraseAsk(enc, { plain -> askPass = null; confirmRestore = plain }, { askPass = null }) }
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             note = try {
                 val text = vm.backupText()
-                withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } }
+                withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)?.use { it.write(Repo.sealed(ctx, text).toByteArray()) } }
                 "Backup saved · " + (Backup.describe(text) ?: "")
             } catch (e: Exception) { CrashLog.record(ctx, e); "Couldn't save the backup file" }
         }
@@ -558,7 +565,8 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             try {
-                confirmRestore = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" }
+                val read = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" }
+                if (Crypt.isEncrypted(read)) askPass = read else confirmRestore = read
             } catch (e: Exception) { CrashLog.record(ctx, e); note = "Couldn't read that file" }
         }
     }
@@ -817,13 +825,19 @@ fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long)
     var step by remember { mutableStateOf("choice") }
     var problem by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var enc by remember { mutableStateOf<String?>(null) }
+    fun go(text: String) {
+        if (Backup.describe(text) == null) { busy = false; problem = "That file is not a Paisa Log backup. Pick the backup file you saved earlier." }
+        else onRestore(text) { ok -> busy = false; if (!ok) problem = "Couldn't restore from that file. Nothing was changed." }
+    }
     val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             busy = true; problem = null
             val text = try { withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: "" } } catch (e: Exception) { CrashLog.record(ctx, e); "" }
-            if (Backup.describe(text) == null) { busy = false; problem = "That file is not a Paisa Log backup. Pick the backup file you saved earlier." }
-            else onRestore(text) { ok -> busy = false; if (!ok) problem = "Couldn't restore from that file. Nothing was changed." }
+            if (Crypt.isEncrypted(text)) { busy = false; enc = text }
+            else go(text)
         } }
+    enc?.let { e -> PassphraseAsk(e, { plain -> enc = null; busy = true; go(plain) }, { enc = null }) }
     if (step == "choice") {
         AlertDialog(
             onDismissRequest = {},

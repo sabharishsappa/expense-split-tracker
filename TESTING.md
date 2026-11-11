@@ -115,3 +115,13 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - More ▸ Automatic backup: pick a folder; one file `PaisaLog-auto-backup.json` is replaced daily when you open the app. Turn off by tapping again.
 - Reminders and split requests now include a `upi://pay` link below the UPI ID (opens the payer's UPI app with the amount filled).
 - Stats ▸ "Where my money went": tap a tag → Transactions opens on that month filtered to the tag ("Others" opens the month unfiltered).
+
+## Stats extras, edit, quick entries, passphrase, evening summary, receipts
+- Stats: budget bar has a tick for "where you should be today" and says "on pace" / "₹X ahead of pace"; with no budget it suggests one from the last 3 months; "Compared with last month" lists the biggest movers (tap → list); Month | Year toggle shows the year.
+- Transactions ▸ Amount ▾: filter between two amounts.
+- Open any hand-made entry ▸ Edit: change amount, tag, day, account, people; Delete is at the top.
+- Add screen: "☆ Save as a quick entry", tap a quick entry to fill the form; Edit to remove some.
+- Inbox: "N left to review", Newest/Biggest/Oldest, "🎉 Inbox zero" when empty.
+- More ▸ Backup passphrase: save a backup, open the file in a text editor → starts with PLENC1:; restoring asks for the passphrase; a wrong one is refused.
+- More ▸ Evening summary: notification at 9 pm only when something is left to review or you spent today.
+- Open a transaction ▸ Add receipt: choose a photo; it shows "Receipt ✓"; not in backups.

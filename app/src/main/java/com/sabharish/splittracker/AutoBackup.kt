@@ -29,7 +29,7 @@ object AutoBackup {
             val resolver = ctx.contentResolver
             val docId = DocumentsContract.getTreeDocumentId(tree)
             val parent = DocumentsContract.buildDocumentUriUsingTree(tree, docId)
-            val text = Repo.exportBackup(ctx)
+            val text = Repo.sealed(ctx, Repo.exportBackup(ctx))
             val temp = DocumentsContract.createDocument(resolver, parent, "application/json", "PaisaLog-auto-backup-new.json") ?: return@withContext false
             resolver.openOutputStream(temp, "wt")?.use { it.write(text.toByteArray()) } ?: return@withContext false
             // now that the new copy is safely written, replace the old one

@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -89,6 +90,9 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
     var lockOn by remember { mutableStateOf(AppLock.isOn(ctx)) }
     var note by remember { mutableStateOf("") }
     var autoDir by remember { mutableStateOf(AutoBackup.folder(ctx)) }
+    var passOn by remember { mutableStateOf(Repo.getPref(ctx, "backupPass", "").isNotEmpty()) }
+    var setPass by remember { mutableStateOf(false) }
+    var digestOn by remember { mutableStateOf(DigestReceiver.isOn(ctx)) }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             try {
@@ -119,9 +123,18 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
         MenuRow("💾", "Automatic backup", if (autoDir != null) "On · one file in your folder, replaced daily. Tap to turn off" else "Saves a backup file in a folder you choose, every day") {
             if (autoDir != null) { Repo.putPref(ctx, AutoBackup.DIR, ""); autoDir = null; note = "Automatic backup is off" } else pickFolder.launch(null)
         }
+        MenuRow("🔑", "Backup passphrase", if (passOn) "On · backup files are encrypted. Keep it safe: it cannot be recovered" else "Protect backup files with a passphrase") { setPass = true }
+        MenuRow("🌙", "Evening summary", "One quiet notification at 9 pm: what is left to review and today's spend", trailing = {
+            Switch(checked = digestOn, onCheckedChange = { on -> digestOn = on; Repo.putPref(ctx, Digest.KEY, if (on) "1" else ""); DigestReceiver.schedule(ctx) })
+        }) { digestOn = !digestOn; Repo.putPref(ctx, Digest.KEY, if (digestOn) "1" else ""); DigestReceiver.schedule(ctx) }
         MenuRow("⚙️", "Settings", "Tags, backup & restore, notifications, theme") { settings = true }
         if (note.isNotEmpty()) Text(note, fontSize = 13.sp, color = teal(), modifier = Modifier.padding(horizontal = 6.dp))
         Text("🔒 Nothing leaves this phone. This app has no internet permission.", fontSize = 12.sp, color = muted(), modifier = Modifier.padding(horizontal = 6.dp))
+    }
+    if (setPass) PassphraseSetDialog(passOn, { setPass = false }) { p ->
+        Repo.putPref(ctx, "backupPass", p); passOn = p.isNotEmpty(); setPass = false
+        if (autoDir != null) vm.autoBackup(force = true)
+        note = if (p.isEmpty()) "Backups are no longer encrypted" else "Backups are now encrypted. Write the passphrase down somewhere safe."
     }
     if (accounts) AccountsDialog(vm) { accounts = false }
     if (recurring) RecurringDialog(vm) { recurring = false }
@@ -215,5 +228,77 @@ fun RecurringDialog(vm: MainVm, onDismiss: () -> Unit) {
                 }
             }
         } else Button(onClick = { adding = true }, modifier = Modifier.fillMaxWidth()) { Text("+ Add a repeating entry") }
+    }
+}
+
+/** Asks for the passphrase of an encrypted backup, then hands back the plain text. */
+@Composable
+fun PassphraseAsk(encrypted: String, onPlain: (String) -> Unit, onCancel: () -> Unit) {
+    var p by remember { mutableStateOf("") }
+    var bad by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("This backup is protected") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Type the passphrase you set when you saved it.", fontSize = 14.sp)
+                OutlinedTextField(value = p, onValueChange = { p = it; bad = false }, singleLine = true, label = { Text("Passphrase") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                if (bad) Text("That passphrase doesn't open this backup.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = p.isNotEmpty() && !busy, onClick = {
+                busy = true
+                scope.launch {
+                    val plain = withContext(Dispatchers.Default) { Crypt.decrypt(encrypted, p) }
+                    busy = false
+                    if (plain == null) bad = true else onPlain(plain)
+                }
+            }) { Text(if (busy) "Checking…" else "Open") }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun PassphraseSetDialog(isOn: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var a by remember { mutableStateOf("") }
+    var b by remember { mutableStateOf("") }
+    val ok = a.length >= 6 && a == b
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Backup passphrase") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Backup files (including the automatic one) are encrypted with it. If you lose the passphrase, those backups cannot be opened by anyone, including me.", fontSize = 13.sp, color = muted())
+                OutlinedTextField(value = a, onValueChange = { a = it }, singleLine = true, label = { Text("New passphrase (6+ characters)") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                OutlinedTextField(value = b, onValueChange = { b = it }, singleLine = true, label = { Text("Type it again") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                if (a.isNotEmpty() && b.isNotEmpty() && a != b) Text("The two don't match.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                if (isOn) TextButton(onClick = { onSave("") }) { Text("Turn off encryption", color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { TextButton(enabled = ok, onClick = { onSave(a) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** The receipt photo for one transaction: view, replace or remove. Stays on this phone and is not part of backups. */
+@Composable
+fun ReceiptDialog(txnId: Long, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var version by remember { mutableStateOf(0) }
+    val bmp = remember(version) { Receipts.load(ctx, txnId) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) { Receipts.save(ctx, txnId, uri); version++ } }
+    FullPage("Receipt", onDismiss) {
+        if (bmp != null) androidx.compose.foundation.Image(bmp.asImageBitmap(), contentDescription = "Receipt photo", modifier = Modifier.fillMaxWidth())
+        else Text("No photo yet.", fontSize = 14.sp, color = muted())
+        Button(onClick = { pick.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (bmp != null) "Replace photo" else "Choose a photo") }
+        if (bmp != null) TextButton(onClick = { Receipts.delete(ctx, txnId); version++ }) { Text("Remove photo", color = MaterialTheme.colorScheme.error) }
+        Text("Kept only on this phone. Photos are not included in backups.", fontSize = 12.sp, color = muted())
     }
 }

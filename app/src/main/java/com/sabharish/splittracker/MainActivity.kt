@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         vm.autoBackup()
+        DigestReceiver.schedule(this)
     }
 
     private fun addShortcut() {

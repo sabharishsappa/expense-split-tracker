@@ -293,6 +293,7 @@ object Repo {
             dao.deleteShares(t.id); dao.unlinkRefunds(t.id); dao.deleteTxnRow(t.id)
             dao.putRule(Rule(Logic.deletedKey(t.kind, t.amount, t.smsTime), "DEL", ""))
         }
+        Receipts.delete(ctx, t.id)
     }
 
     /** Old tag names become their new names in saved transactions, rules and tag lists. Safe to repeat. */
@@ -501,6 +502,9 @@ object Repo {
         val shares = if (people.isEmpty()) listOf(NewShare(ME, amount, true)) else equalShares(amount, listOf(ME) + people, false)
         tag(ctx, t, shares, category, false, people.isNotEmpty())
     }
+
+    /** The backup text as it should be written to a file: encrypted when a passphrase is set. */
+    fun sealed(ctx: Context, text: String): String = getPref(ctx, "backupPass", "").let { if (it.isEmpty()) text else Crypt.encrypt(text, it) }
 
     private val recurMutex = kotlinx.coroutines.sync.Mutex()
 
@@ -721,6 +725,15 @@ object Repo {
     }
 
     private const val CHANNEL = "new_txn"
+
+    fun notifyDigest(ctx: Context, text: String) {
+        if (Build.VERSION.SDK_INT >= 33 && !hasPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)) return
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.createNotificationChannel(NotificationChannel("digest", "Evening summary", NotificationManager.IMPORTANCE_LOW))
+        val open = PendingIntent.getActivity(ctx, 9001, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        nm.notify(9001, NotificationCompat.Builder(ctx, "digest").setSmallIcon(android.R.drawable.ic_menu_agenda)
+            .setContentTitle("Today in Paisa Log").setContentText(text).setContentIntent(open).setAutoCancel(true).build())
+    }
 
     fun notifyNew(ctx: Context, t: Txn) {
         if (Build.VERSION.SDK_INT >= 33 && !hasPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)) return
