@@ -58,8 +58,8 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     }
 
     val accounts = kotlinx.coroutines.flow.combine(dao.all(), dao.acctRules()) { t, r -> Accounts.views(t, r) }.hot(emptyList())
-    fun setBalance(key: String, name: String, balance: Double) =
-        viewModelScope.launch(safe) { Repo.setAccountBalance(getApplication(), key, name, balance) }
+    fun setBalance(key: String, name: String, balance: Double, source: String = "you") =
+        viewModelScope.launch(safe) { Repo.setAccountBalance(getApplication(), key, name, balance, source) }
 
     fun bulkApply(txns: List<Txn>, tag: String, people: List<String>) = viewModelScope.launch(safe) {
         Repo.bulkApply(getApplication(), txns, tag, people)
@@ -126,6 +126,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
         }
         if (n >= 0) {
             Repo.migrateNames(getApplication())
+            Stats.loadStartDay(Repo.getPref(getApplication(), "monthStart", "1")); Epoch.value++
             customTags.value = Logic.parseTags(Repo.getPref(getApplication(), "tags", ""))
             hiddenTags.value = Logic.parseTags(Repo.getPref(getApplication(), "hiddenTags", ""))
             ThemeState.mode = Repo.getPref(getApplication(), "theme", ThemeState.mode)

@@ -277,7 +277,10 @@ private fun SpendList(vm: MainVm, raw: List<Txn>, undoable: (Long, String) -> Un
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliasesNow, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else SpendCard(t, vm, recents, groups, undoable, sel = chosenBy[t.id] ?: emptyList(), setSel = { chosenBy[t.id] = it }, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen }
+            else SwipeRow(
+                right = SwipeAction("✓ Mine", teal()) { vm.tag(t, listOf(NewShare(Repo.ME, t.amount, true)), t.category, false, false); undoable(t.id, "Marked as yours") },
+                left = SwipeAction("Not a spend", amber()) { vm.ignore(t); undoable(t.id, "Skipped") }
+            ) { SpendCard(t, vm, recents, groups, undoable, sel = chosenBy[t.id] ?: emptyList(), setSel = { chosenBy[t.id] = it }, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen } }
         }
     }
     sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen, groups = groups) }
@@ -681,15 +684,18 @@ fun AllScreen(vm: MainVm, q: String) {
     val tags by vm.tags.collectAsState()
     val byTxn = shares.groupBy { it.txnId }
     val now = System.currentTimeMillis()
-    val today = remember { Calendar.getInstance() }
+    val ep = Epoch.value   // changes when the month start day is changed
+    val (cy, cm) = Stats.monthOf(now)
     var monthOffset by remember { mutableIntStateOf(0) }
-    val (my, mm) = Stats.shift(today.get(Calendar.YEAR), today.get(Calendar.MONTH), monthOffset)
+    val (my, mm) = Stats.shift(cy, cm, monthOffset)
     val searchingAll = q.isNotBlank()   // a search looks through every month
     val filtered = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) && (searchingAll || Stats.inMonth(it, my, mm)) }
     val merged = remember(filtered) { Transfers.merge(filtered) }   // an own transfer is one entry, not two
     val shown = merged.shown
     var mode by remember { mutableStateOf("List") }
     val jump by vm.jump.collectAsState()
+    var swipeDelete by remember { mutableStateOf<Txn?>(null) }
+    swipeDelete?.let { d -> ConfirmDelete(1, { swipeDelete = null }) { vm.deleteAll(listOfNotNull(d, merged.partner[d.id])); swipeDelete = null } }
     var askAmount by remember { mutableStateOf(false) }
     val appCtx2 = androidx.compose.ui.platform.LocalContext.current
     var saved by remember { mutableStateOf(SavedFilters.decode(Repo.getPref(appCtx2, SavedFilters.KEY, ""))) }
@@ -713,7 +719,7 @@ fun AllScreen(vm: MainVm, q: String) {
                 j.tag.isNotBlank() -> TxnFilter(tag = j.tag)
                 else -> TxnFilter()
             }
-            monthOffset = (j.year * 12 + j.month0) - (today.get(Calendar.YEAR) * 12 + today.get(Calendar.MONTH))
+            monthOffset = (j.year * 12 + j.month0) - (cy * 12 + cm)
             mode = "List"
             vm.jump.value = null
         }
@@ -727,8 +733,8 @@ fun AllScreen(vm: MainVm, q: String) {
     }
     Spacer(Modifier.height(6.dp))
     if (!searchingAll) {
-        MonthBar(Stats.monthLabel(mm) + " $my", { monthOffset-- }, { monthOffset++ }, monthOffset < 0)
-        val inc = Stats.incomeInMonth(txns, my, mm); val exp = Stats.spentInMonth(txns, byTxn, my, mm)
+        MonthBar(Stats.periodTitle(my, mm), { monthOffset-- }, { monthOffset++ }, monthOffset < 0)
+        val inc = remember(txns, my, mm, ep) { Stats.incomeInMonth(txns, my, mm) }; val exp = remember(txns, byTxn, my, mm, ep) { Stats.spentInMonth(txns, byTxn, my, mm) }
         MonthStrip(inc, exp)
     }
     Spacer(Modifier.height(6.dp))
@@ -775,7 +781,10 @@ fun AllScreen(vm: MainVm, q: String) {
                 DayHeader(t.txnDate, dayRows.sumOf { Stats.expenseOf(it, byTxn[it.id] ?: emptyList()) }, dayRows.sumOf { Stats.incomeOf(it) })
             }
             if (selecting) SelectRow(t, aliases, t.id in picked, merged.partner[t.id]) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id], onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { sheetFor = it }
+            else SwipeRow(
+                right = if (merged.partner[t.id] == null) SwipeAction("Edit tag / split", teal()) { sheetFor = t } else null,
+                left = SwipeAction("Delete", MaterialTheme.colorScheme.error) { swipeDelete = t }
+            ) { TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id], onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { sheetFor = it } }
         }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
@@ -918,24 +927,25 @@ fun SummaryScreen(vm: MainVm, onCategory: (String, Int, Int) -> Unit = { _, _, _
     val shareList by vm.shares.collectAsState()
     val rows by vm.summary.collectAsState()
     var offset by remember { mutableIntStateOf(0) }
-    val today = remember { Calendar.getInstance() }
-    val (y, m) = Stats.shift(today.get(Calendar.YEAR), today.get(Calendar.MONTH), offset)
+    val ep = Epoch.value   // changes when the month start day is changed
+    val (cy, cm) = Stats.monthOf(System.currentTimeMillis())
+    val (y, m) = Stats.shift(cy, cm, offset)
     var budgets by remember { mutableStateOf(Budgets.decode(Repo.getPref(ctx, "budgets", ""))) }
     var editKey by remember { mutableStateOf<String?>(null) }
     var pickTag by remember { mutableStateOf(false) }
     fun saveBudgets(b: Map<String, Double>) { budgets = b; Repo.putPref(ctx, "budgets", Budgets.encode(b)) }
 
     val shares = remember(shareList) { shareList.groupBy { it.txnId } }
-    val spent = remember(txns, shares, y, m) { Stats.spentInMonth(txns, shares, y, m) }
-    val income = remember(txns, y, m) { Stats.incomeInMonth(txns, y, m) }
-    val byCat = remember(txns, shares, y, m) { Stats.byCategory(txns, shares, y, m) }
+    val spent = remember(txns, shares, y, m, ep) { Stats.spentInMonth(txns, shares, y, m) }
+    val income = remember(txns, y, m, ep) { Stats.incomeInMonth(txns, y, m) }
+    val byCat = remember(txns, shares, y, m, ep) { Stats.byCategory(txns, shares, y, m) }
     val slices = remember(byCat) { Stats.slices(byCat) }
-    val trend = remember(txns, shares, y, m) { Stats.trend(txns, shares, y, m, 6) }
+    val trend = remember(txns, shares, y, m, ep) { Stats.trend(txns, shares, y, m, 6) }
     val (py, pm) = Stats.shift(y, m, -1)
-    val changes = remember(byCat, txns, shares, py, pm) { Stats.changes(byCat, Stats.byCategory(txns, shares, py, pm)) }
+    val changes = remember(byCat, txns, shares, py, pm, ep) { Stats.changes(byCat, Stats.byCategory(txns, shares, py, pm)) }
     var view by remember { mutableStateOf("Month") }
     if (view == "Year") { YearPane(txns, shares, view) { view = it }; return }
-    val label = "${Stats.monthLabel(m)} $y"
+    val label = Stats.periodTitle(y, m)
     val inMonth = rows.filter { Stats.monthOf(it.txnDate) == (y to m) }
     val forOthers = inMonth.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
     val receivable = rows.filter { it.person != Repo.ME }.sumOf { it.shareAmt - it.settled }.coerceAtLeast(0.0)
@@ -988,7 +998,7 @@ fun SummaryScreen(vm: MainVm, onCategory: (String, Int, Int) -> Unit = { _, _, _
                     }
                     TextButton(onClick = { editKey = Budgets.TOTAL }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Set my own amount") }
                 } else BudgetRow("This month", spent, total, onClick = { editKey = Budgets.TOTAL }, perDay = if (offset == 0) Budgets.perDay(total, spent, Budgets.daysLeftInMonth(System.currentTimeMillis())) else null,
-                    pace = if (offset == 0) Budgets.pace(today.get(Calendar.DAY_OF_MONTH), today.getActualMaximum(Calendar.DAY_OF_MONTH)) else null)
+                    pace = if (offset == 0) Budgets.pace(Stats.dayInPeriod(System.currentTimeMillis()), Stats.periodDays(cy, cm)) else null)
                 val catLimits = budgets.filterKeys { it != Budgets.TOTAL }
                 catLimits.forEach { (tag, limit) ->
                     Spacer(Modifier.height(10.dp))
@@ -1168,7 +1178,7 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
     val weeks = remember(y, m) { Stats.weeks(y, m) }
     val dayTxns = remember(txns, y, m, picked) {
         val c = Calendar.getInstance()
-        txns.filter { t -> Stats.inMonth(t, y, m) && c.apply { timeInMillis = t.txnDate }.get(Calendar.DAY_OF_MONTH) == picked }.sortedByDescending { it.txnDate }
+        txns.filter { t -> Stats.inCalMonth(t, y, m) && c.apply { timeInMillis = t.txnDate }.get(Calendar.DAY_OF_MONTH) == picked }.sortedByDescending { it.txnDate }
     }
     val merged = remember(dayTxns) { Transfers.merge(dayTxns) }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {

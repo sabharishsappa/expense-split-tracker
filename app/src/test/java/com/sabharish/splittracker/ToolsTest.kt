@@ -211,3 +211,73 @@ class NettingTest {
     }
     @Test fun youOweMoreIsNegative() = assertEquals(-70.0, Netting.between(mapOf("A" to 30.0), listOf("A" to 100.0))[0].net, 0.001)
 }
+
+class MonthStartTest {
+    private fun at(y: Int, m0: Int, d: Int, h: Int = 12) = Calendar.getInstance().apply { clear(); set(y, m0, d, h, 0, 0) }.timeInMillis
+    private fun spend(id: Long, at: Long, amt: Double) = Txn(id = id, bank = "H", card = "1", kind = "SPEND", amount = amt, merchant = "m", txnDate = at, smsTime = at, status = "INBOX")
+    private inline fun <T> withStart(d: Int, block: () -> T): T { Stats.startDay = d; try { return block() } finally { Stats.startDay = 1 } }
+
+    @Test fun defaultIsCalendarMonth() { assertEquals(2026 to 10, Stats.monthOf(at(2026, 10, 1))); assertEquals(2026 to 10, Stats.monthOf(at(2026, 10, 30))) }
+    @Test fun salaryMonthRunsFrom25th() = withStart(25) {
+        assertEquals(2026 to 9, Stats.monthOf(at(2026, 10, 24, 23)))     // 24 Nov is still the October period
+        assertEquals(2026 to 10, Stats.monthOf(at(2026, 10, 25, 0)))     // 25 Nov starts November's
+        assertEquals(2026 to 10, Stats.monthOf(at(2026, 11, 24)))        // 24 Dec ends it
+        assertEquals(2026 to 11, Stats.monthOf(at(2026, 11, 25)))
+    }
+    @Test fun yearBoundary() = withStart(25) { assertEquals(2026 to 11, Stats.monthOf(at(2027, 0, 10))) }
+    @Test fun totalsFollowThePeriod() = withStart(25) {
+        val t = listOf(spend(1, at(2026, 10, 20), 100.0), spend(2, at(2026, 10, 26), 40.0), spend(3, at(2026, 11, 10), 60.0))
+        assertEquals(100.0, Stats.spentInMonth(t, emptyMap(), 2026, 9), 0.001)
+        assertEquals(100.0, Stats.spentInMonth(t, emptyMap(), 2026, 10), 0.001)   // 26 Nov + 10 Dec
+    }
+    @Test fun calendarViewIgnoresStartDay() = withStart(25) {
+        val t = listOf(spend(1, at(2026, 10, 20), 100.0), spend(2, at(2026, 10, 26), 40.0))
+        val days = Stats.dayTotals(t, emptyMap(), 2026, 10)
+        assertEquals(setOf(20, 26), days.keys)
+    }
+    @Test fun titleShowsTheRange() { assertEquals("Nov 2026", Stats.periodTitle(2026, 10)); withStart(25) { assertEquals("25 Nov – 24 Dec", Stats.periodTitle(2026, 10)) } }
+    @Test fun periodLengthAndDays() = withStart(25) {
+        assertEquals(30, Stats.periodDays(2026, 10))                        // 25 Nov → 25 Dec
+        assertEquals(1, Stats.dayInPeriod(at(2026, 10, 25, 8)))
+        assertEquals(6, Stats.dayInPeriod(at(2026, 10, 30, 8)))
+        assertEquals(30, Stats.daysLeft(at(2026, 10, 25, 0)))
+        assertEquals(1, Stats.daysLeft(at(2026, 11, 24, 20)))
+    }
+    @Test fun daysLeftMatchesOldCalendarMathByDefault() {
+        assertEquals(30 - 11 + 1, Budgets.daysLeftInMonth(at(2026, 10, 11, 12)))   // November has 30 days
+    }
+    @Test fun loadClampsJunk() { Stats.loadStartDay("40"); assertEquals(28, Stats.startDay); Stats.loadStartDay("abc"); assertEquals(1, Stats.startDay); Stats.loadStartDay("0"); assertEquals(1, Stats.startDay) }
+}
+
+class BalanceLogTest {
+    private fun p(at: Long, a: Double, k: String = "HDFC|1234") = BalanceLog.Point(k, at, a, "you")
+    @Test fun roundTrips() { val l = listOf(p(1, 10.5), p(2, 20.0, "SBI|9")); assertEquals(l, BalanceLog.decode(BalanceLog.encode(l))) }
+    @Test fun sameAmountIsNotRepeated() = assertEquals(1, BalanceLog.add(BalanceLog.add(emptyList(), p(1, 100.0)), p(2, 100.0)).size)
+    @Test fun changeIsKeptNewestFirst() {
+        val l = BalanceLog.add(BalanceLog.add(emptyList(), p(1, 100.0)), p(2, 80.0))
+        assertEquals(listOf(80.0, 100.0), BalanceLog.forKey(l, "HDFC|1234").map { it.amount })
+    }
+    @Test fun cappedPerAccountOtherAccountsUntouched() {
+        var l = listOf(p(1, 5.0, "SBI|9"))
+        (1..40).forEach { l = BalanceLog.add(l, p(it.toLong() + 10, it.toDouble())) }
+        assertEquals(BalanceLog.MAX_PER_ACCOUNT, BalanceLog.forKey(l, "HDFC|1234").size)
+        assertEquals(1, BalanceLog.forKey(l, "SBI|9").size)
+    }
+}
+
+class ReconcileTest {
+    @Test fun agrees() = assertEquals("The app and the statement agree.", Reconcile.summary(1000.0, 1000.0))
+    @Test fun appHigher() = assertTrue(Reconcile.summary(1250.0, 1000.0).contains("₹250 more"))
+    @Test fun appLower() = assertTrue(Reconcile.summary(900.0, 1000.0).contains("₹100 less"))
+    @Test fun onlyRecentStatementsTellTodaysBalance() { val day = 86_400_000L; assertTrue(Reconcile.isCurrent(10 * day, 12 * day)); assertFalse(Reconcile.isCurrent(1 * day, 20 * day)) }
+    @Test fun findsClosingBalance() {
+        assertEquals(12345.67, Statement.closingBalance("Opening Balance 100.00\nstuff\nClosing Balance: Rs. 12,345.67 CR")!!, 0.001)
+        assertNull(Statement.closingBalance("no balance here"))
+    }
+}
+
+class SwipeLogicTest {
+    @Test fun farEnoughRight() = assertEquals(1, SwipeLogic.decide(120f, 96f))
+    @Test fun farEnoughLeft() = assertEquals(-1, SwipeLogic.decide(-100f, 96f))
+    @Test fun shortSwipeSpringsBack() = assertEquals(0, SwipeLogic.decide(50f, 96f))
+}

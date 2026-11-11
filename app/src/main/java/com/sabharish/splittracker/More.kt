@@ -92,6 +92,8 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
     var autoDir by remember { mutableStateOf(AutoBackup.folder(ctx)) }
     var passOn by remember { mutableStateOf(Repo.getPref(ctx, "backupPass", "").isNotEmpty()) }
     var setPass by remember { mutableStateOf(false) }
+    var monthStart by remember { mutableStateOf(Stats.startDay) }
+    var askStart by remember { mutableStateOf(false) }
     var digestOn by remember { mutableStateOf(DigestReceiver.isOn(ctx)) }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -117,6 +119,7 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
         MenuRow("📤", "Export to spreadsheet", "A .csv file you save yourself") {
             save.launch("PaisaLog-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.csv")
         }
+        MenuRow("📅", "Month starts on day $monthStart", if (monthStart == 1) "Calendar months. Change it if your salary cycle runs, say, 25th to 24th" else "Months run from day $monthStart to day ${monthStart - 1}. The Calendar view stays on calendar months") { askStart = true }
         MenuRow("🔒", "App lock", if (AppLock.canUse(ctx)) "Ask for your phone's fingerprint, face or PIN" else "Set a screen lock on your phone first", trailing = {
             Switch(checked = lockOn, enabled = AppLock.canUse(ctx), onCheckedChange = { on -> lockOn = on; Repo.putPref(ctx, AppLock.KEY, if (on) "1" else "") })
         }) { if (AppLock.canUse(ctx)) { lockOn = !lockOn; Repo.putPref(ctx, AppLock.KEY, if (lockOn) "1" else "") } }
@@ -130,6 +133,9 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
         MenuRow("⚙️", "Settings", "Tags, backup & restore, notifications, theme") { settings = true }
         if (note.isNotEmpty()) Text(note, fontSize = 13.sp, color = teal(), modifier = Modifier.padding(horizontal = 6.dp))
         Text("🔒 Nothing leaves this phone. This app has no internet permission.", fontSize = 12.sp, color = muted(), modifier = Modifier.padding(horizontal = 6.dp))
+    }
+    if (askStart) MonthStartDialog(monthStart, { askStart = false }) { d ->
+        Repo.putPref(ctx, "monthStart", d.toString()); Stats.loadStartDay(d.toString()); monthStart = Stats.startDay; Epoch.value++; askStart = false
     }
     if (setPass) PassphraseSetDialog(passOn, { setPass = false }) { p ->
         Repo.putPref(ctx, "backupPass", p); passOn = p.isNotEmpty(); setPass = false
@@ -145,7 +151,7 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
 @Composable
 fun AccountsDialog(vm: MainVm, onDismiss: () -> Unit) {
     val accounts by vm.accounts.collectAsState()
-    var editing by remember { mutableStateOf<AccountView?>(null) }
+    var detail by remember { mutableStateOf<String?>(null) }
     val known = accounts.filter { it.hasBalance }
     FullPage("Accounts", onDismiss) {
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
@@ -155,12 +161,12 @@ fun AccountsDialog(vm: MainVm, onDismiss: () -> Unit) {
             }
         }
         accounts.forEach { a ->
-            Card(Modifier.fillMaxWidth().clickable { editing = a }, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Card(Modifier.fillMaxWidth().clickable { detail = a.key }, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(a.label, fontSize = 16.sp)
                         val stale = a.hasBalance && System.currentTimeMillis() - a.asOf > 30L * 86_400_000L
-                        Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)}${if (stale) " · may be out of date, tap to correct" else " · tap to correct"}" else "Tap to set balance", fontSize = 12.sp, color = if (stale) amber() else muted())
+                        Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)}${if (stale) " · may be out of date" else ""} · tap for history" else "Tap to set balance and see history", fontSize = 12.sp, color = if (stale) amber() else muted())
                     }
                     if (a.hasBalance) Text(Logic.money(a.balance), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = if (a.balance < 0) MaterialTheme.colorScheme.error else green())
                 }
@@ -168,7 +174,7 @@ fun AccountsDialog(vm: MainVm, onDismiss: () -> Unit) {
         }
         Text("Transfers between your own accounts are left out of your spends.", fontSize = 12.sp, color = muted(), modifier = Modifier.padding(horizontal = 6.dp))
     }
-    editing?.let { a -> BalanceDialog(a, { editing = null }) { n, b -> vm.setBalance(a.key, n, b); editing = null } }
+    detail?.let { k -> accounts.firstOrNull { it.key == k }?.let { a -> AccountDetail(vm, a) { detail = null } } }
 }
 
 /** Entries that repeat every month. They are created on the day, even if the app was closed — the next time it opens. */
@@ -321,4 +327,74 @@ fun TourDialog(onDone: () -> Unit) {
         confirmButton = { TextButton(onClick = { if (i < steps.lastIndex) i++ else onDone() }) { Text(if (i < steps.lastIndex) "Next" else "Got it") } },
         dismissButton = { TextButton(onClick = onDone) { Text("Skip") } }
     )
+}
+
+@Composable
+private fun MonthStartDialog(current: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var text by remember { mutableStateOf(current.toString()) }
+    val d = text.toIntOrNull()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Month starts on day") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Pick 1 to use calendar months, or a day from 2 to 28 (for example 25 if your salary arrives then). Totals, budgets and the Transactions month follow it.", fontSize = 13.sp, color = muted())
+                OutlinedTextField(value = text, onValueChange = { text = it.filter(Char::isDigit).take(2) }, singleLine = true, label = { Text("Day (1-28)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            }
+        },
+        confirmButton = { TextButton(enabled = d != null && d in 1..28, onClick = { onSave(d!!) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** One account: its balance, how that balance has moved, and ways to correct or check it. */
+@Composable
+private fun AccountDetail(vm: MainVm, a: AccountView, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val accounts by vm.accounts.collectAsState()
+    val cur = accounts.firstOrNull { it.key == a.key } ?: a
+    val history = remember(cur.asOf, cur.balance) { Repo.balanceHistory(ctx, a.key) }
+    var edit by remember { mutableStateOf(false) }
+    var statement by remember { mutableStateOf(false) }
+    FullPage(cur.label, onDismiss) {
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Column(Modifier.padding(18.dp)) {
+                Text("Balance now", fontSize = 13.sp, color = muted())
+                Text(if (cur.hasBalance) Logic.money(cur.balance) else "Not set", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                if (cur.hasBalance) Text("From ${Repo.shortDate(cur.asOf)}, plus payments since", fontSize = 12.sp, color = muted())
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { edit = true }) { Text(if (cur.hasBalance) "Correct balance" else "Set balance") }
+            androidx.compose.material3.OutlinedButton(onClick = { statement = true }) { Text("Check a statement") }
+        }
+        if (history.size >= 2) {
+            val points = history.take(12).reversed()
+            val top = points.maxOf { Math.abs(it.amount) }.coerceAtLeast(1.0)
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("How it moved", fontWeight = FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth().height(70.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
+                        points.forEachIndexed { i, p ->
+                            Box(Modifier.weight(1f).height((60 * (Math.abs(p.amount) / top)).toFloat().coerceAtLeast(3f).dp)
+                                .background(if (i == points.lastIndex) teal() else teal().copy(alpha = 0.4f), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                        }
+                    }
+                }
+            }
+        }
+        if (history.isEmpty()) Text("No history yet. Each time you set the balance, or a bank message reports it, it is noted here.", fontSize = 13.sp, color = muted(), modifier = Modifier.padding(6.dp))
+        history.take(10).forEach { p ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text(Repo.shortDate(p.at), fontSize = 14.sp)
+                    Text(when (p.source) { "message" -> "From a bank message"; "statement" -> "From a statement"; else -> "Set by you" }, fontSize = 12.sp, color = muted())
+                }
+                Text(Logic.money(p.amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+    if (edit) BalanceDialog(cur, { edit = false }) { n, b -> vm.setBalance(a.key, n, b); edit = false }
+    if (statement) StatementFlow(vm, initial = "acct|${a.key}") { statement = false }
 }

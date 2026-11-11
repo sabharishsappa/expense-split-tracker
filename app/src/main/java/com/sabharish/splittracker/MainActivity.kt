@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
         readIntent(intent)
         addShortcut()
         ThemeState.mode = Repo.getPref(this, "theme", "system")
+        Stats.loadStartDay(Repo.getPref(this, "monthStart", "1"))
         enableEdgeToEdge()
         setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) { askPermissions() } } }
     }

@@ -260,3 +260,53 @@ object Netting {
         }.sortedByDescending { Math.abs(it.net) }
     }
 }
+
+/** Every balance an account has been set to, by you or read from a bank message, so you can see how it moved. */
+object BalanceLog {
+    const val KEY = "balanceLog"
+    const val MAX_PER_ACCOUNT = 30
+
+    data class Point(val key: String, val at: Long, val amount: Double, val source: String)   // source: "you" | "message" | "statement"
+
+    fun encode(l: List<Point>) = l.joinToString("\n") { "${it.key}\t${it.at}\t${it.amount}\t${it.source}" }
+
+    fun decode(s: String): List<Point> = s.lines().mapNotNull { line ->
+        val p = line.split("\t"); if (p.size < 4) return@mapNotNull null
+        Point(p[0], p[1].toLongOrNull() ?: return@mapNotNull null, p[2].toDoubleOrNull() ?: return@mapNotNull null, p[3])
+    }
+
+    /** Adds a point unless it repeats the latest amount for that account; keeps the newest [MAX_PER_ACCOUNT] per account. */
+    fun add(l: List<Point>, p: Point): List<Point> {
+        val mine = l.filter { it.key == p.key }.sortedByDescending { it.at }
+        if (mine.firstOrNull()?.let { Math.abs(it.amount - p.amount) < 0.005 } == true) return l
+        val kept = (mine + p).sortedByDescending { it.at }.take(MAX_PER_ACCOUNT)
+        return l.filter { it.key != p.key } + kept
+    }
+
+    /** Newest first. */
+    fun forKey(l: List<Point>, key: String) = l.filter { it.key == key }.sortedByDescending { it.at }
+}
+
+/** Comparing a statement's closing balance with what the app shows. */
+object Reconcile {
+    /** App minus statement; zero (within a paisa) means they agree. */
+    fun difference(app: Double, statement: Double): Double = Math.round((app - statement) * 100) / 100.0
+
+    /** A statement's closing balance only equals today's balance if it ends within the last [days] days. */
+    fun isCurrent(lastLine: Long, now: Long, days: Int = 3) = now - lastLine <= days * 86_400_000L
+
+    fun summary(app: Double, statement: Double): String {
+        val d = difference(app, statement)
+        return if (d == 0.0) "The app and the statement agree." else if (d > 0) "The app shows ${Logic.money(d)} more than the statement." else "The app shows ${Logic.money(-d)} less than the statement."
+    }
+}
+
+/** Decides what a sideways drag on a row does. */
+object SwipeLogic {
+    /** 1 = swiped right far enough, -1 = swiped left far enough, 0 = not far enough (the row springs back). */
+    fun decide(offset: Float, threshold: Float): Int = when {
+        offset >= threshold -> 1
+        offset <= -threshold -> -1
+        else -> 0
+    }
+}

@@ -125,3 +125,9 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - More ▸ Backup passphrase: save a backup, open the file in a text editor → starts with PLENC1:; restoring asks for the passphrase; a wrong one is refused.
 - More ▸ Evening summary: notification at 9 pm only when something is left to review or you spent today.
 - Open a transaction ▸ Add receipt: choose a photo; it shows "Receipt ✓"; not in backups.
+
+## Month start day, balance history, statement balance, swipe
+- More ▸ "Month starts on day N": set 25 → Home month card, Stats, Transactions month and budgets run 25th–24th; Calendar view still shows calendar months. Set 1 to go back.
+- More ▸ Accounts ▸ tap an account: balance, "How it moved" bars, list of past balances (you / bank message / statement), Correct balance, Check a statement.
+- Check a statement ▸ if the file shows a closing balance, it is compared with the app; if the statement ends within 3 days, "Use this as the account balance".
+- Inbox: drag a card right → marked mine; left → skipped (Undo in the snackbar). Transactions: right → edit tag/split; left → delete (asks first). Selecting mode turns swipes off. Swipe on empty space or use the bottom bar to change page.

@@ -2,6 +2,9 @@ package com.sabharish.splittracker
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -202,4 +205,39 @@ fun FullScreenDialog(onDismiss: () -> Unit, content: @androidx.compose.runtime.C
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         content = content
     )
+}
+
+/** What a swipe does: its label, colour and action. */
+class SwipeAction(val label: String, val color: Color, val onTrigger: () -> Unit)
+
+/**
+ * A row you can drag sideways to act on: right for [right], left for [left]. The row takes over horizontal drags that start on it,
+ * so swiping on a card never flips the page; page swipes still work anywhere off the cards and with the tabs below.
+ */
+@Composable
+fun SwipeRow(right: SwipeAction?, left: SwipeAction?, content: @Composable () -> Unit) {
+    var offset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 96.dp.toPx() }
+    val shown = when { offset > 0 -> right; offset < 0 -> left; else -> null }
+    Box(Modifier.fillMaxWidth()) {
+        if (shown != null) Box(
+            Modifier.matchParentSize().clip(RoundedCornerShape(20.dp)).background(shown.color.copy(alpha = if (Math.abs(offset) >= threshold) 1f else 0.55f)).padding(horizontal = 20.dp),
+            contentAlignment = if (offset > 0) Alignment.CenterStart else Alignment.CenterEnd
+        ) { Text(shown.label, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
+        Box(
+            Modifier.offset { androidx.compose.ui.unit.IntOffset(offset.toInt(), 0) }.pointerInput(right, left) {
+                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                    onDragEnd = {
+                        when (SwipeLogic.decide(offset, threshold)) { 1 -> right?.onTrigger?.invoke(); -1 -> left?.onTrigger?.invoke() }
+                        offset = 0f
+                    },
+                    onDragCancel = { offset = 0f }
+                ) { change, drag ->
+                    change.consume()
+                    val next = offset + drag
+                    offset = if ((next > 0 && right == null) || (next < 0 && left == null)) 0f else next.coerceIn(-threshold * 1.6f, threshold * 1.6f)
+                }
+            }
+        ) { content() }
+    }
 }

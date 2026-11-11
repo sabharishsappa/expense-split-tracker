@@ -589,13 +589,21 @@ object Repo {
         if (!known) return false
         if (saved != null && smsTime + 1 <= saved.asOf) return false      // older than what we already have
         dao.putRule(Accounts.encode(Account(key, hit.bank, hit.last, saved?.name ?: "", hit.balance, smsTime + 1)))
+        recordBalance(ctx, key, smsTime, hit.balance, "message")
         return true
     }
 
-    suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double) {
+    suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double, source: String = "you") {
         val bank = key.substringBefore("|"); val last = key.substringAfter("|")
         Db.get(ctx).dao().putRule(Accounts.encode(Account(key, bank, last, name.trim(), balance, System.currentTimeMillis())))
+        recordBalance(ctx, key, System.currentTimeMillis(), balance, source)
     }
+
+    fun recordBalance(ctx: Context, key: String, at: Long, amount: Double, source: String) {
+        putPref(ctx, BalanceLog.KEY, BalanceLog.encode(BalanceLog.add(BalanceLog.decode(getPref(ctx, BalanceLog.KEY, "")), BalanceLog.Point(key, at, amount, source))))
+    }
+
+    fun balanceHistory(ctx: Context, key: String): List<BalanceLog.Point> = BalanceLog.forKey(BalanceLog.decode(getPref(ctx, BalanceLog.KEY, "")), key)
 
     // ---------- backup ----------
     suspend fun exportBackup(ctx: Context): String {

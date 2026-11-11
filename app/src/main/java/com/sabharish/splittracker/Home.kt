@@ -247,12 +247,15 @@ private fun ClarityRing(fraction: Float) {
 }
 
 @Composable
-private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
+internal fun StatementFlow(vm: MainVm, initial: String? = null, onDone: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val all by vm.all.collectAsState()
     val sources = remember(all.size) { Statement.sources(all) }
-    var source by remember { mutableStateOf<StmtSource?>(null) }
+    var source by remember { mutableStateOf(sources.firstOrNull { it.key == initial }) }
+    var closing by remember { mutableStateOf<Double?>(null) }
+    var lastLine by remember { mutableStateOf(0L) }
+    var balanceSet by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<Recon?>(null) }
@@ -265,7 +268,7 @@ private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
                 val text = StatementReader.readText(ctx, uri, password)
                 val lines = Statement.parse(text)
                 if (lines.isEmpty()) message = "I couldn't find any transactions in that file. If it is a PDF, send me a sample so I can tune the reader."
-                else { result = Statement.reconcile(lines, Statement.txnsFor(s, all)); message = "" }
+                else { closing = Statement.closingBalance(text); lastLine = lines.maxOf { it.date }; result = Statement.reconcile(lines, Statement.txnsFor(s, all)); message = "" }
             } catch (e: StatementReader.NeedsPassword) {
                 message = "Could not open it. If the PDF has a password, enter it above and choose the file again."
             } catch (e: Exception) { message = "Could not read that file." }
@@ -299,6 +302,18 @@ private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
             title = { Text("${r.matched} of ${r.lines} lines match") },
             text = {
                 Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    val cl = closing
+                    if (cl != null && !s.isCard) {
+                        val accts by vm.accounts.collectAsState()
+                        val view = accts.firstOrNull { it.key == Accounts.keyOf(s.bank, s.last) }
+                        Text("Statement closing balance ${Logic.money(cl)}", fontWeight = FontWeight.SemiBold)
+                        if (view != null && view.hasBalance) Text(Reconcile.summary(view.balance, cl), fontSize = 13.sp, color = muted())
+                        if (Reconcile.isCurrent(lastLine, System.currentTimeMillis())) {
+                            if (balanceSet) Text("Balance updated ✓", fontSize = 13.sp, color = green())
+                            else TextButton(onClick = { vm.setBalance(Accounts.keyOf(s.bank, s.last), view?.name ?: "", cl, "statement"); balanceSet = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Use this as the account balance") }
+                        } else Text("This statement ended ${Logic.shortDate(lastLine)}, so it can't tell today's balance.", fontSize = 12.sp, color = muted())
+                        Spacer(Modifier.height(10.dp))
+                    }
                     if (r.missing.isEmpty() && r.extra.isEmpty()) Text("Everything lines up 🎉")
                     if (r.missing.isNotEmpty()) {
                         Text("On the statement, not in the app (${r.missing.size})", fontWeight = FontWeight.SemiBold)
@@ -368,12 +383,12 @@ private fun MonthCard(vm: MainVm, open: () -> Unit) {
     val txns by vm.all.collectAsState()
     val shareList by vm.shares.collectAsState()
     val shares = remember(shareList) { shareList.groupBy { it.txnId } }
-    val cal = java.util.Calendar.getInstance()
-    val y = cal.get(java.util.Calendar.YEAR); val m = cal.get(java.util.Calendar.MONTH)
-    val spent = remember(txns, shares) { Stats.spentInMonth(txns, shares, y, m) }
+    val ep = Epoch.value   // changes when the month start day is changed
+    val (y, m) = Stats.monthOf(System.currentTimeMillis())
+    val spent = remember(txns, shares, ep) { Stats.spentInMonth(txns, shares, y, m) }
     val limit = Budgets.decode(Repo.getPref(ctx, "budgets", ""))[Budgets.TOTAL]
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface).clickable(onClick = open).padding(18.dp)) {
-        Text("Spent in ${Stats.monthLabel(m)}", fontSize = 13.sp, color = muted())
+        Text(if (Stats.startDay <= 1) "Spent in ${Stats.monthLabel(m)}" else "Spent · ${Stats.periodTitle(y, m)}", fontSize = 13.sp, color = muted())
         Text(Logic.money(spent), fontSize = 28.sp, fontWeight = FontWeight.Bold)
         if (limit != null) {
             val st = Budgets.state(spent, limit)

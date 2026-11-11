@@ -26,9 +26,57 @@ object Stats {
     fun incomeOf(t: Txn): Double =
         if (t.kind == "UPI_IN" && t.status == "RECEIVED" && t.note.startsWith("Received:")) t.amount else 0.0
 
+    /**
+     * The day your "month" starts (1 = the calendar month; 25 = salary-cycle months that run the 25th to the 24th).
+     * Totals, budgets and the month pages follow it; the Calendar view always shows real calendar months.
+     */
+    @Volatile var startDay: Int = 1
+    private const val DAY = 86_400_000L
+
+    fun loadStartDay(stored: String) { startDay = stored.toIntOrNull()?.coerceIn(1, 28) ?: 1 }
+
+    /** Which (year, month0) period a moment belongs to. A period is named after the month it starts in. */
     fun monthOf(ms: Long, cal: Calendar = Calendar.getInstance()): Pair<Int, Int> {
         cal.timeInMillis = ms
+        if (startDay > 1) cal.add(Calendar.DAY_OF_MONTH, -(startDay - 1))
         return cal.get(Calendar.YEAR) to cal.get(Calendar.MONTH)
+    }
+
+    /** The real calendar month, ignoring [startDay]. */
+    fun calMonthOf(ms: Long, cal: Calendar = Calendar.getInstance()): Pair<Int, Int> {
+        cal.timeInMillis = ms
+        return cal.get(Calendar.YEAR) to cal.get(Calendar.MONTH)
+    }
+
+    fun inCalMonth(t: Txn, year: Int, month0: Int) = calMonthOf(t.txnDate) == (year to month0)
+
+    /** Start of the period (inclusive) in millis. */
+    fun periodStart(year: Int, month0: Int): Long =
+        Calendar.getInstance().apply { clear(); set(year, month0, startDay.coerceIn(1, 28), 0, 0, 0) }.timeInMillis
+
+    fun periodEnd(year: Int, month0: Int): Long { val (y, m) = shift(year, month0, 1); return periodStart(y, m) }
+
+    fun periodDays(year: Int, month0: Int): Int = Math.round((periodEnd(year, month0) - periodStart(year, month0)).toDouble() / DAY).toInt()
+
+    /** 1 on the first day of the current period. */
+    fun dayInPeriod(now: Long): Int {
+        val (y, m) = monthOf(now)
+        return ((now - periodStart(y, m)) / DAY).toInt() + 1
+    }
+
+    /** Days left in the current period, today included. */
+    fun daysLeft(now: Long): Int {
+        val (y, m) = monthOf(now)
+        return Math.ceil((periodEnd(y, m) - now).toDouble() / DAY).toInt().coerceAtLeast(1)
+    }
+
+    private val SHORT = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+    /** "Nov 2026", or "25 Nov – 24 Dec" when months start on another day. */
+    fun periodTitle(year: Int, month0: Int): String {
+        if (startDay <= 1) return "${SHORT[Math.floorMod(month0, 12)]} $year"
+        val (ey, em) = shift(year, month0, 1)
+        return "$startDay ${SHORT[Math.floorMod(month0, 12)]} – ${startDay - 1} ${SHORT[Math.floorMod(em, 12)]}"
     }
 
     /** (year, month0) moved by [delta] months. */
@@ -50,7 +98,7 @@ object Stats {
         val cal = Calendar.getInstance()
         val out = HashMap<Int, DayTotal>()
         for (t in txns) {
-            if (!inMonth(t, year, month0)) continue
+            if (!inCalMonth(t, year, month0)) continue
             val s = expenseOf(t, shares[t.id] ?: emptyList()); val i = incomeOf(t)
             if (s == 0.0 && i == 0.0) continue
             cal.timeInMillis = t.txnDate
@@ -170,8 +218,6 @@ object Budgets {
     fun perDay(limit: Double, spent: Double, daysLeft: Int): Double =
         if (daysLeft <= 0) 0.0 else Math.max(0.0, limit - spent) / daysLeft
 
-    fun daysLeftInMonth(now: Long): Int {
-        val c = Calendar.getInstance().apply { timeInMillis = now }
-        return c.getActualMaximum(Calendar.DAY_OF_MONTH) - c.get(Calendar.DAY_OF_MONTH) + 1
-    }
+    /** Days left in the current budget period (the calendar month unless months start on another day). */
+    fun daysLeftInMonth(now: Long): Int = Stats.daysLeft(now)
 }

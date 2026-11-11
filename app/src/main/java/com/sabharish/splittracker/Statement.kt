@@ -65,6 +65,12 @@ object Statement {
      * (amount + balance, or credit/debit/balance columns; the direction comes from the column order or from how the
      * balance moved). Wrapped description lines and totals are ignored.
      */
+    private val closingRx = Regex("""(?:Closing\s+Bal(?:ance)?|Balance\s+(?:as\s+on|carried\s+forward|c/f))\D{0,30}?(-?[\d,]+\.\d{2})""", RegexOption.IGNORE_CASE)
+
+    /** The closing balance printed on a statement, if it can be found. Null when it can't. */
+    fun closingBalance(text: String): Double? =
+        closingRx.findAll(text).lastOrNull()?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+
     fun parse(text: String): List<StmtLine> {
         val out = mutableListOf<StmtLine>()
         var prev: Double? = null
