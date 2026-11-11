@@ -50,6 +50,8 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
     val owed = pending.filter { it.person != Repo.ME }.groupBy { it.person }
         .mapValues { e -> e.value.sumOf { it.amount - it.settled } }.filterValues { it > 0.004 }
     val accounts by vm.accounts.collectAsState()
+    val allTxns by vm.all.collectAsState()
+    val lastBackup by vm.lastBackup.collectAsState()
     val bills by vm.dueBills.collectAsState()
     val payables by vm.payables.collectAsState()
     val oweList = remember(payables) { Logic.owedByYou(payables) }
@@ -69,6 +71,14 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         item { SmsBanner() }
+        item {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val now = System.currentTimeMillis()
+            val notes = listOfNotNull(Health.capture(allTxns, now), Health.backup(lastBackup, AutoBackup.folder(ctx) != null, allTxns.size, now))
+            if (notes.isNotEmpty()) Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                notes.forEach { Text(if (it.warn) "⚠ ${it.text}" else it.text, fontSize = 12.sp, color = if (it.warn) amber() else muted()) }
+            }
+        }
         item {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))

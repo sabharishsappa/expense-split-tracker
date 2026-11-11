@@ -88,6 +88,16 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
     var settings by remember { mutableStateOf(false) }
     var lockOn by remember { mutableStateOf(AppLock.isOn(ctx)) }
     var note by remember { mutableStateOf("") }
+    var autoDir by remember { mutableStateOf(AutoBackup.folder(ctx)) }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                Repo.putPref(ctx, AutoBackup.DIR, uri.toString()); autoDir = uri.toString()
+                vm.autoBackup(force = true); note = "Automatic backup is on. A copy is saved now and then every day you open the app."
+            } catch (e: Exception) { CrashLog.record(ctx, e); note = "Couldn't use that folder" }
+        }
+    }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) scope.launch {
             note = try {
@@ -106,6 +116,9 @@ fun MoreDialog(vm: MainVm, onDismiss: () -> Unit) {
         MenuRow("🔒", "App lock", if (AppLock.canUse(ctx)) "Ask for your phone's fingerprint, face or PIN" else "Set a screen lock on your phone first", trailing = {
             Switch(checked = lockOn, enabled = AppLock.canUse(ctx), onCheckedChange = { on -> lockOn = on; Repo.putPref(ctx, AppLock.KEY, if (on) "1" else "") })
         }) { if (AppLock.canUse(ctx)) { lockOn = !lockOn; Repo.putPref(ctx, AppLock.KEY, if (lockOn) "1" else "") } }
+        MenuRow("💾", "Automatic backup", if (autoDir != null) "On · one file in your folder, replaced daily. Tap to turn off" else "Saves a backup file in a folder you choose, every day") {
+            if (autoDir != null) { Repo.putPref(ctx, AutoBackup.DIR, ""); autoDir = null; note = "Automatic backup is off" } else pickFolder.launch(null)
+        }
         MenuRow("⚙️", "Settings", "Tags, backup & restore, notifications, theme") { settings = true }
         if (note.isNotEmpty()) Text(note, fontSize = 13.sp, color = teal(), modifier = Modifier.padding(horizontal = 6.dp))
         Text("🔒 Nothing leaves this phone. This app has no internet permission.", fontSize = 12.sp, color = muted(), modifier = Modifier.padding(horizontal = 6.dp))

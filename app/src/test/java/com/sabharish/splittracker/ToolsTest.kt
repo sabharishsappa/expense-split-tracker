@@ -68,3 +68,38 @@ class LockRuleTest {
     @Test fun staysOpenForQuickReturn() = assertFalse(LockRule.shouldLock(true, 1_000, 1_000 + 5_000))
     @Test fun neverLocksWhenOff() = assertFalse(LockRule.shouldLock(false, 1_000, 10_000_000))
 }
+
+class UpiLinkTest {
+    @Test fun buildsLink() = assertEquals("upi://pay?pa=me@okaxis&am=250.00&cu=INR&tn=Dinner%20split", UpiLink.build(" me@okaxis ", 250.0, "Dinner split"))
+    @Test fun blankNoteGetsDefault() = assertTrue(UpiLink.build("a@b", 1.0, " ").endsWith("tn=Payment"))
+    @Test fun reminderCarriesLinkOnlyWithUpi() {
+        assertTrue(Reminder.splitRequest("Ravi", "Badminton", 1200.0, 300.0, "me@okaxis").contains("upi://pay?pa=me@okaxis&am=300.00"))
+        assertFalse(Reminder.splitRequest("Ravi", "Badminton", 1200.0, 300.0, "").contains("upi://"))
+    }
+}
+
+class HealthTest {
+    private val day = 86_400_000L
+    private fun t(smsTime: Long, body: String) = Txn(bank = "HDFC", card = "1", kind = "SPEND", amount = 1.0, merchant = "x", txnDate = smsTime, smsTime = smsTime, status = "INBOX", body = body)
+
+    @Test fun captureIgnoresHandMadeEntries() {
+        val now = 10 * day
+        val line = Health.capture(listOf(t(now - 2 * 3_600_000L, "Rs 5 spent"), t(now - 60_000L, "")), now)!!
+        assertEquals("Last bank message read 2 h ago", line.text)
+        assertFalse(line.warn)
+    }
+    @Test fun captureWarnsAfterThreeDays() = assertTrue(Health.capture(listOf(t(0, "msg")), 5 * day)!!.warn)
+    @Test fun noMessagesNoLine() = assertNull(Health.capture(listOf(t(5, "")), 100))
+    @Test fun backupNudgeOnlyForRealData() = assertNull(Health.backup(0, false, 5, 100 * day))
+    @Test fun noBackupYetWarns() = assertTrue(Health.backup(0, false, 50, 100 * day)!!.warn)
+    @Test fun recentBackupIsQuiet() = assertNull(Health.backup(99 * day, false, 50, 100 * day))
+    @Test fun staleAutoBackupWarnsSooner() = assertTrue(Health.backup(95 * day, true, 50, 100 * day) != null)
+}
+
+class AutoBackupDueTest {
+    @Test fun dueAfterAboutADay() { assertTrue(AutoBackup.due(0, 86_400_000L)); assertFalse(AutoBackup.due(1_000, 3_600_000L)) }
+}
+
+class JumpTest {
+    @Test fun untaggedFilterShape() = assertEquals("Untagged", TxnFilter(tagState = "Untagged").tagState)
+}

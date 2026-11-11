@@ -665,6 +665,19 @@ fun AllScreen(vm: MainVm, q: String) {
     val merged = remember(filtered) { Transfers.merge(filtered) }   // an own transfer is one entry, not two
     val shown = merged.shown
     var mode by remember { mutableStateOf("List") }
+    val jump by vm.jump.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(jump) {
+        jump?.let { j ->
+            f0 = when {
+                j.tag == "Untagged" -> TxnFilter(tagState = "Untagged")
+                j.tag.isNotBlank() -> TxnFilter(tag = j.tag)
+                else -> TxnFilter()
+            }
+            monthOffset = (j.year * 12 + j.month0) - (today.get(Calendar.YEAR) * 12 + today.get(Calendar.MONTH))
+            mode = "List"
+            vm.jump.value = null
+        }
+    }
     Spacer(Modifier.height(6.dp))
     Segmented(listOf("List", "Calendar"), mode, { mode = it })
     if (mode == "Calendar") {
@@ -845,7 +858,7 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
 // ======================= SUMMARY =======================
 
 @Composable
-fun SummaryScreen(vm: MainVm) {
+fun SummaryScreen(vm: MainVm, onCategory: (String, Int, Int) -> Unit = { _, _, _ -> }) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val txns by vm.all.collectAsState()
     val shareList by vm.shares.collectAsState()
@@ -927,11 +940,12 @@ fun SummaryScreen(vm: MainVm) {
             item {
                 AppCard {
                     Text("Where my money went", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Tap a tag to see its transactions", fontSize = 12.sp, color = muted())
                     Spacer(Modifier.height(10.dp))
                     PieChart(slices, Modifier.fillMaxWidth().height(170.dp))
                     Spacer(Modifier.height(10.dp))
                     slices.forEachIndexed { i, sl ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().clickable { onCategory(if (sl.label == "Others") "" else sl.label, y, m) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(12.dp).background(sliceColor(i), RoundedCornerShape(3.dp)))
                             Text(sl.label, Modifier.weight(1f).padding(start = 8.dp), fontSize = 14.sp)
                             Text("${Math.round(sl.fraction * 100)}%", fontSize = 13.sp, color = muted())

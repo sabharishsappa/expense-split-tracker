@@ -80,6 +80,13 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     val status = MutableStateFlow("")
 
     init { viewModelScope.launch(safe) { Repo.migrateNames(getApplication()); Repo.backfillCategories(getApplication()); Repo.runRecurring(getApplication()) } }
+    val openEntry = MutableStateFlow(false)
+    data class Jump(val tag: String, val year: Int, val month0: Int)
+    /** Set by Stats to open the Transactions page already filtered to one tag and month. */
+    val jump = MutableStateFlow<Jump?>(null)
+    fun autoBackup(force: Boolean = false) = viewModelScope.launch(safe) {
+        if (AutoBackup.run(getApplication(), force)) lastBackup.value = System.currentTimeMillis()
+    }
     fun runRecurring() = viewModelScope.launch(safe) { Repo.runRecurring(getApplication()) }
     fun csvText(): String = Csv.build(all.value, shares.value.groupBy { it.txnId })
 

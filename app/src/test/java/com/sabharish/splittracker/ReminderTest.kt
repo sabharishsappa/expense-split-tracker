@@ -27,7 +27,8 @@ class ReminderTest {
     @Test fun upiIdIsAddedWhenPresent() {
         val rows = listOf(pending("Rajesh", "Namma Irani", 37.5, nov6, total = 187.5, parts = 5))
         val text = Reminder.build("Rajesh", rows, emptyMap(), "me@okaxis", nov6 + day)
-        assertTrue(text.contains("Total pending: ₹37.50\n\nPay by clicking the UPI ID below:\nme@okaxis\n\nThank you!"))
+        assertTrue(text.contains("Total pending: ₹37.50\n\nPay by clicking the UPI ID below:\nme@okaxis\n\n"))
+        assertTrue(text.endsWith("Thank you!"))
     }
 
     @Test fun noUpiLineWhenBlank() {
@@ -83,8 +84,8 @@ class SplitRequestTest {
     @Test fun badmintonMessage() {
         val m = Reminder.splitRequest("Ravi Kumar", "Badminton", 1200.0, 300.0, "me@okaxis")
         assertTrue(m.startsWith("Hi Ravi 👋\n\nBadminton · total ₹1,200\nYour share: ₹300"))
-        assertTrue(m, m.contains("Pay by clicking the UPI ID below:\nme@okaxis\n\nThank you!"))
-        assertFalse(m.contains("upi://"))
+        assertTrue(m, m.contains("Pay by clicking the UPI ID below:\nme@okaxis\n\n"))
+        assertTrue(m, m.endsWith("Thank you!"))
         assertTrue(m.endsWith("Thank you!"))
     }
     @Test fun noUpiNoPayLine() = assertFalse(Reminder.splitRequest("Ravi", "Badminton", 1200.0, 300.0, " ").contains("Pay by"))

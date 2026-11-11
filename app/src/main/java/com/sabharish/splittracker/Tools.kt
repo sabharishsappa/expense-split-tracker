@@ -111,3 +111,41 @@ object LockRule {
     const val GRACE = 30_000L
     fun shouldLock(lockOn: Boolean, stoppedAt: Long, now: Long) = lockOn && stoppedAt > 0 && now - stoppedAt > GRACE
 }
+
+/** A `upi://pay` link: opens the payer's own UPI app with the amount filled in. Built here, never sent anywhere by this app. */
+object UpiLink {
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20").replace("%40", "@")
+    fun build(upi: String, amount: Double, note: String): String =
+        "upi://pay?pa=${enc(upi.trim())}&am=${"%.2f".format(java.util.Locale.ENGLISH, amount)}&cu=INR&tn=${enc(note.trim().ifEmpty { "Payment" })}"
+}
+
+/** Quiet status lines for Home: is capture working, and is there a recent backup? */
+object Health {
+    data class Line(val text: String, val warn: Boolean)
+    private const val DAY = 86_400_000L
+
+    fun ago(ms: Long): String = when {
+        ms < 60_000L -> "just now"
+        ms < 3_600_000L -> "${ms / 60_000L} min ago"
+        ms < DAY -> "${ms / 3_600_000L} h ago"
+        ms < 2 * DAY -> "yesterday"
+        else -> "${ms / DAY} days ago"
+    }
+
+    /** When the newest bank message or notification was read. Hand-made entries have no message text and are ignored. */
+    fun capture(txns: List<Txn>, now: Long): Line? {
+        val last = txns.filter { it.body.isNotBlank() }.maxOfOrNull { it.smsTime } ?: return null
+        val age = (now - last).coerceAtLeast(0)
+        return Line("Last bank message read ${ago(age)}" + if (age > 3 * DAY) ". If you have paid since, check Settings ▸ Message reading check." else "", age > 3 * DAY)
+    }
+
+    fun backup(lastBackup: Long, autoOn: Boolean, txnCount: Int, now: Long): Line? {
+        if (txnCount < 20) return null
+        val age = now - lastBackup
+        return when {
+            lastBackup <= 0 -> Line("No backup yet. Turn on automatic backup in More.", true)
+            age > 14 * DAY || (autoOn && age > 3 * DAY) -> Line("Last backup ${ago(age)}." + if (autoOn) " Open the app to run the automatic one." else " Turn on automatic backup in More.", true)
+            else -> null
+        }
+    }
+}

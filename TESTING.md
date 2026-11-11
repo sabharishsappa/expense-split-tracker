@@ -108,3 +108,10 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - More ▸ Repeating entries: add "Rent ₹10,000 on the 5th"; it appears on the 5th (or the next app open) and never twice for a month; Stop removes it.
 - More ▸ App lock: needs a phone screen lock; leave the app >30 s and return → asks for fingerprint/PIN.
 - More ▸ Accounts / Home "My accounts" card open the same page.
+
+## Capture health, quick-add, auto backup, pay link, Stats → list
+- Home top: "Last bank message read 2 h ago" (amber warning after 3 days). A backup warning shows when there is none, or it is old.
+- Long-press the app icon → "Add entry" opens the add screen directly (also works from a cold start).
+- More ▸ Automatic backup: pick a folder; one file `PaisaLog-auto-backup.json` is replaced daily when you open the app. Turn off by tapping again.
+- Reminders and split requests now include a `upi://pay` link below the UPI ID (opens the payer's UPI app with the amount filled).
+- Stats ▸ "Where my money went": tap a tag → Transactions opens on that month filtered to the tag ("Others" opens the month unfiltered).
