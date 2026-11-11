@@ -225,3 +225,38 @@ object Digest {
             spentToday.takeIf { it > 0.004 }?.let { "${Logic.money(it)} spent today" }
         ).joinToString(" · ").ifEmpty { null }
 }
+
+/** Filters you use often ("Cab this year"), saved by name. Kept in a setting, so they are backed up. */
+object SavedFilters {
+    const val KEY = "savedFilters"
+    const val MAX = 8
+    private const val SEP = '\u001F'
+
+    data class Saved(val name: String, val filter: TxnFilter)
+
+    private fun fields(f: TxnFilter) = listOf(f.type, f.tagState, f.tag, f.range, f.status, f.minAmt?.toString() ?: "", f.maxAmt?.toString() ?: "").joinToString(SEP.toString())
+
+    fun encode(l: List<Saved>) = l.joinToString("\n") { it.name.replace(Regex("[\t\n]"), " ") + "\t" + fields(it.filter) }
+
+    fun decode(s: String): List<Saved> = s.lines().mapNotNull { line ->
+        val name = line.substringBefore("\t", ""); val p = line.substringAfter("\t", "").split(SEP)
+        if (name.isEmpty() || p.size < 7) null
+        else Saved(name, TxnFilter(type = p[0], tagState = p[1], tag = p[2], range = p[3], status = p[4], minAmt = p[5].toDoubleOrNull(), maxAmt = p[6].toDoubleOrNull()))
+    }
+
+    /** Saving under an existing name replaces it; newest first, capped. */
+    fun add(l: List<Saved>, s: Saved): List<Saved> = (listOf(s) + l.filter { !it.name.equals(s.name, true) }).take(MAX)
+}
+
+/** People who owe you and are owed by you at the same time: the real balance is the difference. */
+object Netting {
+    data class Net(val person: String, val theyOwe: Double, val youOwe: Double) { val net get() = theyOwe - youOwe }
+
+    fun between(theyOwe: Map<String, Double>, youOwe: List<Pair<String, Double>>): List<Net> {
+        val mine = youOwe.associate { it.first.trim().lowercase() to it }
+        return theyOwe.mapNotNull { (p, a) ->
+            val m = mine[p.trim().lowercase()] ?: return@mapNotNull null
+            if (a > 0.004 && m.second > 0.004) Net(p, a, m.second) else null
+        }.sortedByDescending { Math.abs(it.net) }
+    }
+}

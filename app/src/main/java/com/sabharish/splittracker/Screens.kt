@@ -527,6 +527,7 @@ fun PendingScreen(vm: MainVm, q: String) {
     val rows = if (q.isBlank()) allRows else allRows.filter { it.person.contains(q.trim(), true) || Repo.nameOnly(it.merchant, aliases).contains(q.trim(), true) || it.category.contains(q.trim(), true) }
     val owe by vm.payables.collectAsState()
     val oweBy = remember(owe) { Logic.owedByYou(owe) }
+    val nets = remember(rows, oweBy) { Netting.between(rows.groupBy { it.person }.mapValues { e -> e.value.sumOf { it.amount - it.settled } }.filterKeys { it != Repo.ME }, oweBy) }
     var payFor by remember { mutableStateOf<String?>(null) }
     var addOwe by remember { mutableStateOf(false) }
     var addOweFor by remember { mutableStateOf<String?>(null) }
@@ -550,6 +551,19 @@ fun PendingScreen(vm: MainVm, q: String) {
         }
         Spacer(Modifier.height(12.dp))
         if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
+            }
+        }
+        if (nets.isNotEmpty()) item(key = "nets") {
+            AppCard {
+                Text("Settle the difference", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                nets.forEach { n ->
+                    Text(
+                        if (n.net > 0.004) "${n.person} owes you ${Repo.money(n.theyOwe)} and you owe them ${Repo.money(n.youOwe)}. Net: they owe you ${Repo.money(n.net)}."
+                        else if (n.net < -0.004) "${n.person} owes you ${Repo.money(n.theyOwe)} and you owe them ${Repo.money(n.youOwe)}. Net: you owe them ${Repo.money(-n.net)}."
+                        else "${n.person} and you owe each other the same ${Repo.money(n.theyOwe)}. You are even.",
+                        fontSize = 13.sp, color = muted(), modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
         if (oweBy.isNotEmpty()) {
@@ -677,6 +691,20 @@ fun AllScreen(vm: MainVm, q: String) {
     var mode by remember { mutableStateOf("List") }
     val jump by vm.jump.collectAsState()
     var askAmount by remember { mutableStateOf(false) }
+    val appCtx2 = androidx.compose.ui.platform.LocalContext.current
+    var saved by remember { mutableStateOf(SavedFilters.decode(Repo.getPref(appCtx2, SavedFilters.KEY, ""))) }
+    fun persistSaved(l: List<SavedFilters.Saved>) { saved = l; Repo.putPref(appCtx2, SavedFilters.KEY, SavedFilters.encode(l)) }
+    var nameSaved by remember { mutableStateOf(false) }
+    if (nameSaved) {
+        var n by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { nameSaved = false },
+            title = { Text("Name this filter") },
+            text = { OutlinedTextField(value = n, onValueChange = { n = it }, singleLine = true, label = { Text("e.g. Cab this year") }) },
+            confirmButton = { TextButton(enabled = n.isNotBlank(), onClick = { persistSaved(SavedFilters.add(saved, SavedFilters.Saved(n.trim(), f0.copy(query = "")))); nameSaved = false }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { nameSaved = false }) { Text("Cancel") } }
+        )
+    }
     if (askAmount) AmountRangeDialog(f0.minAmt, f0.maxAmt, { askAmount = false }) { lo, hi -> f0 = f0.copy(minAmt = lo, maxAmt = hi); askAmount = false }
     androidx.compose.runtime.LaunchedEffect(jump) {
         jump?.let { j ->
@@ -712,6 +740,18 @@ fun AllScreen(vm: MainVm, q: String) {
         FilterPill("Status", Filters.statuses, f.status) { f0 = f0.copy(status = it) }
         Pill(if (f.minAmt != null || f.maxAmt != null) "₹${f.minAmt?.let { Repo.compact(it) } ?: "0"}–${f.maxAmt?.let { Repo.compact(it) } ?: "any"}" else "Amount ▾",
             { askAmount = true }, selected = f.minAmt != null || f.maxAmt != null, compact = true)
+        Box {
+            var menu by remember { mutableStateOf(false) }
+            Pill("★ Saved ▾", { menu = true }, compact = true, selected = saved.any { it.filter == f0 })
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                saved.forEach { s ->
+                    DropdownMenuItem(text = { Text(s.name) }, onClick = { f0 = s.filter; menu = false },
+                        trailingIcon = { Text("✕", color = muted(), modifier = Modifier.clickable { persistSaved(saved.filter { it != s }); menu = false }.padding(8.dp)) })
+                }
+                if (f0.active) DropdownMenuItem(text = { Text("Save this filter…", color = MaterialTheme.colorScheme.primary) }, onClick = { menu = false; nameSaved = true })
+                if (saved.isEmpty() && !f0.active) DropdownMenuItem(text = { Text("Set a filter first, then save it", color = muted()) }, onClick = { menu = false })
+            }
+        }
         if (f0.active) Pill("Clear ✕", { f0 = TxnFilter() }, compact = true)
     }
     Spacer(Modifier.height(6.dp))

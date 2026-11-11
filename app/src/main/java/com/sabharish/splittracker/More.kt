@@ -302,3 +302,22 @@ fun ReceiptDialog(txnId: Long, onDismiss: () -> Unit) {
         Text("Kept only on this phone. Photos are not included in backups.", fontSize = 12.sp, color = muted())
     }
 }
+
+/** Shown once to a brand-new person: what is read, what stays private, how to add. */
+@Composable
+fun TourDialog(onDone: () -> Unit) {
+    val steps = listOf(
+        Triple("📩", "Payments arrive by themselves", "Bank and UPI messages are read on this phone and show up in your Inbox. Tag each one: yours, or split with someone."),
+        Triple("🔒", "Nothing leaves your phone", "This app has no internet access at all. Your data stays here. Save a backup file now and then (More ▸ Automatic backup does it for you)."),
+        Triple("➕", "Cash or something missed?", "Tap + to add it in a few seconds. You can type 120+45 in the amount, and save things you add often as quick entries.")
+    )
+    var i by remember { mutableStateOf(0) }
+    val (emoji, title, body) = steps[i]
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("$emoji  $title") },
+        text = { Text(body, fontSize = 15.sp) },
+        confirmButton = { TextButton(onClick = { if (i < steps.lastIndex) i++ else onDone() }) { Text(if (i < steps.lastIndex) "Next" else "Got it") } },
+        dismissButton = { TextButton(onClick = onDone) { Text("Skip") } }
+    )
+}

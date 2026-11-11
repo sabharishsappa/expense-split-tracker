@@ -278,6 +278,8 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
             askPermissions()
         }
     )
+    var tour by remember { mutableStateOf(Repo.getPref(appCtx, "tourDone", "").isEmpty() && Repo.getPref(appCtx, "selfAsked", "").isEmpty()) }
+    if (!welcome && !askName && tour) TourDialog { Repo.putPref(appCtx, "tourDone", "1"); tour = false }
     if (!welcome && askName) NameDialog { n ->
         if (n.isNotEmpty()) Repo.putPref(appCtx, "selfnames", n)
         Repo.putPref(appCtx, "selfAsked", "1"); askName = false

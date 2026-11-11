@@ -191,3 +191,23 @@ class DigestTest {
         assertEquals("₹50 spent today", Digest.message(0, 50.0))
     }
 }
+
+class SavedFiltersTest {
+    private val a = SavedFilters.Saved("Cab this year", TxnFilter(tag = "Cab", range = "Last 90 days", minAmt = 100.0))
+    private val b = SavedFilters.Saved("Big UPI", TxnFilter(type = "UPI", maxAmt = 5000.5))
+    @Test fun roundTrips() = assertEquals(listOf(a, b), SavedFilters.decode(SavedFilters.encode(listOf(a, b))))
+    @Test fun sameNameReplaces() {
+        val l = SavedFilters.add(listOf(a, b), SavedFilters.Saved("cab this year", TxnFilter(tag = "Fuel")))
+        assertEquals(2, l.size); assertEquals("Fuel", l.first().filter.tag)
+    }
+    @Test fun junkLinesIgnored() = assertTrue(SavedFilters.decode("nonsense\n\t\n").isEmpty())
+}
+
+class NettingTest {
+    @Test fun onlyPeopleInBothLists() {
+        val n = Netting.between(mapOf("Ravi" to 500.0, "Asha" to 200.0), listOf("ravi " to 150.0, "Kiran" to 90.0))
+        assertEquals(1, n.size)
+        assertEquals(350.0, n[0].net, 0.001)
+    }
+    @Test fun youOweMoreIsNegative() = assertEquals(-70.0, Netting.between(mapOf("A" to 30.0), listOf("A" to 100.0))[0].net, 0.001)
+}
