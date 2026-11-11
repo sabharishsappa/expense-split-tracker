@@ -184,6 +184,11 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        floatingActionButton = {
+            if (tab in 0..3) androidx.compose.material3.FloatingActionButton(
+                onClick = { showEntry = true }, containerColor = MaterialTheme.colorScheme.primary
+            ) { Icon(Icons.Default.Add, contentDescription = "Add an entry") }
+        },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
@@ -210,7 +215,6 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (tab in 0..3) {
                         IconButton(onClick = { showNewSplit = true }) { Icon(SplitIcon, contentDescription = "Split a bill") }
-                        IconButton(onClick = { showEntry = true }) { Icon(Icons.Default.AddCircle, contentDescription = "Add an expense") }
                     }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                         Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")

@@ -656,7 +656,11 @@ fun AllScreen(vm: MainVm, q: String) {
     val tags by vm.tags.collectAsState()
     val byTxn = shares.groupBy { it.txnId }
     val now = System.currentTimeMillis()
-    val filtered = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) }
+    val today = remember { Calendar.getInstance() }
+    var monthOffset by remember { mutableIntStateOf(0) }
+    val (my, mm) = Stats.shift(today.get(Calendar.YEAR), today.get(Calendar.MONTH), monthOffset)
+    val searchingAll = q.isNotBlank()   // a search looks through every month
+    val filtered = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) && (searchingAll || Stats.inMonth(it, my, mm)) }
     val merged = remember(filtered) { Transfers.merge(filtered) }   // an own transfer is one entry, not two
     val shown = merged.shown
     var mode by remember { mutableStateOf("List") }
@@ -668,9 +672,14 @@ fun AllScreen(vm: MainVm, q: String) {
         return
     }
     Spacer(Modifier.height(6.dp))
+    if (!searchingAll) {
+        MonthBar(Stats.monthLabel(mm) + " $my", { monthOffset-- }, { monthOffset++ }, monthOffset < 0)
+        val inc = Stats.incomeInMonth(txns, my, mm); val exp = Stats.spentInMonth(txns, byTxn, my, mm)
+        MonthStrip(inc, exp)
+    }
+    Spacer(Modifier.height(6.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterPill("Type", Filters.types, f.type) { f0 = f0.copy(type = it) }
-        FilterPill("Date", Filters.ranges, f.range) { f0 = f0.copy(range = it) }
         FilterPill("Tag", listOf("Any", "Untagged") + tags, if (f.tagState == "Untagged") "Untagged" else f.tag.ifBlank { "Any" }) {
             f0 = when (it) { "Any" -> f0.copy(tagState = "Any", tag = ""); "Untagged" -> f0.copy(tagState = "Untagged", tag = ""); else -> f0.copy(tagState = "Any", tag = it) }
         }
@@ -678,8 +687,6 @@ fun AllScreen(vm: MainVm, q: String) {
         if (f0.active) Pill("Clear ✕", { f0 = TxnFilter() }, compact = true)
     }
     Spacer(Modifier.height(6.dp))
-    Text("${shown.size} transactions · ${Logic.money(shown.filter { it.kind == "SPEND" || it.kind == "UPI_OUT" }.sumOf { it.amount })} spent",
-        fontSize = 12.sp, color = muted())
     val picked = remember(Epoch.value) { mutableStateListOf<Long>() }
     var selecting by remember(Epoch.value) { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = selecting) { picked.clear(); selecting = false }
@@ -691,13 +698,56 @@ fun AllScreen(vm: MainVm, q: String) {
             onDone = { picked.clear(); selecting = false }, partners = merged.partner)
     } else TextButton(onClick = { selecting = true }) { Text("Select") }
     Spacer(Modifier.height(4.dp))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+    val days = remember(shown) { shown.groupBy { dayKey(it.txnDate) } }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 88.dp)) {
+        if (shown.isEmpty()) item { Text(if (searchingAll) "Nothing matches." else "Nothing in this month yet. Tap + to add.", color = muted(), modifier = Modifier.padding(16.dp)) }
         items(shown, key = { it.id }) { t ->
+            val dayRows = days[dayKey(t.txnDate)] ?: emptyList()
+            if (dayRows.firstOrNull()?.id == t.id) {
+                DayHeader(t.txnDate, dayRows.sumOf { Stats.expenseOf(it, byTxn[it.id] ?: emptyList()) }, dayRows.sumOf { Stats.incomeOf(it) })
+            }
             if (selecting) SelectRow(t, aliases, t.id in picked, merged.partner[t.id]) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
             else TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id], onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { sheetFor = it }
         }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
+}
+
+private fun dayKey(ms: Long) = (ms + java.util.TimeZone.getDefault().getOffset(ms)) / 86_400_000L
+
+@Composable
+private fun DayHeader(ms: Long, spent: Double, income: Double) {
+    val label = java.text.SimpleDateFormat("EEE, d MMM", java.util.Locale.getDefault()).format(ms)
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = muted())
+        Text(
+            listOfNotNull(income.takeIf { it > 0 }?.let { "+${Logic.money(it)}" }, spent.takeIf { it > 0 }?.let { "−${Logic.money(it)}" }).joinToString("   "),
+            fontSize = 13.sp, color = muted()
+        )
+    }
+}
+
+/** ‹ Nov 2026 › — the next arrow stops at the current month. */
+@Composable
+private fun MonthBar(label: String, onPrev: () -> Unit, onNext: () -> Unit, canNext: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onPrev) { Text("‹", fontSize = 22.sp) }
+        Text(label, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(120.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        TextButton(onClick = onNext, enabled = canNext) { Text("›", fontSize = 22.sp) }
+    }
+}
+
+/** Income · Expenses · Balance for the month, in one quiet row. */
+@Composable
+private fun MonthStrip(income: Double, expense: Double) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        listOf(Triple("Income", income, Color(0xFF2F7DE1)), Triple("Expenses", expense, Color(0xFFE5574B)), Triple("Balance", income - expense, Color.Unspecified)).forEach { (l, v, c) ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(l, fontSize = 12.sp, color = muted())
+                Text(Logic.money(v), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c)
+            }
+        }
+    }
 }
 
 /** A pill that opens a menu; highlighted when something other than "Any" is chosen. */
