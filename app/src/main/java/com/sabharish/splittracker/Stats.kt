@@ -100,6 +100,15 @@ object Stats {
         val cells = List(lead) { null } + (1..days).map { it as Int? }
         return cells.chunked(7).map { w -> w + List(7 - w.size) { null } }
     }
+
+    /** Same grid with Sunday first, the way Money Manager draws it. */
+    fun weeksSunday(year: Int, month0: Int): List<List<Int?>> {
+        val cal = Calendar.getInstance().apply { clear(); set(year, month0, 1) }
+        val days = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val lead = cal.get(Calendar.DAY_OF_WEEK) - 1             // Sunday = 0
+        val cells = List(lead) { null } + (1..days).map { it as Int? }
+        return cells.chunked(7).map { w -> w + List(7 - w.size) { null } }
+    }
 }
 
 /** Budgets: one overall monthly limit and optional limits per tag, kept as one small text in the settings. */

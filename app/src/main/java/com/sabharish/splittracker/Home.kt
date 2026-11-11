@@ -72,21 +72,21 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
         item {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF0F766E), Color(0xFF115E59))))
+                    .background(MaterialTheme.colorScheme.surface)
                     .clickable { go(2) }.padding(22.dp)
             ) {
-                Text("Others owe you", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                Text("Others owe you", color = muted(), fontSize = 14.sp)
                 Spacer(Modifier.height(4.dp))
-                Text(Logic.money(total), color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                Text(Logic.money(total), color = blue(), fontSize = 40.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     if (owed.isEmpty()) "All settled 🎉" else "${owed.size} ${if (owed.size == 1) "person owes" else "people owe"} you",
-                    color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp
+                    color = muted(), fontSize = 14.sp
                 )
                 val lent = Logic.lentTotal(pending)
                 if (lent > 0.004) {
                     Spacer(Modifier.height(2.dp))
-                    Text("Cash lent ${Logic.money(lent)} · Shared spends ${Logic.money(total - lent)}", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                    Text("Cash lent ${Logic.money(lent)} · Shared spends ${Logic.money(total - lent)}", color = muted(), fontSize = 13.sp)
                 }
             }
         }
@@ -204,7 +204,7 @@ private fun StatTile(label: String, value: String, tint: Color, modifier: Modifi
 }
 
 @Composable
-private fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
+internal fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
     var amount by remember { mutableStateOf(if (a.hasBalance) a.balance.toString().removeSuffix(".0") else "") }
     var name by remember { mutableStateOf(a.name) }
     AlertDialog(
@@ -240,7 +240,7 @@ private fun ClarityRing(fraction: Float) {
 }
 
 @Composable
-private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
+internal fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val all by vm.all.collectAsState()

@@ -10,6 +10,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -125,7 +130,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
     androidx.compose.runtime.CompositionLocalProvider(
@@ -133,27 +137,34 @@ fun App(vm: MainVm, askPermissions: () -> Unit = {}) {
     ) { AppBody(vm, askPermissions) }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
+    // bottom bar like Money Manager: Trans. / Stats / Accounts / More
     var tab by remember { mutableIntStateOf(0) }
-    // swipe left / right moves between the five pages; the bottom bar and swiping stay in step
-    val pager = androidx.compose.foundation.pager.rememberPagerState(pageCount = { 5 })
-    LaunchedEffect(tab) { if (pager.currentPage != tab) pager.animateScrollToPage(tab) }
-    LaunchedEffect(pager) { androidx.compose.runtime.snapshotFlow { pager.settledPage }.collect { if (it != tab) tab = it } }
+    // inside Trans.: 0 Inbox, 1 Daily, 2 Calendar, 3 Monthly, 4 Total, 5 Note
+    var sub by remember { mutableIntStateOf(1) }
+    var accSection by remember { mutableIntStateOf(0) }
+    var monthOffset by remember { mutableIntStateOf(0) }
+    var flt by remember { mutableStateOf(TxnFilter()) }
+    var showFilters by remember { mutableStateOf(false) }
     var inboxSection by remember { mutableIntStateOf(0) }
     var showNewSplit by remember { mutableStateOf(false) }
     var showEntry by remember { mutableStateOf(false) }
+    var showStatement by remember { mutableStateOf(false) }
     var opened by remember { mutableStateOf<Txn?>(null) }
     val openId by vm.openId.collectAsState()
-    var searching by remember(tab) { mutableStateOf(false) }
-    var query by remember(tab) { mutableStateOf("") }
+    var searching by remember(tab, sub, accSection) { mutableStateOf(false) }
+    var query by remember(tab, sub, accSection) { mutableStateOf("") }
     val spends by vm.inbox.collectAsState()
     val money by vm.moneyIn.collectAsState()
     val status by vm.status.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showSettings by remember { mutableStateOf(false) }
+    val tags by vm.tags.collectAsState()
+    val today = remember { java.util.Calendar.getInstance() }
+    val (y, m) = Stats.shift(today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), monthOffset)
+    val inboxCount = spends.size + money.size
 
     val undoable: (Long, String) -> Unit = { id, msg ->
         scope.launch {
@@ -168,11 +179,10 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
             snackbar.showSnackbar(s)
         }
     }
-
     LaunchedEffect(openId) {
         if (openId > 0) {
             val t = vm.txnById(openId); vm.openId.value = 0
-            tab = 1
+            tab = 0; sub = 0
             if (t != null) when {
                 t.kind == "UPI_IN" || t.kind == "REFUND" || t.status == "REPAID" -> inboxSection = 1
                 t.status == "INBOX" || t.status == "TAGGED" -> { inboxSection = 0; opened = t }
@@ -180,60 +190,89 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
         }
     }
     androidx.activity.compose.BackHandler(enabled = tab != 0) { tab = 0 }
-    val titles = listOf("Today", "Inbox", "Owed to you", "Transactions", "Summary")
+    val navColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = coral(), selectedTextColor = coral(),
+        unselectedIconColor = muted(), unselectedTextColor = muted(), indicatorColor = Color.Transparent
+    )
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
-                    icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
+            NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, colors = navColors,
                     icon = {
-                        androidx.compose.material3.BadgedBox(badge = { if (spends.size + money.size > 0) androidx.compose.material3.Badge { Text("${spends.size + money.size}") } }) {
-                            Icon(Icons.Default.Email, null)
-                        }
-                    }, label = { Text("Inbox") })
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.Person, null) }, label = { Text("Owed") })
-                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("All") })
-                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 },
-                    icon = { Icon(Icons.Default.DateRange, null) }, label = { Text("Summary") })
+                        androidx.compose.material3.BadgedBox(badge = { if (inboxCount > 0) androidx.compose.material3.Badge { Text("$inboxCount") } }) { Icon(Icons.AutoMirrored.Filled.List, null) }
+                    }, label = { Text("Trans.", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = navColors, icon = { Icon(IconBars, null) }, label = { Text("Stats", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = navColors, icon = { Icon(IconWallet, null) }, label = { Text("Accounts", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = navColors, icon = { Icon(IconMore, null) }, label = { Text("More", fontSize = 12.sp) })
             }
         }
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().padding(horizontal = 14.dp)) {
-            Spacer(Modifier.height(24.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(titles[tab], fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (tab in 0..3) {
-                        IconButton(onClick = { showNewSplit = true }) { Icon(SplitIcon, contentDescription = "Split a bill") }
-                        IconButton(onClick = { showEntry = true }) { Icon(Icons.Default.AddCircle, contentDescription = "Add an expense") }
-                    }
-                    if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
-                        Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
-                    }
-                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
-                }
-            }
-            if (searching && tab in 1..3) {
-                SearchBox(query, { query = it }, if (tab == 2) "Search a person or bill" else "Name, amount, tag or message")
-            }
-            Spacer(Modifier.height(6.dp))
+        Box(Modifier.padding(pad).fillMaxSize()) {
             val loaded by vm.loaded.collectAsState()
             if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() } else
-            androidx.compose.foundation.pager.HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-                Column(Modifier.fillMaxSize()) {   // a Column, not a Box: page parts must stack, not overlap
-                    when (page) {
-                        0 -> HomeScreen(vm) { if (it == 11) { inboxSection = 3; tab = 1 } else { if (it == 1) inboxSection = 0; tab = it } }
-                        1 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
-                        2 -> PendingScreen(vm, query)
-                        3 -> AllScreen(vm, query)
-                        else -> SummaryScreen(vm)
+            Column(Modifier.fillMaxSize()) {
+                when (tab) {
+                    0 -> {
+                        val actions: @Composable () -> Unit = {
+                            IconButton(onClick = { showNewSplit = true }) { Icon(SplitIcon, contentDescription = "Split a bill") }
+                            SearchIconButton(searching) { searching = !searching; if (!searching) query = "" }
+                            if (sub in 1..5) IconButton(onClick = { showFilters = !showFilters }) { Icon(IconTune, contentDescription = "Filter", tint = if (flt.active) coral() else MaterialTheme.colorScheme.onSurface) }
+                        }
+                        MonthBar(if (sub == 0) "Inbox" else "${Stats.monthLabel(m)} $y",
+                            { monthOffset -= 1 }, { if (monthOffset < 0) monthOffset += 1 }, monthOffset < 0, arrows = sub != 0, actions = actions)
+                        MmTabs(listOf(if (inboxCount > 0) "Inbox $inboxCount" else "Inbox", "Daily", "Calendar", "Monthly", "Total", "Note"), sub) { sub = it }
+                        if (searching) Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { SearchBox(query, { query = it }, "Name, amount, tag or message") }
+                        if (showFilters && sub in 1..5) Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterPill("Type", Filters.types, flt.type) { flt = flt.copy(type = it) }
+                            FilterPill("Tag", listOf("Any", "Untagged") + tags, if (flt.tagState == "Untagged") "Untagged" else flt.tag.ifBlank { "Any" }) {
+                                flt = when (it) { "Any" -> flt.copy(tagState = "Any", tag = ""); "Untagged" -> flt.copy(tagState = "Untagged", tag = ""); else -> flt.copy(tagState = "Any", tag = it) }
+                            }
+                            FilterPill("Status", Filters.statuses, flt.status) { flt = flt.copy(status = it) }
+                            if (flt.active) Pill("Clear ✕", { flt = TxnFilter() }, compact = true)
+                        }
+                        val txns by vm.all.collectAsState()
+                        val shareList by vm.shares.collectAsState()
+                        if (sub in 1..3 || sub == 5) {
+                            val byTxn = remember(shareList) { shareList.groupBy { it.txnId } }
+                            SummaryStrip(Stats.incomeInMonth(txns, y, m), Stats.spentInMonth(txns, byTxn, y, m))
+                        }
+                        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (sub == 0 || sub == 4) 14.dp else 0.dp)) {
+                            when (sub) {
+                                0 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
+                                1 -> DailyPane(vm, y, m, query, flt)
+                                2 -> CalendarMm(vm, y, m, today)
+                                3 -> MonthlyPane(vm, y) { mo -> monthOffset = (mo - today.get(java.util.Calendar.MONTH)) + 12 * (y - today.get(java.util.Calendar.YEAR)); sub = 1 }
+                                4 -> HomeScreen(vm) { code ->
+                                    when (code) {
+                                        1 -> { inboxSection = 0; sub = 0 }
+                                        2 -> { tab = 2; accSection = 1 }
+                                        4 -> tab = 1
+                                        11 -> { inboxSection = 3; sub = 0 }
+                                    }
+                                }
+                                else -> NotePane(vm, y, m)
+                            }
+                        }
                     }
+                    1 -> Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
+                        Text("Stats", fontSize = 20.sp, modifier = Modifier.padding(vertical = 16.dp))
+                        SummaryScreen(vm)
+                    }
+                    2 -> {
+                        Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Accounts", fontSize = 20.sp, modifier = Modifier.weight(1f))
+                            SearchIconButton(searching) { searching = !searching; if (!searching) query = "" }
+                        }
+                        if (searching && accSection == 1) Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { SearchBox(query, { query = it }, "Search a person or bill") }
+                        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (accSection == 1) 14.dp else 0.dp)) { AccountsPage(vm, query, accSection) { accSection = it } }
+                    }
+                    else -> MorePage(vm, openSettings = { showSettings = true }, openStatement = { showStatement = true })
                 }
+            }
+            if (loaded && ((tab == 0 && sub != 0) || (tab == 2 && accSection == 0) || tab == 1)) {
+                RoundAddButton({ showEntry = true }, Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp))
             }
         }
     }
@@ -259,7 +298,9 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
         Repo.putPref(appCtx, "selfAsked", "1"); askName = false
     }
     if (showNewSplit) NewSplitFlow(vm) { showNewSplit = false }
-    if (showEntry) AddEntryDialog(vm) { showEntry = false }
+    if (showEntry) AddEntryScreen(vm) { showEntry = false }
+    if (showStatement) StatementFlow(vm) { showStatement = false }
     opened?.let { t -> TagSheet(vm, t, onDismiss = { opened = null }, onSaved = { undoable(t.id, it) }) }
     if (showSettings) SettingsDialog(vm) { showSettings = false }
 }
+

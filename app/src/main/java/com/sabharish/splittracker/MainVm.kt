@@ -138,8 +138,14 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun addReceived(title: String, amount: Double, key: String) = viewModelScope.launch(safe) {
         Repo.addReceived(getApplication(), title, amount, key); status.value = "Added — say what it was in your Inbox"
     }
-    fun addMoved(from: AccountView, to: AccountView, amount: Double) = viewModelScope.launch(safe) {
-        Repo.addMoved(getApplication(), from.key, to.key, from.label, to.label, amount)
+    fun addHandExpense(title: String, amount: Double, key: String, category: String, note: String, at: Long) = viewModelScope.launch(safe) {
+        Repo.addHandExpense(getApplication(), title, amount, key, category, note, at); status.value = "Saved ${Logic.money(amount)}"
+    }
+    fun addHandIncome(title: String, amount: Double, key: String, category: String, at: Long) = viewModelScope.launch(safe) {
+        Repo.addHandIncome(getApplication(), title, amount, key, category, at); status.value = "Saved ${Logic.money(amount)} income"
+    }
+    fun addMoved(from: AccountView, to: AccountView, amount: Double, at: Long = System.currentTimeMillis(), note: String = "") = viewModelScope.launch(safe) {
+        Repo.addMoved(getApplication(), from.key, to.key, from.label, to.label, amount, at, note)
         status.value = "Moved ${Logic.money(amount)} from ${from.label} to ${to.label}"
     }
     fun ownTransfer(t: Txn) = viewModelScope.launch(safe) {

@@ -493,10 +493,27 @@ object Repo {
         Db.get(ctx).dao().insert(Entries.received(accountKey, title, amount, System.currentTimeMillis()))
     }
 
-    suspend fun addMoved(ctx: Context, fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double) {
+    suspend fun addMoved(ctx: Context, fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double, at: Long = System.currentTimeMillis(), note: String = "") {
         val db = Db.get(ctx); val dao = db.dao()
-        val (out, inn) = Entries.moved(fromKey, toKey, fromLabel, toLabel, amount, System.currentTimeMillis())
-        db.withTransaction { dao.insert(out); dao.insert(inn) }
+        val (out, inn) = Entries.moved(fromKey, toKey, fromLabel, toLabel, amount, at)
+        val n = note.trim()
+        db.withTransaction { dao.insert(if (n.isEmpty()) out else out.copy(note = n)); dao.insert(if (n.isEmpty()) inn else inn.copy(note = n)) }
+    }
+
+    /** An expense typed in with its category and day: it is yours, so it is tagged straight away and never waits in the Inbox. */
+    suspend fun addHandExpense(ctx: Context, title: String, amount: Double, accountKey: String, category: String, note: String, at: Long) {
+        val db = Db.get(ctx); val dao = db.dao()
+        val base = Entries.spent(accountKey, title.ifBlank { category.ifBlank { "Added by me" } }, amount, at)
+        db.withTransaction {
+            val id = dao.insert(base.copy(status = "TAGGED", category = category, note = note.trim().ifEmpty { "Added by hand" }))
+            dao.insertShare(Share(txnId = id, person = ME, amount = amount, settled = amount))
+        }
+    }
+
+    /** Income typed in by hand (salary, rent, gift…). It counts as income straight away. */
+    suspend fun addHandIncome(ctx: Context, title: String, amount: Double, accountKey: String, category: String, at: Long) {
+        val base = Entries.received(accountKey, title.ifBlank { category.ifBlank { "Added by me" } }, amount, at)
+        Db.get(ctx).dao().insert(base.copy(status = "RECEIVED", note = "Received: " + category.ifBlank { "Income" }))
     }
 
     /**

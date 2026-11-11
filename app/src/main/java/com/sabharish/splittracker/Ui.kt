@@ -52,37 +52,42 @@ fun isDarkNow(): Boolean = when (ThemeState.mode) {
 }
 
 val LightColors = lightColorScheme(
-    primary = Color(0xFF0F766E),
+    primary = Color(0xFFF2554D),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD5EEEA),
-    onPrimaryContainer = Color(0xFF053B36),
-    secondary = Color(0xFF475569),
-    background = Color(0xFFF4F7F6),
+    primaryContainer = Color(0xFFFFE3E0),
+    onPrimaryContainer = Color(0xFF5B100C),
+    secondary = Color(0xFF5F6368),
+    background = Color(0xFFF3F3F5),
     surface = Color.White,
-    surfaceVariant = Color(0xFFE7EFED),
-    onSurface = Color(0xFF0F172A),
-    onSurfaceVariant = Color(0xFF475569),
-    error = Color(0xFFB91C1C)
+    surfaceVariant = Color(0xFFE9E9EC),
+    onSurface = Color(0xFF1B1C20),
+    onSurfaceVariant = Color(0xFF6A6C73),
+    outline = Color(0xFFCFCFD4),
+    error = Color(0xFFD93025)
 )
 
+// Dark palette follows Money Manager: charcoal pages, slightly lighter panels, coral accent
 val DarkColors = darkColorScheme(
-    primary = Color(0xFF2DD4BF),
-    onPrimary = Color(0xFF042F2E),
-    primaryContainer = Color(0xFF134E4A),
-    onPrimaryContainer = Color(0xFFCCFBF1),
-    secondary = Color(0xFF94A3B8),
-    background = Color(0xFF0B1210),
-    surface = Color(0xFF141C1A),
-    surfaceVariant = Color(0xFF22302D),
-    onSurface = Color(0xFFE6EEEC),
-    onSurfaceVariant = Color(0xFFA7B6B2),
-    error = Color(0xFFF87171)
+    primary = Color(0xFFFF6159),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF4A2724),
+    onPrimaryContainer = Color(0xFFFFDAD6),
+    secondary = Color(0xFF9AA0A6),
+    background = Color(0xFF212226),
+    surface = Color(0xFF26272D),
+    surfaceVariant = Color(0xFF30323A),
+    onSurface = Color(0xFFECECEF),
+    onSurfaceVariant = Color(0xFF9A9CA4),
+    outline = Color(0xFF3A3C44),
+    error = Color(0xFFFF6159)
 )
 
-// Theme-aware accent colours
+// Theme-aware accent colours. Income and positive balances are blue, expenses coral (as in Money Manager).
 @Composable fun muted(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 @Composable fun teal(): Color = MaterialTheme.colorScheme.primary
-@Composable fun green(): Color = if (isDarkNow()) Color(0xFF4ADE80) else Color(0xFF15803D)
+@Composable fun blue(): Color = if (isDarkNow()) Color(0xFF4DA3FF) else Color(0xFF1A73E8)
+@Composable fun coral(): Color = MaterialTheme.colorScheme.primary
+@Composable fun green(): Color = blue()
 @Composable fun amber(): Color = if (isDarkNow()) Color(0xFFFBBF24) else Color(0xFFB45309)
 
 /** Large rounded tap target used for people, categories and filters (min height 44dp). */

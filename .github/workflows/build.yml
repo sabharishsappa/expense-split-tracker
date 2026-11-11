@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, money-manager-ui]
   workflow_dispatch:
 
 permissions:
@@ -61,5 +61,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk SplitTracker.apk
-          gh release delete latest -y --cleanup-tag || true
-          gh release create latest SplitTracker.apk --title "Latest build" --notes "Debug build of commit ${GITHUB_SHA::7}"
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            gh release delete latest -y --cleanup-tag || true
+            gh release create latest SplitTracker.apk --title "Latest build" --notes "Debug build of commit ${GITHUB_SHA::7}"
+          else
+            # branch builds never touch the "latest" download
+            gh release delete ui-preview -y --cleanup-tag || true
+            gh release create ui-preview SplitTracker.apk --prerelease --title "UI preview (${GITHUB_REF_NAME})" --notes "Preview build of commit ${GITHUB_SHA::7} from branch ${GITHUB_REF_NAME}. Not the main app."
+          fi

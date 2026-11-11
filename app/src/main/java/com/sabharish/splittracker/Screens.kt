@@ -158,7 +158,7 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
 
 /** Compact row shown while selecting: tick, merchant, amount. */
 @Composable
-private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, partner: Txn? = null, onToggle: () -> Unit) {
+internal fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, partner: Txn? = null, onToggle: () -> Unit) {
     AppCard {
         Row(Modifier.fillMaxWidth().clickable(onClick = onToggle), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = checked, onCheckedChange = { onToggle() })
@@ -178,7 +178,7 @@ private fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, pa
 
 /** Group edit: choose a tag and/or people in one row, then the single ✓ applies it to every ticked bill. */
 @Composable
-private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDone: () -> Unit, partners: Map<Long, Txn> = emptyMap()) {
+internal fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDone: () -> Unit, partners: Map<Long, Txn> = emptyMap()) {
     var confirmDelete by remember { mutableStateOf(false) }
     val recents by vm.recents.collectAsState()
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -702,7 +702,7 @@ fun AllScreen(vm: MainVm, q: String) {
 
 /** A pill that opens a menu; highlighted when something other than "Any" is chosen. */
 @Composable
-private fun FilterPill(title: String, options: List<String>, selected: String, onPick: (String) -> Unit) {
+internal fun FilterPill(title: String, options: List<String>, selected: String, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val on = selected != options.first() && selected != "Any" && selected != "Any time"
     Box {
@@ -999,7 +999,7 @@ private fun BudgetDialog(title: String, current: Double?, onDismiss: () -> Unit,
 
 /** One confirmation for deleting one or many transactions (an own transfer counts as one). */
 @Composable
-private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+internal fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (count == 1) "Delete this transaction?" else "Delete $count transactions?") },
