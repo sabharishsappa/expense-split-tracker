@@ -16,6 +16,13 @@ object Logic {
     // ---------- money ----------
 
     /** Indian grouping: 1,00,000. Whole rupees drop the decimals. */
+    /** Short amount for chart labels: 950, 1.2k, 1.5L. */
+    fun compact(v: Double): String = when {
+        v >= 100_000 -> String.format(Locale.US, "%.1fL", v / 100_000)
+        v >= 1_000 -> String.format(Locale.US, "%.1fk", v / 1_000)
+        else -> String.format(Locale.US, "%.0f", v)
+    }
+
     fun money(v: Double): String {
         val neg = v < 0
         val cents = Math.round(Math.abs(v) * 100)

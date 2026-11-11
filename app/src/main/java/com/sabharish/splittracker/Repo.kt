@@ -26,6 +26,7 @@ object Repo {
 
     // ---------- formatting ----------
     fun money(v: Double): String = Logic.money(v)
+    fun compact(v: Double): String = Logic.compact(v)
 
     fun shortDate(ms: Long): String = Logic.shortDate(ms)
 

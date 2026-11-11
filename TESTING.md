@@ -92,3 +92,8 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 
 ## Auto "mine" only when safe
 - A shop is tagged mine automatically only after 2+ earlier spends there that were yours alone, never shared, and only if the new amount is no more than 25% above the largest earlier one. Otherwise it sits in the Inbox with an "As before: mine" shortcut.
+
+## Stats page (Money Manager style)
+- Summary tab: month navigator; Spent and Income; Budget card (overall + per tag, bars turn amber at 80% and red when over, "safe to spend a day" for the current month); donut chart with legend; last 6 months bars.
+- Income = money received that you marked Salary, Gift or Other. Repayments, borrowed money and refunds are not income.
+- Tap a budget row to change or remove it; budgets are included in backups.

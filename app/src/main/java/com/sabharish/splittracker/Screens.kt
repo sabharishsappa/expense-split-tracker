@@ -1,6 +1,7 @@
 package com.sabharish.splittracker
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
@@ -786,24 +787,30 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
 
 @Composable
 fun SummaryScreen(vm: MainVm) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val txns by vm.all.collectAsState()
+    val shareList by vm.shares.collectAsState()
     val rows by vm.summary.collectAsState()
     var offset by remember { mutableIntStateOf(0) }
-    val cal = Calendar.getInstance().apply { add(Calendar.MONTH, offset) }
-    val ym = cal.get(Calendar.YEAR) * 12 + cal.get(Calendar.MONTH)
-    fun monthOf(ms: Long): Int {
-        val c = Calendar.getInstance(); c.timeInMillis = ms
-        return c.get(Calendar.YEAR) * 12 + c.get(Calendar.MONTH)
-    }
-    val label = SimpleDateFormat("MMMM yyyy", Locale.ENGLISH).format(cal.time)
-    val inMonth = rows.filter { monthOf(it.txnDate) == ym }
-    val mine = inMonth.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
+    val today = remember { Calendar.getInstance() }
+    val (y, m) = Stats.shift(today.get(Calendar.YEAR), today.get(Calendar.MONTH), offset)
+    var budgets by remember { mutableStateOf(Budgets.decode(Repo.getPref(ctx, "budgets", ""))) }
+    var editKey by remember { mutableStateOf<String?>(null) }
+    var pickTag by remember { mutableStateOf(false) }
+    fun saveBudgets(b: Map<String, Double>) { budgets = b; Repo.putPref(ctx, "budgets", Budgets.encode(b)) }
+
+    val shares = remember(shareList) { shareList.groupBy { it.txnId } }
+    val spent = remember(txns, shares, y, m) { Stats.spentInMonth(txns, shares, y, m) }
+    val income = remember(txns, y, m) { Stats.incomeInMonth(txns, y, m) }
+    val byCat = remember(txns, shares, y, m) { Stats.byCategory(txns, shares, y, m) }
+    val slices = remember(byCat) { Stats.slices(byCat) }
+    val trend = remember(txns, shares, y, m) { Stats.trend(txns, shares, y, m, 6) }
+    val label = "${Stats.monthLabel(m)} $y"
+    val inMonth = rows.filter { Stats.monthOf(it.txnDate) == (y to m) }
     val forOthers = inMonth.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
     val receivable = rows.filter { it.person != Repo.ME }.sumOf { it.shareAmt - it.settled }.coerceAtLeast(0.0)
-    val byCat = inMonth.filter { it.person == Repo.ME && it.shareAmt > 0.004 }
-        .groupBy { it.category.ifBlank { "Untagged" } }
-        .mapValues { e -> e.value.sumOf { it.shareAmt } }
-        .entries.sortedByDescending { it.value }
     val byCard = inMonth.groupBy { it.card }.entries.sortedByDescending { e -> e.value.sumOf { it.shareAmt } }
+    val total = budgets[Budgets.TOTAL]
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         item {
@@ -817,35 +824,78 @@ fun SummaryScreen(vm: MainVm) {
             AppCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text("My spend", fontSize = 13.sp, color = muted())
-                        Text(Repo.money(mine), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Text("Spent", fontSize = 13.sp, color = muted())
+                        Text(Repo.money(spent), fontSize = 28.sp, fontWeight = FontWeight.Bold)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Paid for others", fontSize = 13.sp, color = muted())
-                        Text(Repo.money(forOthers), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Text("Income", fontSize = 13.sp, color = muted())
+                        Text(Repo.money(income), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = if (income > 0) green() else muted())
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                Text("Still to recover (all time): ${Repo.money(receivable)}", fontSize = 14.sp, color = teal(), fontWeight = FontWeight.SemiBold)
+                if (income > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Saved ${Repo.money(income - spent)}", fontSize = 14.sp, color = if (income - spent >= 0) green() else MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                }
+                if (forOthers > 0.004 || receivable > 0.004) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Paid for others ${Repo.money(forOthers)} · still to recover ${Repo.money(receivable)}", fontSize = 13.sp, color = teal())
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Your share only. Spends still in the Inbox count in full until you tag them.", fontSize = 12.sp, color = muted())
             }
         }
-        if (byCat.isNotEmpty()) {
+        item {
+            AppCard {
+                Text("Budget", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(8.dp))
+                if (total == null) {
+                    Text("Set a monthly limit and see how much is safe to spend each day.", fontSize = 13.sp, color = muted())
+                    TextButton(onClick = { editKey = Budgets.TOTAL }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Set monthly budget") }
+                } else BudgetRow("This month", spent, total, onClick = { editKey = Budgets.TOTAL }, perDay = if (offset == 0) Budgets.perDay(total, spent, Budgets.daysLeftInMonth(System.currentTimeMillis())) else null)
+                val catLimits = budgets.filterKeys { it != Budgets.TOTAL }
+                catLimits.forEach { (tag, limit) ->
+                    Spacer(Modifier.height(10.dp))
+                    BudgetRow(tag, byCat.firstOrNull { it.first.equals(tag, true) }?.second ?: 0.0, limit, onClick = { editKey = tag })
+                }
+                Spacer(Modifier.height(8.dp))
+                Box {
+                    Pill("+ Budget for a tag", { pickTag = true }, compact = true)
+                    TagMenu(vm, pickTag, { pickTag = false }) { editKey = it; pickTag = false }
+                }
+            }
+        }
+        if (slices.isNotEmpty()) {
             item {
                 AppCard {
                     Text("Where my money went", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(Modifier.height(10.dp))
-                    val top = byCat.first().value.coerceAtLeast(1.0)
-                    byCat.take(8).forEach { e ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(e.key, fontSize = 14.sp)
-                            Text(Repo.money(e.value), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    PieChart(slices, Modifier.fillMaxWidth().height(170.dp))
+                    Spacer(Modifier.height(10.dp))
+                    slices.forEachIndexed { i, sl ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(12.dp).background(sliceColor(i), RoundedCornerShape(3.dp)))
+                            Text(sl.label, Modifier.weight(1f).padding(start = 8.dp), fontSize = 14.sp)
+                            Text("${Math.round(sl.fraction * 100)}%", fontSize = 13.sp, color = muted())
+                            Spacer(Modifier.size(10.dp))
+                            Text(Repo.money(sl.value), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
-                        Box(
-                            Modifier.padding(top = 3.dp, bottom = 10.dp)
-                                .fillMaxWidth((e.value / top).toFloat().coerceIn(0.03f, 1f))
-                                .height(8.dp)
-                                .background(teal(), RoundedCornerShape(4.dp))
-                        )
+                    }
+                }
+            }
+        }
+        item {
+            AppCard {
+                Text("Last 6 months", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(10.dp))
+                val top = trend.maxOf { it.second }.coerceAtLeast(1.0)
+                Row(Modifier.fillMaxWidth().height(130.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    trend.forEachIndexed { i, (name, v) ->
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                            Text(if (v > 0) Repo.compact(v) else "", fontSize = 10.sp, color = muted(), maxLines = 1)
+                            Box(Modifier.fillMaxWidth().height((90 * (v / top)).toFloat().coerceAtLeast(if (v > 0) 4f else 1f).dp)
+                                .background(if (i == trend.lastIndex) teal() else teal().copy(alpha = 0.45f), RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)))
+                            Text(name, fontSize = 11.sp, color = muted())
+                        }
                     }
                 }
             }
@@ -856,18 +906,86 @@ fun SummaryScreen(vm: MainVm) {
                     Text("By card / account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(Modifier.height(8.dp))
                     byCard.forEach { e ->
-                        val m = e.value.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
+                        val mine = e.value.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
                         val o = e.value.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
                         Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("••${e.key}", fontSize = 14.sp)
-                            Text("mine ${Repo.money(m)} · others ${Repo.money(o)}", fontSize = 14.sp)
+                            Text(if (e.key.isBlank()) "Cash" else "••${e.key}", fontSize = 14.sp)
+                            Text("mine ${Repo.money(mine)} · others ${Repo.money(o)}", fontSize = 14.sp)
                         }
                     }
                 }
             }
         }
-        if (inMonth.isEmpty()) item { Text("Nothing tagged for this month yet.", color = muted(), fontSize = 15.sp) }
+        if (spent <= 0.0 && income <= 0.0) item { Text("Nothing recorded for this month yet.", color = muted(), fontSize = 15.sp) }
     }
+    editKey?.let { key ->
+        BudgetDialog(if (key == Budgets.TOTAL) "Monthly budget" else "Budget for $key", budgets[key], { editKey = null }) { v -> saveBudgets(Budgets.set(budgets, key, v)); editKey = null }
+    }
+}
+
+private val SLICE_COLORS = listOf(Color(0xFF0F766E), Color(0xFFD97706), Color(0xFF2563EB), Color(0xFFBE185D), Color(0xFF7C3AED), Color(0xFF64748B))
+private fun sliceColor(i: Int) = SLICE_COLORS[i % SLICE_COLORS.size]
+
+@Composable
+private fun PieChart(slices: List<Stats.Slice>, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val d = minOf(size.width, size.height)
+        val stroke = d * 0.22f
+        val box = androidx.compose.ui.geometry.Size(d - stroke, d - stroke)
+        val topLeft = androidx.compose.ui.geometry.Offset((size.width - box.width) / 2, (size.height - box.height) / 2)
+        var start = -90f
+        slices.forEachIndexed { i, sl ->
+            val sweep = sl.fraction * 360f
+            drawArc(sliceColor(i), start, (sweep - 1.5f).coerceAtLeast(0.5f), false, topLeft, box,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke))
+            start += sweep
+        }
+    }
+}
+
+/** One budget line: name, spent of limit, a bar that turns amber near the limit and red over it. */
+@Composable
+private fun BudgetRow(name: String, spent: Double, limit: Double, onClick: () -> Unit, perDay: Double? = null) {
+    val st = Budgets.state(spent, limit)
+    val color = when (st) { Budgets.State.OK -> teal(); Budgets.State.CLOSE -> amber(); Budgets.State.OVER -> MaterialTheme.colorScheme.error }
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("${Repo.money(spent)} of ${Repo.money(limit)}", fontSize = 14.sp)
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))) {
+            Box(Modifier.fillMaxWidth(Budgets.fraction(spent, limit).coerceAtLeast(0.01f)).height(8.dp).background(color, RoundedCornerShape(4.dp)))
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            if (st == Budgets.State.OVER) "Over by ${Repo.money(spent - limit)}" else "${Repo.money(limit - spent)} left" +
+                (if (perDay != null) " · safe to spend ${Repo.money(perDay)} a day" else ""),
+            fontSize = 12.sp, color = if (st == Budgets.State.OVER) MaterialTheme.colorScheme.error else muted()
+        )
+    }
+}
+
+@Composable
+private fun BudgetDialog(title: String, current: Double?, onDismiss: () -> Unit, onSave: (Double?) -> Unit) {
+    var text by remember { mutableStateOf(current?.let { it.toString().removeSuffix(".0") } ?: "") }
+    val v = text.replace(",", "").toDoubleOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true, label = { Text("Limit per month ₹") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                Text("Counts your own share of spends this month.", fontSize = 12.sp, color = muted())
+            }
+        },
+        confirmButton = { TextButton(enabled = v != null && v > 0, onClick = { onSave(v) }) { Text("Save") } },
+        dismissButton = {
+            if (current != null) TextButton(onClick = { onSave(null) }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            else TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 
