@@ -138,3 +138,32 @@ class InsightsTest {
         assertFalse(Filters.matches(t, emptyList(), emptyMap(), TxnFilter(maxAmt = 100.0), now))
     }
 }
+
+class BookmarksTest {
+    private val a = Bookmark("Expense", "Chai", 20.0, "Food", "CASH|")
+    private val b = Bookmark("Expense", "Auto", 60.0, "Cab", "CASH|")
+
+    @Test fun roundTrips() = assertEquals(listOf(a, b), Bookmarks.decode(Bookmarks.encode(listOf(a, b))))
+    @Test fun sameEntryMovesToFront() = assertEquals(listOf(b, a), Bookmarks.add(listOf(a, b), b).let { Bookmarks.add(it, a) }.let { listOf(it[1], it[0]) })
+    @Test fun capped() {
+        var l = emptyList<Bookmark>()
+        (1..12).forEach { l = Bookmarks.add(l, a.copy(amount = it.toDouble())) }
+        assertEquals(Bookmarks.MAX, l.size); assertEquals(12.0, l.first().amount, 0.001)
+    }
+    @Test fun labelFallsBackToCategory() = assertTrue(Bookmarks.label(a.copy(title = "")).contains("Food"))
+}
+
+class EditableEntryTest {
+    private fun t(body: String = "", note: String = "Added by hand", status: String = "TAGGED") =
+        Txn(bank = "CASH", card = "", kind = "UPI_OUT", amount = 1.0, merchant = "x", txnDate = 0, smsTime = 0, status = status, note = note, body = body)
+    @Test fun handEntriesAreEditable() { assertTrue(Entries.isHand(t())); assertTrue(Entries.isHand(t(note = "Received: Salary", status = "RECEIVED"))) }
+    @Test fun messagesAndTransfersAreNot() { assertFalse(Entries.isHand(t(body = "Rs 5 spent"))); assertFalse(Entries.isHand(t(status = "SELF"))) }
+}
+
+class InboxOrderTest {
+    private fun t(id: Long, amt: Double, date: Long) = Txn(id = id, bank = "H", card = "1", kind = "SPEND", amount = amt, merchant = "m", txnDate = date, smsTime = date, status = "INBOX")
+    private val l = listOf(t(1, 50.0, 100), t(2, 900.0, 300), t(3, 10.0, 200))
+    @Test fun newest() = assertEquals(listOf(2L, 3L, 1L), InboxOrder.sort(l, "Newest").map { it.id })
+    @Test fun biggest() = assertEquals(listOf(2L, 1L, 3L), InboxOrder.sort(l, "Biggest").map { it.id })
+    @Test fun oldest() = assertEquals(listOf(1L, 3L, 2L), InboxOrder.sort(l, "Oldest").map { it.id })
+}

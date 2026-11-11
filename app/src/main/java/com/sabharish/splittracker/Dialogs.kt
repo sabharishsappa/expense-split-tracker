@@ -94,6 +94,7 @@ fun TagSheet(
     var rename by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var refundFor by remember { mutableStateOf(false) }
+    var editEntry by remember { mutableStateOf(false) }
     var alreadyPaid by remember { mutableStateOf(false) }
     var splitAdded by remember { mutableStateOf(false) }
     var rememberRule by remember { mutableStateOf(!creating) }
@@ -199,11 +200,13 @@ fun TagSheet(
                     ) { Icon(Icons.Default.Check, contentDescription = "Save") }
                 }
                 if (!creating) Row {
+                    if (Entries.isHand(t)) TextButton(onClick = { editEntry = true }) { Text("Edit") }
                     TextButton(onClick = { rename = true }) { Text("Rename merchant") }
                     if (t.kind == "SPEND" || t.kind == "UPI_OUT") TextButton(onClick = { refundFor = true }) { Text("Refund received") }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 }
+                if (editEntry) AddEntryDialog(vm, edit = t) { editEntry = false; onDismiss() }
                 if (refundFor) RefundDialog(t, { refundFor = false }) { a -> refundFor = false; vm.refunded(t, a); onDismiss() }
                 if (confirmDelete) AlertDialog(
                     onDismissRequest = { confirmDelete = false },

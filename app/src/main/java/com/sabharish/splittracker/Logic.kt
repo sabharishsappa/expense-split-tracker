@@ -328,6 +328,16 @@ object Groups {
     }
 }
 
+/** Inbox order: newest first by default; biggest first to clear what matters most; oldest first to catch up. */
+object InboxOrder {
+    val modes = listOf("Newest", "Biggest", "Oldest")
+    fun sort(items: List<Txn>, mode: String): List<Txn> = when (mode) {
+        "Biggest" -> items.sortedByDescending { it.amount }
+        "Oldest" -> items.sortedBy { it.txnDate }
+        else -> items.sortedByDescending { it.txnDate }
+    }
+}
+
 object Reminder {
     private fun payBlock(upi: String, amount: Double, note: String): String =
         if (upi.isBlank()) "" else "\n\nPay by clicking the UPI ID below:\n${upi.trim()}\n\nOr tap to pay in your UPI app:\n${UpiLink.build(upi, amount, note)}"

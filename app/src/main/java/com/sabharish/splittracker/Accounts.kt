@@ -129,6 +129,9 @@ object Entries {
     fun income(key: String, title: String, amount: Double, category: String, at: Long) =
         received(key, title.ifBlank { category }, amount, at).copy(status = "RECEIVED", note = incomeNote(category), category = category)
 
+    /** Typed in by hand (no message text behind it), so it can be edited. Transfers are two rows and are not editable. */
+    fun isHand(t: Txn) = t.body.isBlank() && t.status != "SELF" && (t.note == "Added by hand" || t.note.startsWith("Received:"))
+
     fun bankOf(key: String) = key.substringBefore("|")
     fun lastOf(key: String) = key.substringAfter("|")
 

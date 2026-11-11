@@ -152,6 +152,11 @@ class MainVm(app: Application) : AndroidViewModel(app) {
             Repo.addEntry(getApplication(), title, amount, key, at, category, people)
             status.value = "Added ${Logic.money(amount)}"
         }
+    fun updateEntry(old: Txn, title: String, amount: Double, key: String, at: Long, category: String, people: List<String>, income: Boolean) =
+        viewModelScope.launch(safe) {
+            Repo.updateEntry(getApplication(), old, title, amount, key, at, category, people, income)
+            status.value = "Saved changes"
+        }
     fun addIncome(title: String, amount: Double, key: String, at: Long, category: String) = viewModelScope.launch(safe) {
         Repo.addIncome(getApplication(), title, amount, key, at, category); status.value = "Added income ${Logic.money(amount)}"
     }

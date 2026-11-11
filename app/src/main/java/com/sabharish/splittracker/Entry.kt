@@ -67,19 +67,27 @@ internal fun dayToMillis(utcMidnight: Long, time: LocalTime = LocalTime.now()): 
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
+fun AddEntryDialog(vm: MainVm, edit: Txn? = null, onDismiss: () -> Unit) {
     val accounts = Accounts.options(vm.accounts.collectAsState().value)
     val recents by vm.recents.collectAsState()
     val insets = LocalScreenInsets.current
-    var kind by remember { mutableStateOf("Expense") }
-    var amount by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("") }
-    var from by remember { mutableStateOf(accounts.first { it.key == Accounts.CASH }) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val editing = edit != null
+    var kind by remember { mutableStateOf(if (edit != null && (edit.kind == "UPI_IN" || edit.kind == "REFUND")) "Income" else "Expense") }
+    var amount by remember { mutableStateOf(edit?.amount?.let { it.toString().removeSuffix(".0") } ?: "") }
+    var note by remember { mutableStateOf(edit?.merchant?.takeIf { it != edit.category } ?: "") }
+    var category by remember { mutableStateOf(edit?.category ?: "") }
+    var from by remember { mutableStateOf(accounts.firstOrNull { edit != null && it.key == Accounts.keyOf(edit.bank, edit.card) } ?: accounts.first { it.key == Accounts.CASH }) }
     var to by remember { mutableStateOf<AccountView?>(null) }
-    var day by remember { mutableStateOf(System.currentTimeMillis()) }
+    var day by remember { mutableStateOf(edit?.txnDate ?: System.currentTimeMillis()) }
+    var bookmarks by remember { mutableStateOf(Bookmarks.decode(Repo.getPref(ctx, Bookmarks.KEY, ""))) }
+    var manageQuick by remember { mutableStateOf(false) }
+    fun saveBookmarks(l: List<Bookmark>) { bookmarks = l; Repo.putPref(ctx, Bookmarks.KEY, Bookmarks.encode(l)) }
     var pickDay by remember { mutableStateOf(false) }
     val people = remember { mutableStateListOf<String>() }
+    if (edit != null) androidx.compose.runtime.LaunchedEffect(edit.id) {
+        people.clear(); people.addAll(vm.sharesFor(edit.id).map { it.person }.filter { it != Logic.ME }.distinct())
+    }
     val amt = Calc.eval(amount) ?: 0.0
     val target = to?.takeIf { it.key != from.key } ?: accounts.firstOrNull { it.key != from.key }
     val accent = when (kind) { "Expense" -> ExpenseRed; "Income" -> IncomeBlue; else -> MoveGrey }
@@ -96,10 +104,30 @@ fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onDismiss) { Text("Cancel", color = muted()) }
                     Box(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                        Segmented(listOf("Expense", "Income", "Transfer"), kind, { kind = it; category = "" })
+                        if (editing) Text(if (kind == "Income") "Edit income" else "Edit expense", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        else Segmented(listOf("Expense", "Income", "Transfer"), kind, { kind = it; category = "" })
                     }
+                    if (editing) TextButton(onClick = { vm.delete(edit!!); onDismiss() }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    if (!editing && bookmarks.isNotEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Label("Quick entries")
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { manageQuick = !manageQuick }) { Text(if (manageQuick) "Done" else "Edit", fontSize = 13.sp) }
+                        }
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            bookmarks.forEach { b ->
+                                Pill((if (manageQuick) "✕ " else "") + Bookmarks.label(b), {
+                                    if (manageQuick) saveBookmarks(bookmarks - b)
+                                    else {
+                                        kind = b.kind; amount = b.amount.toString().removeSuffix(".0"); note = b.title; category = b.category
+                                        accounts.firstOrNull { it.key == b.account }?.let { from = it }
+                                    }
+                                }, compact = true)
+                            }
+                        }
+                    }
                     // Amount: big, centred, in the entry's colour. Plain text, so every digit can be deleted.
                     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                         Text("₹", fontSize = 34.sp, color = accent, fontWeight = FontWeight.SemiBold)
@@ -159,10 +187,10 @@ fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
                         label = { Text(if (kind == "Income") "From whom? (optional)" else "Note (optional)") }
                     )
 
-                    if (kind == "Expense" && recents.isNotEmpty()) {
+                    if (kind == "Expense" && (recents.isNotEmpty() || people.isNotEmpty())) {
                         Label("Split with (optional)")
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            recents.take(6).forEach { p -> Pill(p, { if (p in people) people.remove(p) else people.add(p) }, selected = p in people) }
+                            (people.toList() + recents).distinct().take(8).forEach { p -> Pill(p, { if (p in people) people.remove(p) else people.add(p) }, selected = p in people) }
                         }
                         if (people.isNotEmpty() && amt > 0)
                             Text("Split equally: ${Logic.money(amt / (people.size + 1))} each, including you.", fontSize = 12.sp, color = muted())
@@ -174,14 +202,19 @@ fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
                     colors = ButtonDefaults.buttonColors(containerColor = accent),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).height(52.dp),
                     onClick = {
-                        when (kind) {
+                        if (edit != null) vm.updateEntry(edit, note, amt, from.key, day, category.ifBlank { "Other" }, people.toList(), kind == "Income")
+                        else when (kind) {
                             "Expense" -> vm.addEntry(note, amt, from.key, day, category.ifBlank { "Other" }, people.toList())
                             "Income" -> vm.addIncome(note, amt, from.key, day, category.ifBlank { "Other" })
                             else -> target?.let { vm.addMoved(from, it, amt, day) }
                         }
                         onDismiss()
                     }
-                ) { Text("Save", fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                ) { Text(if (editing) "Save changes" else "Save", fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                if (!editing && kind != "Transfer" && amt > 0) TextButton(
+                    onClick = { saveBookmarks(Bookmarks.add(bookmarks, Bookmark(kind, note.trim(), amt, category.ifBlank { "Other" }, from.key))) },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) { Text("☆ Save as a quick entry", fontSize = 13.sp, color = muted()) }
             }
         }
     }

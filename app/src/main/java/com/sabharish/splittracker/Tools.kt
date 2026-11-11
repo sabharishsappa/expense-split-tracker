@@ -155,3 +155,25 @@ object Health {
         }
     }
 }
+
+/** Quick entries: a few things you add again and again (chai, auto fare, rent share). Kept in a setting, so they are backed up. */
+data class Bookmark(val kind: String, val title: String, val amount: Double, val category: String, val account: String)
+
+object Bookmarks {
+    const val KEY = "bookmarks"
+    const val MAX = 8
+
+    fun encode(l: List<Bookmark>) = l.joinToString("\n") {
+        listOf(it.kind, it.title.replace(Regex("[\t\n]"), " "), it.amount, it.category, it.account).joinToString("\t")
+    }
+
+    fun decode(s: String): List<Bookmark> = s.lines().mapNotNull { line ->
+        val p = line.split("\t"); if (p.size < 5) return@mapNotNull null
+        Bookmark(p[0], p[1], p[2].toDoubleOrNull() ?: return@mapNotNull null, p[3], p[4])
+    }
+
+    /** Newest first; the same entry saved twice moves to the front instead of repeating. */
+    fun add(l: List<Bookmark>, b: Bookmark): List<Bookmark> = (listOf(b) + l.filter { it != b }).take(MAX)
+
+    fun label(b: Bookmark) = "${Entries.emoji(b.category)} ${b.title.ifBlank { b.category }} ${Logic.money(b.amount)}"
+}

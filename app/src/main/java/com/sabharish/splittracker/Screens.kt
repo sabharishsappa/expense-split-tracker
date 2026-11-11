@@ -230,8 +230,10 @@ private fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onDo
 }
 
 @Composable
-private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> Unit) {
+private fun SpendList(vm: MainVm, raw: List<Txn>, undoable: (Long, String) -> Unit) {
     val appCtx = androidx.compose.ui.platform.LocalContext.current
+    var order by remember { mutableStateOf("Newest") }
+    val items = remember(raw, order) { InboxOrder.sort(raw, order) }
     val recents by vm.recents.collectAsState()
     var sheetFor by remember { mutableStateOf<Pair<Txn, List<String>>?>(null) }
     // chosen people live here, not inside each card, so scrolling or searching never loses them
@@ -241,7 +243,8 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         val smsCtx = androidx.compose.ui.platform.LocalContext.current
         val smsOk = remember(Perm.tick) { Repo.hasPermission(smsCtx, android.Manifest.permission.READ_SMS) }
         if (!smsOk) { SmsBanner(); return }
-        Text("You're all caught up. New payments will show up here.", color = muted(), fontSize = 15.sp)
+        Text("🎉 Inbox zero", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("You're all caught up. New payments will show up here.", color = muted(), fontSize = 15.sp, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { vm.importDays(365) }) { Text("Import last 12 months of messages") }
         return
@@ -259,7 +262,14 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         Spacer(Modifier.height(8.dp))
     } else {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Spacer(Modifier.weight(1f))
+            var orderMenu by remember { mutableStateOf(false) }
+            Text("${items.size} left to review", fontSize = 13.sp, color = muted(), modifier = Modifier.weight(1f))
+            Box {
+                TextButton(onClick = { orderMenu = true }) { Text("$order ▾") }
+                DropdownMenu(expanded = orderMenu, onDismissRequest = { orderMenu = false }) {
+                    InboxOrder.modes.forEach { m -> DropdownMenuItem(text = { Text(m) }, onClick = { order = m; orderMenu = false }) }
+                }
+            }
             TextButton(onClick = { selecting = true }) { Text("Select") }
             if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
         }

@@ -520,6 +520,20 @@ object Repo {
         putPref(ctx, Recurrings.KEY, Recurrings.encode(items.map { r -> latest[r.id]?.let { r.copy(last = it) } ?: r }))
     }
 
+    /** Changes a hand-made entry in place (same id), then re-splits it if it is an expense. */
+    suspend fun updateEntry(ctx: Context, old: Txn, title: String, amount: Double, key: String, at: Long, category: String, people: List<String>, income: Boolean) {
+        val dao = Db.get(ctx).dao()
+        val t = old.copy(
+            bank = Entries.bankOf(key), card = Entries.lastOf(key), amount = amount, merchant = title.trim().ifEmpty { category },
+            txnDate = at, smsTime = at, category = category, note = if (income) Entries.incomeNote(category) else old.note
+        )
+        dao.updateTxn(t)
+        if (!income) {
+            val shares = if (people.isEmpty()) listOf(NewShare(ME, amount, true)) else equalShares(amount, listOf(ME) + people, false)
+            tag(ctx, t, shares, category, false, people.isNotEmpty())
+        }
+    }
+
     suspend fun addIncome(ctx: Context, title: String, amount: Double, key: String, at: Long, category: String) {
         Db.get(ctx).dao().insert(Entries.income(key, title, amount, category, at))
     }
