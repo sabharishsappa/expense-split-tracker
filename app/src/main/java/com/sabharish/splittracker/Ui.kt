@@ -2,6 +2,7 @@ package com.sabharish.splittracker
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.offset
@@ -226,7 +227,7 @@ fun SwipeRow(right: SwipeAction?, left: SwipeAction?, content: @Composable () ->
         ) { Text(shown.label, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
         Box(
             Modifier.offset { androidx.compose.ui.unit.IntOffset(offset.toInt(), 0) }.pointerInput(right, left) {
-                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                detectHorizontalDragGestures(
                     onDragEnd = {
                         when (SwipeLogic.decide(offset, threshold)) { 1 -> right?.onTrigger?.invoke(); -1 -> left?.onTrigger?.invoke() }
                         offset = 0f
