@@ -103,3 +103,38 @@ class AutoBackupDueTest {
 class JumpTest {
     @Test fun untaggedFilterShape() = assertEquals("Untagged", TxnFilter(tagState = "Untagged").tagState)
 }
+
+class InsightsTest {
+    private fun spend(id: Long, cat: String, amt: Double, y: Int, m0: Int) = Txn(
+        id = id, bank = "HDFC", card = "1", kind = "SPEND", amount = amt, merchant = "x", category = cat, status = "INBOX",
+        txnDate = Calendar.getInstance().apply { clear(); set(y, m0, 10, 12, 0, 0) }.timeInMillis, smsTime = 0
+    )
+
+    @Test fun changesRankByBiggestMove() {
+        val c = Stats.changes(listOf("Food" to 3000.0, "Cab" to 500.0), listOf("Food" to 1800.0, "Cab" to 480.0, "Fuel" to 900.0))
+        assertEquals(listOf("Food", "Fuel", "Cab"), c.map { it.tag })
+        assertEquals(1200.0, c[0].delta, 0.001)
+        assertEquals(-900.0, c[1].delta, 0.001)
+    }
+    @Test fun tinyMovesIgnored() = assertTrue(Stats.changes(listOf("A" to 10.2), listOf("A" to 10.0)).isEmpty())
+    @Test fun yearRowsSumMonths() {
+        val t = listOf(spend(1, "Food", 100.0, 2026, 0), spend(2, "Food", 50.0, 2026, 0), spend(3, "Cab", 70.0, 2026, 5), spend(4, "Cab", 999.0, 2025, 5))
+        val rows = Stats.yearMonths(t, emptyMap(), 2026)
+        assertEquals(12, rows.size)
+        assertEquals(150.0, rows[0].spent, 0.001); assertEquals(70.0, rows[5].spent, 0.001)
+        assertEquals(listOf("Food" to 150.0, "Cab" to 70.0), Stats.byCategoryYear(t, emptyMap(), 2026))
+    }
+    @Test fun paceIsShareOfMonth() { assertEquals(0.5f, Budgets.pace(15, 30), 0.001f); assertEquals(0f, Budgets.pace(1, 0), 0.001f) }
+    @Test fun suggestRoundsUp() {
+        assertEquals(1300.0, Budgets.suggest(listOf(1200.0, 1250.0, 1210.0))!!, 0.001)       // avg 1220 → step 100
+        assertEquals(15500.0, Budgets.suggest(listOf(15000.0, 15200.0, 15100.0))!!, 0.001)   // avg 15100 → step 500
+        assertNull(Budgets.suggest(listOf(0.0, 0.0)))
+    }
+    @Test fun amountFilterBounds() {
+        val t = spend(1, "Food", 250.0, 2026, 0)
+        val now = System.currentTimeMillis()
+        assertTrue(Filters.matches(t, emptyList(), emptyMap(), TxnFilter(minAmt = 200.0, maxAmt = 300.0), now))
+        assertFalse(Filters.matches(t, emptyList(), emptyMap(), TxnFilter(minAmt = 300.0), now))
+        assertFalse(Filters.matches(t, emptyList(), emptyMap(), TxnFilter(maxAmt = 100.0), now))
+    }
+}

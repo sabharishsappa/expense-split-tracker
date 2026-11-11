@@ -70,6 +70,31 @@ object Stats {
             .map { (k, v) -> k to v.sum() }
             .sortedByDescending { it.second }
 
+    /** Spent per tag over a whole calendar year, biggest first. */
+    fun byCategoryYear(txns: List<Txn>, shares: Map<Long, List<Share>>, year: Int): List<Pair<String, Double>> =
+        txns.filter { monthOf(it.txnDate).first == year }
+            .map { it.category.ifBlank { "Untagged" } to expenseOf(it, shares[it.id] ?: emptyList()) }
+            .filter { it.second > 0.004 }
+            .groupBy({ it.first }, { it.second })
+            .map { (k, v) -> k to v.sum() }
+            .sortedByDescending { it.second }
+
+    data class MonthRow(val label: String, val spent: Double, val income: Double)
+
+    /** Twelve rows, January to December, for the year view. */
+    fun yearMonths(txns: List<Txn>, shares: Map<Long, List<Share>>, year: Int): List<MonthRow> =
+        (0..11).map { MonthRow(monthLabel(it), spentInMonth(txns, shares, year, it), incomeInMonth(txns, year, it)) }
+
+    data class Change(val tag: String, val now: Double, val before: Double) { val delta get() = now - before }
+
+    /** Tags whose spend moved most compared with the month before, biggest move first. Moves under ₹1 are ignored. */
+    fun changes(now: List<Pair<String, Double>>, before: List<Pair<String, Double>>, max: Int = 3): List<Change> {
+        val a = now.toMap(); val b = before.toMap()
+        return (a.keys + b.keys).map { Change(it, a[it] ?: 0.0, b[it] ?: 0.0) }
+            .filter { Math.abs(it.delta) >= 1.0 }
+            .sortedByDescending { Math.abs(it.delta) }.take(max)
+    }
+
     /** The last [n] months ending at (year, month0): label and spent, oldest first. */
     fun trend(txns: List<Txn>, shares: Map<Long, List<Share>>, year: Int, month0: Int, n: Int = 6): List<Pair<String, Double>> =
         (n - 1 downTo 0).map { back ->
@@ -125,6 +150,18 @@ object Budgets {
         spent > limit + 0.004 -> State.OVER
         spent >= limit * 0.8 -> State.CLOSE
         else -> State.OK
+    }
+
+    /** How far through the month [day] is, 0..1. A budget "on pace" has spent this share of its limit. */
+    fun pace(day: Int, daysInMonth: Int): Float = if (daysInMonth <= 0) 0f else (day.toFloat() / daysInMonth).coerceIn(0f, 1f)
+
+    /** A starting budget from past months: their average, rounded up to a tidy number. Null when there is no history. */
+    fun suggest(pastSpent: List<Double>): Double? {
+        val h = pastSpent.filter { it > 0.0 }
+        if (h.isEmpty()) return null
+        val avg = h.average()
+        val step = if (avg >= 5000.0) 500.0 else 100.0
+        return Math.ceil(avg / step) * step
     }
 
     fun fraction(spent: Double, limit: Double): Float = if (limit <= 0.0) 0f else (spent / limit).toFloat().coerceIn(0f, 1f)

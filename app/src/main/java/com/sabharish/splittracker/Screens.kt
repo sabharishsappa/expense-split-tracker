@@ -666,6 +666,8 @@ fun AllScreen(vm: MainVm, q: String) {
     val shown = merged.shown
     var mode by remember { mutableStateOf("List") }
     val jump by vm.jump.collectAsState()
+    var askAmount by remember { mutableStateOf(false) }
+    if (askAmount) AmountRangeDialog(f0.minAmt, f0.maxAmt, { askAmount = false }) { lo, hi -> f0 = f0.copy(minAmt = lo, maxAmt = hi); askAmount = false }
     androidx.compose.runtime.LaunchedEffect(jump) {
         jump?.let { j ->
             f0 = when {
@@ -698,6 +700,8 @@ fun AllScreen(vm: MainVm, q: String) {
             f0 = when (it) { "Any" -> f0.copy(tagState = "Any", tag = ""); "Untagged" -> f0.copy(tagState = "Untagged", tag = ""); else -> f0.copy(tagState = "Any", tag = it) }
         }
         FilterPill("Status", Filters.statuses, f.status) { f0 = f0.copy(status = it) }
+        Pill(if (f.minAmt != null || f.maxAmt != null) "₹${f.minAmt?.let { Repo.compact(it) } ?: "0"}–${f.maxAmt?.let { Repo.compact(it) } ?: "any"}" else "Amount ▾",
+            { askAmount = true }, selected = f.minAmt != null || f.maxAmt != null, compact = true)
         if (f0.active) Pill("Clear ✕", { f0 = TxnFilter() }, compact = true)
     }
     Spacer(Modifier.height(6.dp))
@@ -877,6 +881,10 @@ fun SummaryScreen(vm: MainVm, onCategory: (String, Int, Int) -> Unit = { _, _, _
     val byCat = remember(txns, shares, y, m) { Stats.byCategory(txns, shares, y, m) }
     val slices = remember(byCat) { Stats.slices(byCat) }
     val trend = remember(txns, shares, y, m) { Stats.trend(txns, shares, y, m, 6) }
+    val (py, pm) = Stats.shift(y, m, -1)
+    val changes = remember(byCat, txns, shares, py, pm) { Stats.changes(byCat, Stats.byCategory(txns, shares, py, pm)) }
+    var view by remember { mutableStateOf("Month") }
+    if (view == "Year") { YearPane(txns, shares, view) { view = it }; return }
     val label = "${Stats.monthLabel(m)} $y"
     val inMonth = rows.filter { Stats.monthOf(it.txnDate) == (y to m) }
     val forOthers = inMonth.filter { it.person != Repo.ME }.sumOf { it.shareAmt }
@@ -885,6 +893,7 @@ fun SummaryScreen(vm: MainVm, onCategory: (String, Int, Int) -> Unit = { _, _, _
     val total = budgets[Budgets.TOTAL]
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+        item { Segmented(listOf("Month", "Year"), view, { view = it }) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
@@ -922,8 +931,14 @@ fun SummaryScreen(vm: MainVm, onCategory: (String, Int, Int) -> Unit = { _, _, _
                 Spacer(Modifier.height(8.dp))
                 if (total == null) {
                     Text("Set a monthly limit and see how much is safe to spend each day.", fontSize = 13.sp, color = muted())
-                    TextButton(onClick = { editKey = Budgets.TOTAL }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Set monthly budget") }
-                } else BudgetRow("This month", spent, total, onClick = { editKey = Budgets.TOTAL }, perDay = if (offset == 0) Budgets.perDay(total, spent, Budgets.daysLeftInMonth(System.currentTimeMillis())) else null)
+                    val suggested = remember(trend) { Budgets.suggest(trend.dropLast(1).takeLast(3).map { it.second }) }
+                    if (suggested != null) {
+                        Text("Based on your last months, about ${Repo.money(suggested)} would have fit.", fontSize = 13.sp, color = teal())
+                        TextButton(onClick = { saveBudgets(Budgets.set(budgets, Budgets.TOTAL, suggested)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Use ${Repo.money(suggested)}") }
+                    }
+                    TextButton(onClick = { editKey = Budgets.TOTAL }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Set my own amount") }
+                } else BudgetRow("This month", spent, total, onClick = { editKey = Budgets.TOTAL }, perDay = if (offset == 0) Budgets.perDay(total, spent, Budgets.daysLeftInMonth(System.currentTimeMillis())) else null,
+                    pace = if (offset == 0) Budgets.pace(today.get(Calendar.DAY_OF_MONTH), today.getActualMaximum(Calendar.DAY_OF_MONTH)) else null)
                 val catLimits = budgets.filterKeys { it != Budgets.TOTAL }
                 catLimits.forEach { (tag, limit) ->
                     Spacer(Modifier.height(10.dp))
@@ -952,6 +967,19 @@ fun SummaryScreen(vm: MainVm, onCategory: (String, Int, Int) -> Unit = { _, _, _
                             Spacer(Modifier.size(10.dp))
                             Text(Repo.money(sl.value), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
+                    }
+                }
+            }
+        }
+        if (changes.isNotEmpty()) item {
+            AppCard {
+                Text("Compared with ${Stats.monthLabel(pm)}", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(6.dp))
+                changes.forEach { c ->
+                    Row(Modifier.fillMaxWidth().clickable { onCategory(c.tag, y, m) }.padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(c.tag, fontSize = 14.sp)
+                        Text((if (c.delta > 0) "▲ " else "▼ ") + Repo.money(Math.abs(c.delta)), fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            color = if (c.delta > 0) amber() else green())
                     }
                 }
             }
@@ -1018,7 +1046,7 @@ private fun PieChart(slices: List<Stats.Slice>, modifier: Modifier = Modifier) {
 
 /** One budget line: name, spent of limit, a bar that turns amber near the limit and red over it. */
 @Composable
-private fun BudgetRow(name: String, spent: Double, limit: Double, onClick: () -> Unit, perDay: Double? = null) {
+private fun BudgetRow(name: String, spent: Double, limit: Double, onClick: () -> Unit, perDay: Double? = null, pace: Float? = null) {
     val st = Budgets.state(spent, limit)
     val color = when (st) { Budgets.State.OK -> teal(); Budgets.State.CLOSE -> amber(); Budgets.State.OVER -> MaterialTheme.colorScheme.error }
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -1029,11 +1057,15 @@ private fun BudgetRow(name: String, spent: Double, limit: Double, onClick: () ->
         Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().height(8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))) {
             Box(Modifier.fillMaxWidth(Budgets.fraction(spent, limit).coerceAtLeast(0.01f)).height(8.dp).background(color, RoundedCornerShape(4.dp)))
+            if (pace != null) Box(Modifier.fillMaxWidth(pace.coerceIn(0.02f, 1f)).height(8.dp), contentAlignment = Alignment.CenterEnd) {
+                Box(Modifier.width(2.dp).height(12.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)))
+            }
         }
         Spacer(Modifier.height(3.dp))
         Text(
             if (st == Budgets.State.OVER) "Over by ${Repo.money(spent - limit)}" else "${Repo.money(limit - spent)} left" +
-                (if (perDay != null) " · safe to spend ${Repo.money(perDay)} a day" else ""),
+                (if (perDay != null) " · safe to spend ${Repo.money(perDay)} a day" else "") +
+                (if (pace != null && st != Budgets.State.OVER) (limit * pace).let { exp -> if (spent > exp + 0.5) " · ${Repo.money(spent - exp)} ahead of pace" else " · on pace" } else ""),
             fontSize = 12.sp, color = if (st == Budgets.State.OVER) MaterialTheme.colorScheme.error else muted()
         )
     }
@@ -1136,4 +1168,80 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
             TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id], onSelect = {}) { onChange(it) }
         }
     }
+}
+
+/** A whole year at a glance: totals, one row per month, the biggest tags. */
+@Composable
+private fun YearPane(txns: List<Txn>, shares: Map<Long, List<Share>>, view: String, onView: (String) -> Unit) {
+    var yearOffset by remember { mutableIntStateOf(0) }
+    val year = remember { Calendar.getInstance().get(Calendar.YEAR) } + yearOffset
+    val rows = remember(txns, shares, year) { Stats.yearMonths(txns, shares, year) }
+    val cats = remember(txns, shares, year) { Stats.byCategoryYear(txns, shares, year) }
+    val spent = rows.sumOf { it.spent }; val income = rows.sumOf { it.income }
+    val top = rows.maxOf { maxOf(it.spent, it.income) }.coerceAtLeast(1.0)
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+        item { Segmented(listOf("Month", "Year"), view, onView) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { yearOffset -= 1 }) { Text("‹ Prev") }
+                Text("$year", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                TextButton(onClick = { if (yearOffset < 0) yearOffset += 1 }, enabled = yearOffset < 0) { Text("Next ›") }
+            }
+        }
+        item {
+            AppCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column { Text("Spent", fontSize = 13.sp, color = muted()); Text(Repo.money(spent), fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                    Column(horizontalAlignment = Alignment.End) { Text("Income", fontSize = 13.sp, color = muted()); Text(Repo.money(income), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = if (income > 0) green() else muted()) }
+                }
+                if (income > 0) Text("Saved ${Repo.money(income - spent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (income - spent >= 0) green() else MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+        item {
+            AppCard {
+                Text("Month by month", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(8.dp))
+                rows.forEach { r ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(r.label, Modifier.width(36.dp), fontSize = 13.sp, color = muted())
+                        Box(Modifier.weight(1f).height(10.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(5.dp))) {
+                            Box(Modifier.fillMaxWidth((r.spent / top).toFloat().coerceIn(0f, 1f)).height(10.dp).background(teal(), RoundedCornerShape(5.dp)))
+                        }
+                        Text(if (r.spent > 0) Repo.compact(r.spent) else "–", Modifier.width(64.dp), fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    }
+                }
+            }
+        }
+        if (cats.isNotEmpty()) item {
+            AppCard {
+                Text("Biggest tags", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(6.dp))
+                cats.take(6).forEach { (n, v) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(n, fontSize = 14.sp); Text(Repo.money(v), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AmountRangeDialog(min: Double?, max: Double?, onDismiss: () -> Unit, onApply: (Double?, Double?) -> Unit) {
+    var lo by remember { mutableStateOf(min?.let { it.toString().removeSuffix(".0") } ?: "") }
+    var hi by remember { mutableStateOf(max?.let { it.toString().removeSuffix(".0") } ?: "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Amount between") },
+        text = {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(value = lo, onValueChange = { lo = it.filter { c -> c.isDigit() || c == '.' } }, singleLine = true, label = { Text("From ₹") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                OutlinedTextField(value = hi, onValueChange = { hi = it.filter { c -> c.isDigit() || c == '.' } }, singleLine = true, label = { Text("To ₹") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal), modifier = Modifier.weight(1f))
+            }
+        },
+        confirmButton = { TextButton(onClick = { onApply(lo.toDoubleOrNull(), hi.toDoubleOrNull()) }) { Text("Apply") } },
+        dismissButton = { TextButton(onClick = { onApply(null, null) }) { Text("Clear") } }
+    )
 }
