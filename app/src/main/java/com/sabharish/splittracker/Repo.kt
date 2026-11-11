@@ -493,9 +493,20 @@ object Repo {
         Db.get(ctx).dao().insert(Entries.received(accountKey, title, amount, System.currentTimeMillis()))
     }
 
-    suspend fun addMoved(ctx: Context, fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double) {
+    /** A spend typed in by hand: tagged straight away (mine, or split equally with [people]). */
+    suspend fun addEntry(ctx: Context, title: String, amount: Double, key: String, at: Long, category: String, people: List<String>) {
+        val t = Entries.spent(key, title.ifBlank { category }, amount, at).let { it.copy(id = Db.get(ctx).dao().insert(it)) }
+        val shares = if (people.isEmpty()) listOf(NewShare(ME, amount, true)) else equalShares(amount, listOf(ME) + people, false)
+        tag(ctx, t, shares, category, false, people.isNotEmpty())
+    }
+
+    suspend fun addIncome(ctx: Context, title: String, amount: Double, key: String, at: Long, category: String) {
+        Db.get(ctx).dao().insert(Entries.income(key, title, amount, category, at))
+    }
+
+    suspend fun addMoved(ctx: Context, fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double, at: Long = System.currentTimeMillis()) {
         val db = Db.get(ctx); val dao = db.dao()
-        val (out, inn) = Entries.moved(fromKey, toKey, fromLabel, toLabel, amount, System.currentTimeMillis())
+        val (out, inn) = Entries.moved(fromKey, toKey, fromLabel, toLabel, amount, at)
         db.withTransaction { dao.insert(out); dao.insert(inn) }
     }
 
