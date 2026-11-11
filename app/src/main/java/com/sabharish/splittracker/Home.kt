@@ -90,6 +90,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                 }
             }
         }
+        item { MonthCard(vm) { go(4) } }
         if (bills.isNotEmpty()) item { BillsCard(bills) { b -> payingBill = b } }
         if (oweList.isNotEmpty()) item {
             Row(
@@ -348,6 +349,41 @@ private fun BillsCard(bills: List<Bill>, onTap: (Bill) -> Unit) {
                     Text("${Repo.shortDate(b.dueDate)} · ${Bills.dueLine(days)}", fontSize = 12.sp, color = c)
                 }
             }
+        }
+    }
+}
+
+
+/** This month at a glance: what you spent and, when a budget is set, how much is safe to spend today. */
+@Composable
+private fun MonthCard(vm: MainVm, open: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val txns by vm.all.collectAsState()
+    val shareList by vm.shares.collectAsState()
+    val shares = remember(shareList) { shareList.groupBy { it.txnId } }
+    val cal = java.util.Calendar.getInstance()
+    val y = cal.get(java.util.Calendar.YEAR); val m = cal.get(java.util.Calendar.MONTH)
+    val spent = remember(txns, shares) { Stats.spentInMonth(txns, shares, y, m) }
+    val limit = Budgets.decode(Repo.getPref(ctx, "budgets", ""))[Budgets.TOTAL]
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface).clickable(onClick = open).padding(18.dp)) {
+        Text("Spent in ${Stats.monthLabel(m)}", fontSize = 13.sp, color = muted())
+        Text(Logic.money(spent), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        if (limit != null) {
+            val st = Budgets.state(spent, limit)
+            val color = when (st) { Budgets.State.OK -> teal(); Budgets.State.CLOSE -> amber(); Budgets.State.OVER -> MaterialTheme.colorScheme.error }
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))) {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(Budgets.fraction(spent, limit).coerceAtLeast(0.01f)).height(8.dp).background(color, RoundedCornerShape(4.dp)))
+            }
+            Spacer(Modifier.height(6.dp))
+            val perDay = Budgets.perDay(limit, spent, Budgets.daysLeftInMonth(System.currentTimeMillis()))
+            Text(
+                if (st == Budgets.State.OVER) "Over budget by ${Logic.money(spent - limit)}"
+                else "${Logic.money(limit - spent)} left of ${Logic.money(limit)} · safe to spend ${Logic.money(perDay)} today",
+                fontSize = 13.sp, color = if (st == Budgets.State.OVER) MaterialTheme.colorScheme.error else muted()
+            )
+        } else {
+            Text("Set a monthly budget to see what is safe to spend each day ›", fontSize = 13.sp, color = muted())
         }
     }
 }

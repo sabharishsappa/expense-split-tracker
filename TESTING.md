@@ -97,3 +97,7 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 - Summary tab: month navigator; Spent and Income; Budget card (overall + per tag, bars turn amber at 80% and red when over, "safe to spend a day" for the current month); donut chart with legend; last 6 months bars.
 - Income = money received that you marked Salary, Gift or Other. Repayments, borrowed money and refunds are not income.
 - Tap a budget row to change or remove it; budgets are included in backups.
+
+## Calendar and home month card
+- All tab → "Calendar": month grid with spent (red) and income (green) per day; tap a day to list its transactions; Prev/Next change month.
+- Home shows "Spent in <month>", and with a budget set, a bar and "safe to spend today".

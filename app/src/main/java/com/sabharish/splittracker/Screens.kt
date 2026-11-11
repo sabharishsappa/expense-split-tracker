@@ -659,6 +659,14 @@ fun AllScreen(vm: MainVm, q: String) {
     val filtered = txns.filter { Filters.matches(it, byTxn[it.id] ?: emptyList(), aliases, f, now) }
     val merged = remember(filtered) { Transfers.merge(filtered) }   // an own transfer is one entry, not two
     val shown = merged.shown
+    var mode by remember { mutableStateOf("List") }
+    Spacer(Modifier.height(6.dp))
+    Segmented(listOf("List", "Calendar"), mode, { mode = it })
+    if (mode == "Calendar") {
+        CalendarPane(vm, txns, byTxn, aliases) { sheetFor = it }
+        sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
+        return
+    }
     Spacer(Modifier.height(6.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterPill("Type", Filters.types, f.type) { f0 = f0.copy(type = it) }
@@ -999,4 +1007,68 @@ private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Un
         confirmButton = { TextButton(onClick = onConfirm) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+
+/** Month calendar with what you spent (and earned) each day; tap a day to see its transactions. */
+@Composable
+private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Share>>, aliases: Map<String, String>, onChange: (Txn) -> Unit) {
+    val today = remember { Calendar.getInstance() }
+    var offset by remember { mutableIntStateOf(0) }
+    val (y, m) = Stats.shift(today.get(Calendar.YEAR), today.get(Calendar.MONTH), offset)
+    var picked by remember(offset) { mutableStateOf(if (offset == 0) today.get(Calendar.DAY_OF_MONTH) else 1) }
+    val totals = remember(txns, byTxn, y, m) { Stats.dayTotals(txns, byTxn, y, m) }
+    val weeks = remember(y, m) { Stats.weeks(y, m) }
+    val dayTxns = remember(txns, y, m, picked) {
+        val c = Calendar.getInstance()
+        txns.filter { t -> Stats.inMonth(t, y, m) && c.apply { timeInMillis = t.txnDate }.get(Calendar.DAY_OF_MONTH) == picked }.sortedByDescending { it.txnDate }
+    }
+    val merged = remember(dayTxns) { Transfers.merge(dayTxns) }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
+                Text("${Stats.monthLabel(m)} $y", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                TextButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Text("Next ›") }
+            }
+            Row(Modifier.fillMaxWidth()) {
+                listOf("M", "T", "W", "T", "F", "S", "S").forEach { Text(it, Modifier.weight(1f), fontSize = 12.sp, color = muted(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                weeks.forEach { week ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        week.forEach { d ->
+                            if (d == null) Spacer(Modifier.weight(1f).height(54.dp))
+                            else {
+                                val tot = totals[d]
+                                val on = d == picked
+                                val isToday = offset == 0 && d == today.get(Calendar.DAY_OF_MONTH)
+                                Column(
+                                    Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
+                                        .background(if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                                        .clickable { picked = d }.padding(top = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(d.toString(), fontSize = 13.sp, fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal, color = if (isToday) teal() else MaterialTheme.colorScheme.onSurface)
+                                    if (tot != null && tot.spent > 0) Text(Repo.compact(tot.spent), fontSize = 10.sp, color = MaterialTheme.colorScheme.error, maxLines = 1)
+                                    if (tot != null && tot.income > 0) Text(Repo.compact(tot.income), fontSize = 10.sp, color = green(), maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            val t = totals[picked]
+            Text("${picked} ${Stats.monthLabel(m)}" + (if (t != null) " · spent ${Repo.money(t.spent)}" + (if (t.income > 0) " · income ${Repo.money(t.income)}" else "") else ""),
+                fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            if (merged.shown.isEmpty()) Text("Nothing on this day.", color = muted(), fontSize = 14.sp)
+        }
+        items(merged.shown, key = { it.id }) { t ->
+            TxnRow(t, byTxn[t.id] ?: emptyList(), vm, aliases, merged.partner[t.id], onSelect = {}) { onChange(it) }
+        }
+    }
 }
