@@ -55,7 +55,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
     val oweList = remember(payables) { Logic.owedByYou(payables) }
     var payingBill by remember { mutableStateOf<Bill?>(null) }
     var checking by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<AccountView?>(null) }
+    var showAccounts by remember { mutableStateOf(false) }
     val total = owed.values.sum()
     val toReview = spends.size + money.size
     payingBill?.let { b ->
@@ -136,25 +136,22 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             }
         }
         if (accounts.isNotEmpty()) {
-            item { Text("My accounts", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.padding(top = 4.dp)) }
-            accounts.forEach { a ->
-                item {
-                    Card(
-                        Modifier.fillMaxWidth().clickable { editing = a }, shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(a.label, fontSize = 16.sp)
-                                Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)} · tap to correct" else "Tap to set balance", fontSize = 12.sp, color = muted())
-                            }
-                            if (a.hasBalance) Text(Logic.money(a.balance), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                                color = if (a.balance < 0) MaterialTheme.colorScheme.error else green())
+            item {
+                val known = accounts.filter { it.hasBalance }
+                Card(
+                    Modifier.fillMaxWidth().clickable { showAccounts = true }, shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("My accounts", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${accounts.size} ${if (accounts.size == 1) "account" else "accounts"} · tap to see balances", fontSize = 12.sp, color = muted())
                         }
+                        if (known.isNotEmpty()) Text(Logic.money(known.sumOf { it.balance }), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Text("  ›", fontSize = 22.sp, color = muted())
                     }
                 }
             }
-            item { Text("Transfers between your own accounts are left out of your spends.", fontSize = 12.sp, color = muted()) }
         }
         item {
             Card(
@@ -187,7 +184,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
         }
     }
     if (checking) StatementFlow(vm) { checking = false }
-    editing?.let { a -> BalanceDialog(a, { editing = null }) { n, b -> vm.setBalance(a.key, n, b); editing = null } }
+    if (showAccounts) AccountsDialog(vm) { showAccounts = false }
 }
 
 @Composable
@@ -204,7 +201,7 @@ private fun StatTile(label: String, value: String, tint: Color, modifier: Modifi
 }
 
 @Composable
-private fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
+internal fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
     var amount by remember { mutableStateOf(if (a.hasBalance) a.balance.toString().removeSuffix(".0") else "") }
     var name by remember { mutableStateOf(a.name) }
     AlertDialog(

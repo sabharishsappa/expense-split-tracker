@@ -101,3 +101,10 @@ Tick each line as you try it on your phone. "Expect" is what should happen.
 ## Calendar and home month card
 - All tab → "Calendar": month grid with spent (red) and income (green) per day; tap a day to list its transactions; Prev/Next change month.
 - Home shows "Spent in <month>", and with a budget set, a bar and "safe to spend today".
+
+## Calculator, export, repeating entries, app lock
+- Amount field: type `120+45×2` (or tap + − × ÷) → "= ₹210" shows below; Save uses the total.
+- More ▸ Export to spreadsheet: saves a .csv; open in Sheets/Excel; commas in names stay in one cell.
+- More ▸ Repeating entries: add "Rent ₹10,000 on the 5th"; it appears on the 5th (or the next app open) and never twice for a month; Stop removes it.
+- More ▸ App lock: needs a phone screen lock; leave the app >30 s and return → asks for fingerprint/PIN.
+- More ▸ Accounts / Home "My accounts" card open the same page.

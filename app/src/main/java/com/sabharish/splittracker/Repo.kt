@@ -1,5 +1,7 @@
 package com.sabharish.splittracker
 
+import java.util.Calendar
+import kotlinx.coroutines.sync.withLock
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -498,6 +500,24 @@ object Repo {
         val t = Entries.spent(key, title.ifBlank { category }, amount, at).let { it.copy(id = Db.get(ctx).dao().insert(it)) }
         val shares = if (people.isEmpty()) listOf(NewShare(ME, amount, true)) else equalShares(amount, listOf(ME) + people, false)
         tag(ctx, t, shares, category, false, people.isNotEmpty())
+    }
+
+    private val recurMutex = kotlinx.coroutines.sync.Mutex()
+
+    /** Creates the entries that repeating items owe by now. Safe to call often. */
+    suspend fun runRecurring(ctx: Context) = recurMutex.withLock {
+        val items = Recurrings.decode(getPref(ctx, Recurrings.KEY, ""))
+        if (items.isEmpty()) return@withLock
+        val due = Recurrings.due(items, System.currentTimeMillis())
+        if (due.isEmpty()) return@withLock
+        val latest = HashMap<String, String>()
+        for ((r, at) in due.sortedBy { it.second }) {
+            if (r.kind == "Income") addIncome(ctx, r.title, r.amount, r.account, at, r.category)
+            else addEntry(ctx, r.title, r.amount, r.account, at, r.category, emptyList())
+            val c = Calendar.getInstance().apply { timeInMillis = at }
+            latest[r.id] = Recurrings.monthKey(c.get(Calendar.YEAR), c.get(Calendar.MONTH))
+        }
+        putPref(ctx, Recurrings.KEY, Recurrings.encode(items.map { r -> latest[r.id]?.let { r.copy(last = it) } ?: r }))
     }
 
     suspend fun addIncome(ctx: Context, title: String, amount: Double, key: String, at: Long, category: String) {

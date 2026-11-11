@@ -79,7 +79,9 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 
-    init { viewModelScope.launch(safe) { Repo.migrateNames(getApplication()); Repo.backfillCategories(getApplication()) } }
+    init { viewModelScope.launch(safe) { Repo.migrateNames(getApplication()); Repo.backfillCategories(getApplication()); Repo.runRecurring(getApplication()) } }
+    fun runRecurring() = viewModelScope.launch(safe) { Repo.runRecurring(getApplication()) }
+    fun csvText(): String = Csv.build(all.value, shares.value.groupBy { it.txnId })
 
     fun loadContacts() = viewModelScope.launch(safe) { contacts.value = Repo.loadContacts(getApplication()) }
 

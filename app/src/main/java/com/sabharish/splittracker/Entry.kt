@@ -80,7 +80,7 @@ fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
     var day by remember { mutableStateOf(System.currentTimeMillis()) }
     var pickDay by remember { mutableStateOf(false) }
     val people = remember { mutableStateListOf<String>() }
-    val amt = amount.replace(",", "").toDoubleOrNull() ?: 0.0
+    val amt = Calc.eval(amount) ?: 0.0
     val target = to?.takeIf { it.key != from.key } ?: accounts.firstOrNull { it.key != from.key }
     val accent = when (kind) { "Expense" -> ExpenseRed; "Income" -> IncomeBlue; else -> MoveGrey }
     val ok = amt > 0 && (kind != "Transfer" || target != null)
@@ -105,7 +105,7 @@ fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
                         Text("₹", fontSize = 34.sp, color = accent, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.width(6.dp))
                         BasicTextField(
-                            value = amount, onValueChange = { v -> amount = v.filter { it.isDigit() || it == '.' || it == ',' } },
+                            value = amount, onValueChange = { v -> amount = v.filter { it.isDigit() || it in ".,+×÷−-*/" } },
                             singleLine = true, cursorBrush = SolidColor(accent),
                             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 44.sp, fontWeight = FontWeight.SemiBold, color = accent, textAlign = TextAlign.Start),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -113,6 +113,15 @@ fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
                             decorationBox = { inner -> if (amount.isEmpty()) Text("0", fontSize = 44.sp, color = accent.copy(alpha = 0.3f), fontWeight = FontWeight.SemiBold); inner() }
                         )
                     }
+
+                    // a small calculator: tap an operator, type the next number, the total shows below
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        listOf("+", "−", "×", "÷").forEach { op ->
+                            TextButton(onClick = { if (amount.isNotEmpty() && amount.last() !in "+−×÷") amount += op }) { Text(op, fontSize = 22.sp, color = accent) }
+                        }
+                        TextButton(onClick = { amount = amount.dropLast(1) }) { Text("⌫", fontSize = 18.sp, color = muted()) }
+                    }
+                    if (Calc.hasOperator(amount) && amt > 0) Text("= ${Logic.money(amt)}", Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 15.sp, color = muted())
 
                     if (kind == "Transfer") {
                         Label("From")

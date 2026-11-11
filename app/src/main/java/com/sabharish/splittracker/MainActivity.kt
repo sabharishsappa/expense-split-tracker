@@ -153,7 +153,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     val status by vm.status.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var showSettings by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
 
     val undoable: (Long, String) -> Unit = { id, msg ->
         scope.launch {
@@ -219,7 +219,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                         Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
                     }
-                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+                    IconButton(onClick = { showMore = true }) { Icon(Icons.Default.Settings, contentDescription = "More") }
                 }
             }
             if (searching && tab in 1..3) {
@@ -265,5 +265,6 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     if (showNewSplit) NewSplitFlow(vm) { showNewSplit = false }
     if (showEntry) AddEntryDialog(vm) { showEntry = false }
     opened?.let { t -> TagSheet(vm, t, onDismiss = { opened = null }, onSaved = { undoable(t.id, it) }) }
-    if (showSettings) SettingsDialog(vm) { showSettings = false }
+    if (showMore) MoreDialog(vm) { showMore = false }
+    LockGate()
 }
