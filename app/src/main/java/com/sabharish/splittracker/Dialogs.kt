@@ -168,10 +168,10 @@ fun TagSheet(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
                     if (creating) {
-                        Text("New split", Modifier.weight(1f).padding(horizontal = 6.dp), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("New split", Modifier.weight(1f).padding(horizontal = 6.dp), fontSize = 22.sp, fontWeight = FontWeight.Medium)
                     } else Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
-                        Text(Repo.money(t.amount), fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                        Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(Repo.money(t.amount), fontSize = 26.sp, fontWeight = FontWeight.Medium)
+                        Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                         Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                     }
                     FilledIconButton(
@@ -232,7 +232,7 @@ fun TagSheet(
                         }
                     }
                     Spacer(Modifier.height(14.dp))
-                    Text("Tag", fontWeight = FontWeight.SemiBold)
+                    Text("Tag", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(6.dp))
                     val tagScroll = rememberScrollState()
                     // after a pick the chosen tag moves to the front, so bring the row back to the front too
@@ -246,7 +246,7 @@ fun TagSheet(
                     }
 
                     Spacer(Modifier.height(18.dp))
-                    Text("Who was this for?", fontWeight = FontWeight.SemiBold)
+                    Text("Who was this for?", fontWeight = FontWeight.Medium)
                     Text("Pick one person if it was all theirs. Pick several to split equally.", fontSize = 12.sp, color = muted())
                     Spacer(Modifier.height(6.dp))
                     val s = sug
@@ -270,7 +270,7 @@ fun TagSheet(
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (q.isNotEmpty() && contacts.none { it.equals(q, true) }) {
-                            Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
+                            Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.Medium,
                                 modifier = Modifier.fillMaxWidth().clickable { add(q); query = "" }.padding(vertical = 10.dp))
                         }
                         if (q.isNotEmpty()) results.forEach { name ->
@@ -283,7 +283,7 @@ fun TagSheet(
                     if (picked.isNotEmpty()) {
                         if (picked.size >= 2) {
                             Spacer(Modifier.height(16.dp))
-                            Text("How to split", fontWeight = FontWeight.SemiBold)
+                            Text("How to split", fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(6.dp))
                             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf("EQUAL" to "Equal", "PERCENT" to "Percent", "PARTS" to "Parts", "AMOUNT" to "Amounts").forEach { (m, label) ->
@@ -318,7 +318,7 @@ fun TagSheet(
                                 owedToYou > 0 -> "${Repo.money(owedToYou)} will show as owed to you."
                                 else -> "Nothing is owed to you."
                             },
-                            fontWeight = FontWeight.SemiBold, color = teal()
+                            fontWeight = FontWeight.Medium, color = teal()
                         )
                     }
 
@@ -378,7 +378,7 @@ fun LinkRefundDialog(vm: MainVm, refund: Txn, onDismiss: () -> Unit) {
                 if (spends.isEmpty()) Text("No purchases found.")
                 spends.forEach { s ->
                     Column(Modifier.fillMaxWidth().clickable { vm.linkRefund(refund.id, s.id); onDismiss() }.padding(vertical = 8.dp)) {
-                        Text("${Repo.title(s.merchant, aliases)} · ${Repo.money(s.amount)}", fontWeight = FontWeight.SemiBold)
+                        Text("${Repo.title(s.merchant, aliases)} · ${Repo.money(s.amount)}", fontWeight = FontWeight.Medium)
                         Text("${Repo.acct(s.bank, s.card)} · ${fullDate(s.txnDate)}", fontSize = 12.sp, color = muted())
                     }
                 }
@@ -407,7 +407,7 @@ fun PersonPickerDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onPick:
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 SearchBox(query, { query = it }, "Search or type a name")
                 if (q.isNotEmpty() && pool.none { it.equals(q, true) }) {
-                    Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
+                    Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.Medium,
                         modifier = Modifier.fillMaxWidth().clickable { onPick(q) }.padding(vertical = 10.dp))
                 }
                 results.forEach { n -> Text(n, modifier = Modifier.fillMaxWidth().clickable { onPick(n) }.padding(vertical = 10.dp)) }
@@ -523,9 +523,9 @@ private fun share(ctx: Context, text: String) {
 @Composable
 private fun Section(title: String, hint: String = "", content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 18.dp)) {
-        Text(title.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = muted(), modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
+        Text(title.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = muted(), modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
         Column(
-            Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
+            Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             content()
@@ -581,11 +581,11 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
-                    Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("Settings", fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Section("Privacy", "This app has no internet permission. Your messages, people and amounts stay on this phone. They only leave if you choose to: a backup file you save, or a reminder you send yourself.") {
-                        Text("🔒 Nothing is uploaded or published", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text("🔒 Nothing is uploaded or published", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                     Section("Payments", "Your UPI ID is put in the reminder message so people know where to pay.") {
                         OutlinedTextField(value = upi, onValueChange = { upi = it; Repo.putPref(ctx, "upi", it.trim()) }, singleLine = true,
@@ -644,7 +644,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     }
                     val listenerOn = remember(Perm.tick) { Repo.notificationAccessOn(ctx) }
                     Section("Read notifications too", "Also notes payments shown in notifications from Google Pay, PhonePe, Paytm, your bank apps, your messages app and mail apps like Gmail. A payment that arrives by text and by notification is counted once. Mail is read only through its notification preview, so the amount must appear there. Nothing leaves this phone.") {
-                        Text(if (listenerOn) "✓ On" else "Off", fontWeight = FontWeight.SemiBold, color = if (listenerOn) green() else muted())
+                        Text(if (listenerOn) "✓ On" else "Off", fontWeight = FontWeight.Medium, color = if (listenerOn) green() else muted())
                         OutlinedButton(onClick = { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) {
                             Text(if (listenerOn) "Manage notification access" else "Allow notification access")
                         }
@@ -724,7 +724,7 @@ fun PaidDialog(person: String, count: Int, amount: Double, onDismiss: () -> Unit
         title = { Text("$person paid $count ${if (count == 1) "bill" else "bills"}") },
         text = {
             Column {
-                Text(Logic.money(amount), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text(Logic.money(amount), fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Pill("UPI", { mode = "UPI" }, selected = mode == "UPI")
                     Pill("Cash", { mode = "Cash" }, selected = mode == "Cash")
@@ -786,7 +786,7 @@ fun PeopleSelectDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onDone:
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 SearchBox(query, { query = it }, "Search or type a name")
                 if (q.isNotEmpty() && pool.none { it.equals(q, true) }) {
-                    Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.SemiBold,
+                    Text("Add \"$q\"", color = teal(), fontWeight = FontWeight.Medium,
                         modifier = Modifier.fillMaxWidth().clickable { chosen.add(q); query = "" }.padding(vertical = 10.dp))
                 }
                 (chosen.filter { it !in results } + results).forEach { n ->
@@ -827,7 +827,7 @@ fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long)
             title = { Text("Welcome 👋") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Is this your first time, or do you have a backup file from before?", fontWeight = FontWeight.SemiBold)
+                    Text("Is this your first time, or do you have a backup file from before?", fontWeight = FontWeight.Medium)
                     Text("Restoring brings back your transactions, people, tags, name and settings, so there is nothing to set up again.", fontSize = 13.sp, color = muted())
                     if (busy) Text("Restoring…", color = teal())
                     problem?.let { Text(it, fontSize = 13.sp, color = amber()) }
@@ -847,7 +847,7 @@ fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long)
         title = { Text("Welcome 👋") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("From which date should I track your spends?", fontWeight = FontWeight.SemiBold)
+                Text("From which date should I track your spends?", fontWeight = FontWeight.Medium)
                 Text("Messages from that date go into your Inbox. New ones arrive with a notification and stay in the Inbox until you sort them.", fontSize = 13.sp, color = muted())
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     options.forEach { (label, t) -> Pill(label, { sel = t }, selected = sel == t, strong = sel == t) }

@@ -81,7 +81,7 @@ private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
     FullScreenDialog(onClose) {
         Surface(Modifier.fillMaxSize().padding(LocalScreenInsets.current), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
-                Text("Split saved", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+                Text("Split saved", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp))
                 Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 15.sp, color = muted())
                 Spacer(Modifier.height(12.dp))
                 if (others.isEmpty()) Text("Nobody else is in this split, so there's nothing to ask for.", color = muted())
@@ -105,7 +105,7 @@ private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
                             androidx.compose.material3.Checkbox(checked = on, onCheckedChange = { if (it) ticked.add(s.person) else ticked.remove(s.person) })
                             Avatar(s.person, 36)
                             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                Text(s.person, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                                Text(s.person, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                                 Text(Repo.money(s.amount), fontSize = 14.sp, color = muted())
                             }
                             if (s.person in asked) Pill("Asked ✓", { asked.remove(s.person) }, compact = true)

@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
         readIntent(intent)
         ThemeState.mode = Repo.getPref(this, "theme", "system")
         enableEdgeToEdge()
-        setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) { askPermissions() } } }
+        setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors, typography = AppTypography, shapes = AppShapes) { App(vm) { askPermissions() } } }
     }
 
     private fun askPermissions() = perms.launch(

@@ -84,9 +84,9 @@ private fun daysSince(ms: Long) = ((System.currentTimeMillis() - ms) / 86_400_00
 private fun AppCard(onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             (if (onLongClick != null || onClick != null) Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick) else Modifier).padding(16.dp)
@@ -99,12 +99,12 @@ private fun AppCard(onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = 
 private fun TxnHeader(t: Txn, aliases: Map<String, String>, incoming: Boolean = false, trailing: @Composable () -> Unit = {}) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(Repo.title(t.merchant, aliases), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 13.sp, color = muted())
         }
         Text(
             (if (incoming) "+" else "") + Repo.money(t.amount),
-            fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = if (incoming) green() else MaterialTheme.colorScheme.onSurface
+            fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, color = if (incoming) green() else coral()
         )
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { trailing() }
     }
@@ -164,14 +164,14 @@ internal fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, p
             Checkbox(checked = checked, onCheckedChange = { onToggle() })
             Column(Modifier.weight(1f)) {
                 if (partner != null) {
-                    Text("Own transfer", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Own transfer", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                 } else {
-                    Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     Text("${Repo.shortDate(t.txnDate)} · ${if (t.category.isBlank()) "no tag" else t.category}", fontSize = 12.sp, color = muted())
                 }
             }
-            Text(Repo.money(t.amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(Repo.money(t.amount), fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -191,7 +191,7 @@ internal fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onD
     val ready = picked.isNotEmpty() && (tag.isNotBlank() || people.isNotEmpty())
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (picked.isEmpty()) "Select bills" else "${picked.size} selected · ${Repo.money(picked.sumOf { it.amount })}", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(if (picked.isEmpty()) "Select bills" else "${picked.size} selected · ${Repo.money(picked.sumOf { it.amount })}", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             TextButton(onClick = onSelectAll) { Text("Select all") }
             if (picked.isNotEmpty()) TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             TextButton(onClick = onDone) { Text("Cancel") }
@@ -421,7 +421,7 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
             val g = guess
             if (g != null) {
                 Text("Looks like a refund for:", fontSize = 13.sp, color = muted())
-                Text("${Repo.title(g.merchant, aliases)} · ${Repo.money(g.amount)} · ${fullDate(g.txnDate)}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("${Repo.title(g.merchant, aliases)} · ${Repo.money(g.amount)} · ${fullDate(g.txnDate)}", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = { vm.linkRefund(t.id, g.id) }) { Text("Yes, close it") }
@@ -531,11 +531,11 @@ fun PendingScreen(vm: MainVm, q: String) {
             Column {
         AppCard {
             Text("Owed to you", fontSize = 13.sp, color = muted())
-            Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (total > 0) teal() else muted())
+            Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Medium, color = if (total > 0) teal() else muted())
             Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
             val lent = Logic.lentTotal(rows)
             TextButton(onClick = { addOwe = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("+ I owe someone") }
-            if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = teal())
+            if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = teal())
         }
         Spacer(Modifier.height(12.dp))
         if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
@@ -543,23 +543,23 @@ fun PendingScreen(vm: MainVm, q: String) {
         }
         if (oweBy.isNotEmpty()) {
             item(key = "owe-head") {
-                Text("You owe · ${Repo.money(oweBy.sumOf { it.second })}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text("You owe · ${Repo.money(oweBy.sumOf { it.second })}", fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
             items(oweBy, key = { "owe-" + it.first }) { (person, amt) ->
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Avatar(person, 36)
                         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                            Text(person, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                            Text(person, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                             Text("You need to pay", fontSize = 12.sp, color = muted())
                         }
-                        Text(Repo.money(amt), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(Repo.money(amt), fontSize = 16.sp, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.size(8.dp))
                         OutlinedButton(onClick = { payFor = person }) { Text("Paid") }
                     }
                 }
             }
-            item(key = "owe-gap") { Spacer(Modifier.height(4.dp)); Text("Owed to you", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            item(key = "owe-gap") { Spacer(Modifier.height(4.dp)); Text("Owed to you", fontSize = 16.sp, fontWeight = FontWeight.Medium) }
         }
         items(ordered, key = { it.key }) { e ->
             val owed = e.value.sumOf { it.amount - it.settled }
@@ -567,11 +567,11 @@ fun PendingScreen(vm: MainVm, q: String) {
             AppCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
-                        Text(e.key, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        Text(e.key, fontSize = 19.sp, fontWeight = FontWeight.Medium)
                         Text("${e.value.size} items · oldest $days days", fontSize = 13.sp,
                             color = if (days > 30) MaterialTheme.colorScheme.error else if (days > 14) amber() else muted())
                     }
-                    Text(Repo.money(owed), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(Repo.money(owed), fontSize = 22.sp, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(8.dp))
                 val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
@@ -584,7 +584,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                         verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
                         Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
-                        Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                 }
                     if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}") }
@@ -726,10 +726,10 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
         AppCard(onLongClick = onSelect) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text("Own transfer", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Own transfer", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 13.sp, color = muted())
                 }
-                Text(Repo.money(t.amount), fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(Repo.money(t.amount), fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 Box {
                     IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) { deleteItem() }
@@ -824,7 +824,7 @@ fun SummaryScreen(vm: MainVm) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
-                Text(label, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(label, fontWeight = FontWeight.Medium, fontSize = 17.sp)
                 TextButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Text("Next ›") }
             }
         }
@@ -833,16 +833,16 @@ fun SummaryScreen(vm: MainVm) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("Spent", fontSize = 13.sp, color = muted())
-                        Text(Repo.money(spent), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Text(Repo.money(spent), fontSize = 17.sp, fontWeight = FontWeight.Medium)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Income", fontSize = 13.sp, color = muted())
-                        Text(Repo.money(income), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = if (income > 0) green() else muted())
+                        Text(Repo.money(income), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = if (income > 0) green() else muted())
                     }
                 }
                 if (income > 0) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Saved ${Repo.money(income - spent)}", fontSize = 14.sp, color = if (income - spent >= 0) green() else MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                    Text("Saved ${Repo.money(income - spent)}", fontSize = 14.sp, color = if (income - spent >= 0) green() else MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
                 }
                 if (forOthers > 0.004 || receivable > 0.004) {
                     Spacer(Modifier.height(6.dp))
@@ -854,7 +854,7 @@ fun SummaryScreen(vm: MainVm) {
         }
         item {
             AppCard {
-                Text("Budget", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Budget", fontWeight = FontWeight.Medium, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 if (total == null) {
                     Text("Set a monthly limit and see how much is safe to spend each day.", fontSize = 13.sp, color = muted())
@@ -875,7 +875,7 @@ fun SummaryScreen(vm: MainVm) {
         if (slices.isNotEmpty()) {
             item {
                 AppCard {
-                    Text("Where my money went", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Where my money went", fontWeight = FontWeight.Medium, fontSize = 16.sp)
                     Spacer(Modifier.height(10.dp))
                     PieChart(slices, Modifier.fillMaxWidth().height(170.dp))
                     Spacer(Modifier.height(10.dp))
@@ -885,7 +885,7 @@ fun SummaryScreen(vm: MainVm) {
                             Text(sl.label, Modifier.weight(1f).padding(start = 8.dp), fontSize = 14.sp)
                             Text("${Math.round(sl.fraction * 100)}%", fontSize = 13.sp, color = muted())
                             Spacer(Modifier.size(10.dp))
-                            Text(Repo.money(sl.value), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(Repo.money(sl.value), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -893,7 +893,7 @@ fun SummaryScreen(vm: MainVm) {
         }
         item {
             AppCard {
-                Text("Last 6 months", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Last 6 months", fontWeight = FontWeight.Medium, fontSize = 16.sp)
                 Spacer(Modifier.height(10.dp))
                 val top = trend.maxOf { it.second }.coerceAtLeast(1.0)
                 Row(Modifier.fillMaxWidth().height(130.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -911,7 +911,7 @@ fun SummaryScreen(vm: MainVm) {
         if (byCard.isNotEmpty()) {
             item {
                 AppCard {
-                    Text("By card / account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("By card / account", fontWeight = FontWeight.Medium, fontSize = 16.sp)
                     Spacer(Modifier.height(8.dp))
                     byCard.forEach { e ->
                         val mine = e.value.filter { it.person == Repo.ME }.sumOf { it.shareAmt }
@@ -931,7 +931,7 @@ fun SummaryScreen(vm: MainVm) {
     }
 }
 
-private val SLICE_COLORS = listOf(Color(0xFF0F766E), Color(0xFFD97706), Color(0xFF2563EB), Color(0xFFBE185D), Color(0xFF7C3AED), Color(0xFF64748B))
+private val SLICE_COLORS = listOf(Color(0xFFFF6159), Color(0xFF4DA3FF), Color(0xFFFFB84D), Color(0xFF4CC38A), Color(0xFFA78BFA), Color(0xFF8A8D96))
 private fun sliceColor(i: Int) = SLICE_COLORS[i % SLICE_COLORS.size]
 
 @Composable
@@ -958,7 +958,7 @@ private fun BudgetRow(name: String, spent: Double, limit: Double, onClick: () ->
     val color = when (st) { Budgets.State.OK -> teal(); Budgets.State.CLOSE -> amber(); Budgets.State.OVER -> MaterialTheme.colorScheme.error }
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(name, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Text("${Repo.money(spent)} of ${Repo.money(limit)}", fontSize = 14.sp)
         }
         Spacer(Modifier.height(4.dp))
@@ -1028,7 +1028,7 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
-                Text("${Stats.monthLabel(m)} $y", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("${Stats.monthLabel(m)} $y", fontWeight = FontWeight.Medium, fontSize = 17.sp)
                 TextButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Text("Next ›") }
             }
             Row(Modifier.fillMaxWidth()) {
@@ -1051,7 +1051,7 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
                                         .clickable { picked = d }.padding(top = 4.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Text(d.toString(), fontSize = 13.sp, fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal, color = if (isToday) teal() else MaterialTheme.colorScheme.onSurface)
+                                    Text(d.toString(), fontSize = 13.sp, fontWeight = if (isToday) FontWeight.Medium else FontWeight.Normal, color = if (isToday) teal() else MaterialTheme.colorScheme.onSurface)
                                     if (tot != null && tot.spent > 0) Text(Repo.compact(tot.spent), fontSize = 10.sp, color = MaterialTheme.colorScheme.error, maxLines = 1)
                                     if (tot != null && tot.income > 0) Text(Repo.compact(tot.income), fontSize = 10.sp, color = green(), maxLines = 1)
                                 }
@@ -1064,7 +1064,7 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
         item {
             val t = totals[picked]
             Text("${picked} ${Stats.monthLabel(m)}" + (if (t != null) " · spent ${Repo.money(t.spent)}" + (if (t.income > 0) " · income ${Repo.money(t.income)}" else "") else ""),
-                fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+                fontWeight = FontWeight.Medium, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
             if (merged.shown.isEmpty()) Text("Nothing on this day.", color = muted(), fontSize = 14.sp)
         }
         items(merged.shown, key = { it.id }) { t ->

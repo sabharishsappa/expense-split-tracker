@@ -90,6 +90,23 @@ val DarkColors = darkColorScheme(
 @Composable fun green(): Color = blue()
 @Composable fun amber(): Color = if (isDarkNow()) Color(0xFFFBBF24) else Color(0xFFB45309)
 
+/** One type scale and one set of corners for the whole app, so every page reads the same. */
+val AppTypography = androidx.compose.material3.Typography(
+    bodyLarge = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, letterSpacing = 0.sp),
+    bodyMedium = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, letterSpacing = 0.sp),
+    bodySmall = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, letterSpacing = 0.sp),
+    titleLarge = androidx.compose.ui.text.TextStyle(fontSize = 20.sp, letterSpacing = 0.sp),
+    titleMedium = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, letterSpacing = 0.sp),
+    titleSmall = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, letterSpacing = 0.sp),
+    labelLarge = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, letterSpacing = 0.sp),
+    labelMedium = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, letterSpacing = 0.sp),
+    labelSmall = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, letterSpacing = 0.sp)
+)
+val AppShapes = androidx.compose.material3.Shapes(
+    extraSmall = RoundedCornerShape(4.dp), small = RoundedCornerShape(6.dp), medium = RoundedCornerShape(10.dp),
+    large = RoundedCornerShape(10.dp), extraLarge = RoundedCornerShape(10.dp)
+)
+
 /** Large rounded tap target used for people, categories and filters (min height 44dp). */
 @Composable
 fun Pill(
@@ -124,7 +141,7 @@ fun Avatar(name: String, size: Int = 40) {
         Modifier.size(size.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c.copy(alpha = 0.18f)),
         contentAlignment = Alignment.Center
     ) {
-        Text(name.trim().take(1).uppercase(), color = c, fontSize = (size * 0.42).sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        Text(name.trim().take(1).uppercase(), color = c, fontSize = (size * 0.42).sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     }
 }
 
@@ -134,7 +151,7 @@ fun Avatar(name: String, size: Int = 40) {
 fun Segmented(options: List<String>, selected: String, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     androidx.compose.foundation.layout.Row(
-        modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(scheme.surfaceVariant).padding(3.dp)
+        modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(scheme.surfaceVariant).padding(3.dp)
     ) {
         options.forEach { o ->
             val on = o == selected
@@ -144,7 +161,7 @@ fun Segmented(options: List<String>, selected: String, onPick: (String) -> Unit,
                     .clickable { onPick(o) },
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
-                Text(o, fontSize = 13.sp, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
+                Text(o, fontSize = 13.sp, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.Medium else androidx.compose.ui.text.font.FontWeight.Normal,
                     color = if (on) scheme.onSurface else scheme.onSurfaceVariant)
             }
         }
@@ -159,9 +176,9 @@ fun SmsBanner() {
     val ok = remember(Epoch.value, Perm.tick) { Repo.hasPermission(ctx, android.Manifest.permission.READ_SMS) }
     if (ok) return
     androidx.compose.foundation.layout.Column(
-        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(16.dp)
+        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(16.dp)
     ) {
-        Text("Allow SMS access", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+        Text("Allow SMS access", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = MaterialTheme.colorScheme.onErrorContainer)
         Text("Bank messages are read on this phone to find your payments. Nothing is uploaded.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
         androidx.compose.material3.TextButton(onClick = {
             ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + ctx.packageName)))
