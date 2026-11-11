@@ -159,7 +159,8 @@ fun AccountsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(a.label, fontSize = 16.sp)
-                        Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)} · tap to correct" else "Tap to set balance", fontSize = 12.sp, color = muted())
+                        val stale = a.hasBalance && System.currentTimeMillis() - a.asOf > 30L * 86_400_000L
+                        Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)}${if (stale) " · may be out of date, tap to correct" else " · tap to correct"}" else "Tap to set balance", fontSize = 12.sp, color = if (stale) amber() else muted())
                     }
                     if (a.hasBalance) Text(Logic.money(a.balance), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = if (a.balance < 0) MaterialTheme.colorScheme.error else green())
                 }
