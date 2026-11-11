@@ -58,8 +58,8 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     }
 
     val accounts = kotlinx.coroutines.flow.combine(dao.all(), dao.acctRules()) { t, r -> Accounts.views(t, r) }.hot(emptyList())
-    fun setBalance(key: String, name: String, balance: Double, source: String = "you") =
-        viewModelScope.launch(safe) { Repo.setAccountBalance(getApplication(), key, name, balance, source) }
+    fun setBalance(key: String, name: String, balance: Double) =
+        viewModelScope.launch(safe) { Repo.setAccountBalance(getApplication(), key, name, balance) }
 
     fun bulkApply(txns: List<Txn>, tag: String, people: List<String>) = viewModelScope.launch(safe) {
         Repo.bulkApply(getApplication(), txns, tag, people)
@@ -79,16 +79,7 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     val contacts = MutableStateFlow<List<String>>(emptyList())
     val status = MutableStateFlow("")
 
-    init { viewModelScope.launch(safe) { Repo.migrateNames(getApplication()); Repo.backfillCategories(getApplication()); Repo.runRecurring(getApplication()) } }
-    val openEntry = MutableStateFlow(false)
-    data class Jump(val tag: String, val year: Int, val month0: Int)
-    /** Set by Stats to open the Transactions page already filtered to one tag and month. */
-    val jump = MutableStateFlow<Jump?>(null)
-    fun autoBackup(force: Boolean = false) = viewModelScope.launch(safe) {
-        if (AutoBackup.run(getApplication(), force)) lastBackup.value = System.currentTimeMillis()
-    }
-    fun runRecurring() = viewModelScope.launch(safe) { Repo.runRecurring(getApplication()) }
-    fun csvText(): String = Csv.build(all.value, shares.value.groupBy { it.txnId })
+    init { viewModelScope.launch(safe) { Repo.migrateNames(getApplication()); Repo.backfillCategories(getApplication()) } }
 
     fun loadContacts() = viewModelScope.launch(safe) { contacts.value = Repo.loadContacts(getApplication()) }
 
@@ -126,7 +117,6 @@ class MainVm(app: Application) : AndroidViewModel(app) {
         }
         if (n >= 0) {
             Repo.migrateNames(getApplication())
-            Stats.loadStartDay(Repo.getPref(getApplication(), "monthStart", "1")); Epoch.value++
             customTags.value = Logic.parseTags(Repo.getPref(getApplication(), "tags", ""))
             hiddenTags.value = Logic.parseTags(Repo.getPref(getApplication(), "hiddenTags", ""))
             ThemeState.mode = Repo.getPref(getApplication(), "theme", ThemeState.mode)
@@ -148,21 +138,8 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun addReceived(title: String, amount: Double, key: String) = viewModelScope.launch(safe) {
         Repo.addReceived(getApplication(), title, amount, key); status.value = "Added — say what it was in your Inbox"
     }
-    fun addEntry(title: String, amount: Double, key: String, at: Long, category: String, people: List<String>) =
-        viewModelScope.launch(safe) {
-            Repo.addEntry(getApplication(), title, amount, key, at, category, people)
-            status.value = "Added ${Logic.money(amount)}"
-        }
-    fun updateEntry(old: Txn, title: String, amount: Double, key: String, at: Long, category: String, people: List<String>, income: Boolean) =
-        viewModelScope.launch(safe) {
-            Repo.updateEntry(getApplication(), old, title, amount, key, at, category, people, income)
-            status.value = "Saved changes"
-        }
-    fun addIncome(title: String, amount: Double, key: String, at: Long, category: String) = viewModelScope.launch(safe) {
-        Repo.addIncome(getApplication(), title, amount, key, at, category); status.value = "Added income ${Logic.money(amount)}"
-    }
-    fun addMoved(from: AccountView, to: AccountView, amount: Double, at: Long = System.currentTimeMillis()) = viewModelScope.launch(safe) {
-        Repo.addMoved(getApplication(), from.key, to.key, from.label, to.label, amount, at)
+    fun addMoved(from: AccountView, to: AccountView, amount: Double) = viewModelScope.launch(safe) {
+        Repo.addMoved(getApplication(), from.key, to.key, from.label, to.label, amount)
         status.value = "Moved ${Logic.money(amount)} from ${from.label} to ${to.label}"
     }
     fun ownTransfer(t: Txn) = viewModelScope.launch(safe) {

@@ -1,7 +1,5 @@
 package com.sabharish.splittracker
 
-import java.util.Calendar
-import kotlinx.coroutines.sync.withLock
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -293,7 +291,6 @@ object Repo {
             dao.deleteShares(t.id); dao.unlinkRefunds(t.id); dao.deleteTxnRow(t.id)
             dao.putRule(Rule(Logic.deletedKey(t.kind, t.amount, t.smsTime), "DEL", ""))
         }
-        Receipts.delete(ctx, t.id)
     }
 
     /** Old tag names become their new names in saved transactions, rules and tag lists. Safe to repeat. */
@@ -496,55 +493,9 @@ object Repo {
         Db.get(ctx).dao().insert(Entries.received(accountKey, title, amount, System.currentTimeMillis()))
     }
 
-    /** A spend typed in by hand: tagged straight away (mine, or split equally with [people]). */
-    suspend fun addEntry(ctx: Context, title: String, amount: Double, key: String, at: Long, category: String, people: List<String>) {
-        val t = Entries.spent(key, title.ifBlank { category }, amount, at).let { it.copy(id = Db.get(ctx).dao().insert(it)) }
-        val shares = if (people.isEmpty()) listOf(NewShare(ME, amount, true)) else equalShares(amount, listOf(ME) + people, false)
-        tag(ctx, t, shares, category, false, people.isNotEmpty())
-    }
-
-    /** The backup text as it should be written to a file: encrypted when a passphrase is set. */
-    fun sealed(ctx: Context, text: String): String = getPref(ctx, "backupPass", "").let { if (it.isEmpty()) text else Crypt.encrypt(text, it) }
-
-    private val recurMutex = kotlinx.coroutines.sync.Mutex()
-
-    /** Creates the entries that repeating items owe by now. Safe to call often. */
-    suspend fun runRecurring(ctx: Context) = recurMutex.withLock {
-        val items = Recurrings.decode(getPref(ctx, Recurrings.KEY, ""))
-        if (items.isEmpty()) return@withLock
-        val due = Recurrings.due(items, System.currentTimeMillis())
-        if (due.isEmpty()) return@withLock
-        val latest = HashMap<String, String>()
-        for ((r, at) in due.sortedBy { it.second }) {
-            if (r.kind == "Income") addIncome(ctx, r.title, r.amount, r.account, at, r.category)
-            else addEntry(ctx, r.title, r.amount, r.account, at, r.category, emptyList())
-            val c = Calendar.getInstance().apply { timeInMillis = at }
-            latest[r.id] = Recurrings.monthKey(c.get(Calendar.YEAR), c.get(Calendar.MONTH))
-        }
-        putPref(ctx, Recurrings.KEY, Recurrings.encode(items.map { r -> latest[r.id]?.let { r.copy(last = it) } ?: r }))
-    }
-
-    /** Changes a hand-made entry in place (same id), then re-splits it if it is an expense. */
-    suspend fun updateEntry(ctx: Context, old: Txn, title: String, amount: Double, key: String, at: Long, category: String, people: List<String>, income: Boolean) {
-        val dao = Db.get(ctx).dao()
-        val t = old.copy(
-            bank = Entries.bankOf(key), card = Entries.lastOf(key), amount = amount, merchant = title.trim().ifEmpty { category },
-            txnDate = at, smsTime = at, category = category, note = if (income) Entries.incomeNote(category) else old.note
-        )
-        dao.updateTxn(t)
-        if (!income) {
-            val shares = if (people.isEmpty()) listOf(NewShare(ME, amount, true)) else equalShares(amount, listOf(ME) + people, false)
-            tag(ctx, t, shares, category, false, people.isNotEmpty())
-        }
-    }
-
-    suspend fun addIncome(ctx: Context, title: String, amount: Double, key: String, at: Long, category: String) {
-        Db.get(ctx).dao().insert(Entries.income(key, title, amount, category, at))
-    }
-
-    suspend fun addMoved(ctx: Context, fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double, at: Long = System.currentTimeMillis()) {
+    suspend fun addMoved(ctx: Context, fromKey: String, toKey: String, fromLabel: String, toLabel: String, amount: Double) {
         val db = Db.get(ctx); val dao = db.dao()
-        val (out, inn) = Entries.moved(fromKey, toKey, fromLabel, toLabel, amount, at)
+        val (out, inn) = Entries.moved(fromKey, toKey, fromLabel, toLabel, amount, System.currentTimeMillis())
         db.withTransaction { dao.insert(out); dao.insert(inn) }
     }
 
@@ -589,21 +540,13 @@ object Repo {
         if (!known) return false
         if (saved != null && smsTime + 1 <= saved.asOf) return false      // older than what we already have
         dao.putRule(Accounts.encode(Account(key, hit.bank, hit.last, saved?.name ?: "", hit.balance, smsTime + 1)))
-        recordBalance(ctx, key, smsTime, hit.balance, "message")
         return true
     }
 
-    suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double, source: String = "you") {
+    suspend fun setAccountBalance(ctx: Context, key: String, name: String, balance: Double) {
         val bank = key.substringBefore("|"); val last = key.substringAfter("|")
         Db.get(ctx).dao().putRule(Accounts.encode(Account(key, bank, last, name.trim(), balance, System.currentTimeMillis())))
-        recordBalance(ctx, key, System.currentTimeMillis(), balance, source)
     }
-
-    fun recordBalance(ctx: Context, key: String, at: Long, amount: Double, source: String) {
-        putPref(ctx, BalanceLog.KEY, BalanceLog.encode(BalanceLog.add(BalanceLog.decode(getPref(ctx, BalanceLog.KEY, "")), BalanceLog.Point(key, at, amount, source))))
-    }
-
-    fun balanceHistory(ctx: Context, key: String): List<BalanceLog.Point> = BalanceLog.forKey(BalanceLog.decode(getPref(ctx, BalanceLog.KEY, "")), key)
 
     // ---------- backup ----------
     suspend fun exportBackup(ctx: Context): String {
@@ -733,15 +676,6 @@ object Repo {
     }
 
     private const val CHANNEL = "new_txn"
-
-    fun notifyDigest(ctx: Context, text: String) {
-        if (Build.VERSION.SDK_INT >= 33 && !hasPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)) return
-        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.createNotificationChannel(NotificationChannel("digest", "Evening summary", NotificationManager.IMPORTANCE_LOW))
-        val open = PendingIntent.getActivity(ctx, 9001, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        nm.notify(9001, NotificationCompat.Builder(ctx, "digest").setSmallIcon(android.R.drawable.ic_menu_agenda)
-            .setContentTitle("Today in Paisa Log").setContentText(text).setContentIntent(open).setAutoCancel(true).build())
-    }
 
     fun notifyNew(ctx: Context, t: Txn) {
         if (Build.VERSION.SDK_INT >= 33 && !hasPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)) return

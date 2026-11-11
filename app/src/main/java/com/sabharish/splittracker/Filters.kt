@@ -9,9 +9,7 @@ data class TxnFilter(
     val tag: String = "",            // a specific tag, or ""
     val range: String = "Any time",  // see Filters.ranges
     val status: String = "Any",      // Any | Needs you | Pending | Refunds | Failed
-    val query: String = "",
-    val minAmt: Double? = null,
-    val maxAmt: Double? = null
+    val query: String = ""
 ) {
     val active get() = this != TxnFilter()
 }
@@ -54,8 +52,6 @@ object Filters {
         if (f.tagState == "Tagged" && untagged) return false
         if (f.tagState == "Untagged" && !untagged) return false
         if (f.tag.isNotBlank() && !t.category.equals(f.tag, true)) return false
-        if (f.minAmt != null && t.amount < f.minAmt - 0.005) return false
-        if (f.maxAmt != null && t.amount > f.maxAmt + 0.005) return false
         val (from, to) = rangeFor(f.range, now)
         if (from != null && t.txnDate < from) return false
         if (to != null && t.txnDate >= to) return false

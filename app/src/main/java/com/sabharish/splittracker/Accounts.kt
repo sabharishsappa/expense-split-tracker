@@ -115,23 +115,6 @@ object Entries {
     const val OWN = "Transfer between your own accounts"
     const val DAYS3 = 3 * 24 * 60 * 60_000L
 
-    val INCOME_CATS = listOf("Salary", "Allowance", "Bonus", "Petty cash", "Gift", "Other")
-    fun incomeNote(category: String) = "Received: ${category.ifBlank { "Other" }}"
-
-    private val EMOJI = mapOf(
-        "Grocery" to "🛒", "Food" to "🍜", "Dine Out" to "🍽️", "Cab" to "🚕", "Travel" to "✈️", "Shopping" to "🛍️",
-        "Bills" to "🧾", "Fuel" to "⛽", "Entertainment" to "🎬", "Health" to "🧘", "Lent" to "🤝", "Other" to "📦",
-        "Salary" to "💼", "Allowance" to "👛", "Bonus" to "🎁", "Petty cash" to "💵", "Gift" to "🎀"
-    )
-    fun emoji(category: String) = EMOJI[category] ?: "🏷️"
-
-    /** A hand-made income entry; the note format is what Stats counts as income. */
-    fun income(key: String, title: String, amount: Double, category: String, at: Long) =
-        received(key, title.ifBlank { category }, amount, at).copy(status = "RECEIVED", note = incomeNote(category), category = category)
-
-    /** Typed in by hand (no message text behind it), so it can be edited. Transfers are two rows and are not editable. */
-    fun isHand(t: Txn) = t.body.isBlank() && t.status != "SELF" && (t.note == "Added by hand" || t.note.startsWith("Received:"))
-
     fun bankOf(key: String) = key.substringBefore("|")
     fun lastOf(key: String) = key.substringAfter("|")
 

@@ -82,17 +82,3 @@ class BudgetsTest {
         assertEquals(0.0, Budgets.perDay(1000.0, 0.0, 0), 0.001)
     }
 }
-
-class ManualEntryTest {
-    @org.junit.Test fun handMadeIncomeCountsAsIncome() {
-        val t = Entries.income("CASH|", "", 5000.0, "Salary", 1_000L)
-        org.junit.Assert.assertEquals("RECEIVED", t.status)
-        org.junit.Assert.assertEquals("Received: Salary", t.note)
-        org.junit.Assert.assertEquals("Salary", t.merchant)
-        org.junit.Assert.assertEquals(5000.0, Stats.incomeOf(t), 0.001)
-    }
-    @org.junit.Test fun everyCategoryHasAnEmoji() {
-        (Categories.all + Entries.INCOME_CATS).forEach { org.junit.Assert.assertNotEquals("🏷️", Entries.emoji(it)) }
-    }
-    @org.junit.Test fun incomeNoteDefaultsToOther() = org.junit.Assert.assertEquals("Received: Other", Entries.incomeNote(" "))
-}

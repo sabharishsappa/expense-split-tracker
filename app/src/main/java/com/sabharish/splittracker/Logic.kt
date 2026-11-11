@@ -328,25 +328,15 @@ object Groups {
     }
 }
 
-/** Inbox order: newest first by default; biggest first to clear what matters most; oldest first to catch up. */
-object InboxOrder {
-    val modes = listOf("Newest", "Biggest", "Oldest")
-    fun sort(items: List<Txn>, mode: String): List<Txn> = when (mode) {
-        "Biggest" -> items.sortedByDescending { it.amount }
-        "Oldest" -> items.sortedBy { it.txnDate }
-        else -> items.sortedByDescending { it.txnDate }
-    }
-}
-
 object Reminder {
-    private fun payBlock(upi: String, amount: Double, note: String): String =
-        if (upi.isBlank()) "" else "\n\nPay by clicking the UPI ID below:\n${upi.trim()}\n\nOr tap to pay in your UPI app:\n${UpiLink.build(upi, amount, note)}"
+    private fun payBlock(upi: String): String =
+        if (upi.isBlank()) "" else "\n\nPay by clicking the UPI ID below:\n${upi.trim()}"
 
     /** The message for one person right after a split is created. */
     fun splitRequest(person: String, title: String, total: Double, share: Double, upi: String): String {
         val first = person.trim().substringBefore(" ")
         val what = title.trim().ifEmpty { "our split" }
-        val pay = payBlock(upi, share, what)
+        val pay = payBlock(upi)
         return "Hi $first 👋\n\n$what · total ${Logic.money(total)}\nYour share: ${Logic.money(share)}$pay\n\nThank you!"
     }
 
@@ -374,7 +364,7 @@ object Reminder {
             }
         }
         val more = if (sorted.size > shown.size) "\n…and ${sorted.size - shown.size} more" else ""
-        val pay = payBlock(upi, total, "Paisa Log reminder")
+        val pay = payBlock(upi)
         val close = if (days > 30) "Could you please clear it this week? Thank you!" else "Thank you!"
         return "$intro\n\n$lines$more\n\nTotal pending: ${Logic.money(total)}$pay\n\n$close"
     }

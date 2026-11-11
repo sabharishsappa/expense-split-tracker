@@ -22,7 +22,7 @@ object Backup {
     val PREF_KEYS = listOf("upi", "selfnames", "tags", "hiddenTags", "theme", "groups")
 
     /** Only these are left out: they describe this phone, not you. Everything else you set is saved. */
-    private val SKIP = setOf("lastBackup", "unparsed", "lock", "backupDir", "lastAuto", "backupPass", "digest")
+    private val SKIP = setOf("lastBackup", "unparsed")
     fun keep(key: String) = key !in SKIP
 
     /** What a backup holds, in words, so it can be checked before restoring and after saving. */

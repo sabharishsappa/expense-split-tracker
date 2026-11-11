@@ -116,7 +116,6 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun restoreSettlement(s: Settlement)
 
     @Insert suspend fun insert(t: Txn): Long
-    @androidx.room.Update suspend fun updateTxn(t: Txn)
     @Insert suspend fun insertShare(s: Share): Long
     @Insert suspend fun insertSettlement(s: Settlement): Long
     @Query("DELETE FROM settlement WHERE id = :id") suspend fun deleteSettlement(id: Long)

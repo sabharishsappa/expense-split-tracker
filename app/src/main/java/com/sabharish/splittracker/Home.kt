@@ -50,14 +50,12 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
     val owed = pending.filter { it.person != Repo.ME }.groupBy { it.person }
         .mapValues { e -> e.value.sumOf { it.amount - it.settled } }.filterValues { it > 0.004 }
     val accounts by vm.accounts.collectAsState()
-    val allTxns by vm.all.collectAsState()
-    val lastBackup by vm.lastBackup.collectAsState()
     val bills by vm.dueBills.collectAsState()
     val payables by vm.payables.collectAsState()
     val oweList = remember(payables) { Logic.owedByYou(payables) }
     var payingBill by remember { mutableStateOf<Bill?>(null) }
     var checking by remember { mutableStateOf(false) }
-    var showAccounts by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<AccountView?>(null) }
     val total = owed.values.sum()
     val toReview = spends.size + money.size
     payingBill?.let { b ->
@@ -71,14 +69,6 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         item { SmsBanner() }
-        item {
-            val ctx = androidx.compose.ui.platform.LocalContext.current
-            val now = System.currentTimeMillis()
-            val notes = listOfNotNull(Health.capture(allTxns, now), Health.backup(lastBackup, AutoBackup.folder(ctx) != null, allTxns.size, now))
-            if (notes.isNotEmpty()) Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                notes.forEach { Text(if (it.warn) "⚠ ${it.text}" else it.text, fontSize = 12.sp, color = if (it.warn) amber() else muted()) }
-            }
-        }
         item {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
@@ -146,22 +136,25 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             }
         }
         if (accounts.isNotEmpty()) {
-            item {
-                val known = accounts.filter { it.hasBalance }
-                Card(
-                    Modifier.fillMaxWidth().clickable { showAccounts = true }, shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("My accounts", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                            Text("${accounts.size} ${if (accounts.size == 1) "account" else "accounts"} · tap to see balances", fontSize = 12.sp, color = muted())
+            item { Text("My accounts", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.padding(top = 4.dp)) }
+            accounts.forEach { a ->
+                item {
+                    Card(
+                        Modifier.fillMaxWidth().clickable { editing = a }, shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(a.label, fontSize = 16.sp)
+                                Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)} · tap to correct" else "Tap to set balance", fontSize = 12.sp, color = muted())
+                            }
+                            if (a.hasBalance) Text(Logic.money(a.balance), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                                color = if (a.balance < 0) MaterialTheme.colorScheme.error else green())
                         }
-                        if (known.isNotEmpty()) Text(Logic.money(known.sumOf { it.balance }), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                        Text("  ›", fontSize = 22.sp, color = muted())
                     }
                 }
             }
+            item { Text("Transfers between your own accounts are left out of your spends.", fontSize = 12.sp, color = muted()) }
         }
         item {
             Card(
@@ -194,7 +187,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
         }
     }
     if (checking) StatementFlow(vm) { checking = false }
-    if (showAccounts) AccountsDialog(vm) { showAccounts = false }
+    editing?.let { a -> BalanceDialog(a, { editing = null }) { n, b -> vm.setBalance(a.key, n, b); editing = null } }
 }
 
 @Composable
@@ -211,7 +204,7 @@ private fun StatTile(label: String, value: String, tint: Color, modifier: Modifi
 }
 
 @Composable
-internal fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
+private fun BalanceDialog(a: AccountView, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
     var amount by remember { mutableStateOf(if (a.hasBalance) a.balance.toString().removeSuffix(".0") else "") }
     var name by remember { mutableStateOf(a.name) }
     AlertDialog(
@@ -247,15 +240,12 @@ private fun ClarityRing(fraction: Float) {
 }
 
 @Composable
-internal fun StatementFlow(vm: MainVm, initial: String? = null, onDone: () -> Unit) {
+private fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val all by vm.all.collectAsState()
     val sources = remember(all.size) { Statement.sources(all) }
-    var source by remember { mutableStateOf(sources.firstOrNull { it.key == initial }) }
-    var closing by remember { mutableStateOf<Double?>(null) }
-    var lastLine by remember { mutableStateOf(0L) }
-    var balanceSet by remember { mutableStateOf(false) }
+    var source by remember { mutableStateOf<StmtSource?>(null) }
     var password by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<Recon?>(null) }
@@ -268,7 +258,7 @@ internal fun StatementFlow(vm: MainVm, initial: String? = null, onDone: () -> Un
                 val text = StatementReader.readText(ctx, uri, password)
                 val lines = Statement.parse(text)
                 if (lines.isEmpty()) message = "I couldn't find any transactions in that file. If it is a PDF, send me a sample so I can tune the reader."
-                else { closing = Statement.closingBalance(text); lastLine = lines.maxOf { it.date }; result = Statement.reconcile(lines, Statement.txnsFor(s, all)); message = "" }
+                else { result = Statement.reconcile(lines, Statement.txnsFor(s, all)); message = "" }
             } catch (e: StatementReader.NeedsPassword) {
                 message = "Could not open it. If the PDF has a password, enter it above and choose the file again."
             } catch (e: Exception) { message = "Could not read that file." }
@@ -302,18 +292,6 @@ internal fun StatementFlow(vm: MainVm, initial: String? = null, onDone: () -> Un
             title = { Text("${r.matched} of ${r.lines} lines match") },
             text = {
                 Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    val cl = closing
-                    if (cl != null && !s.isCard) {
-                        val accts by vm.accounts.collectAsState()
-                        val view = accts.firstOrNull { it.key == Accounts.keyOf(s.bank, s.last) }
-                        Text("Statement closing balance ${Logic.money(cl)}", fontWeight = FontWeight.SemiBold)
-                        if (view != null && view.hasBalance) Text(Reconcile.summary(view.balance, cl), fontSize = 13.sp, color = muted())
-                        if (Reconcile.isCurrent(lastLine, System.currentTimeMillis())) {
-                            if (balanceSet) Text("Balance updated ✓", fontSize = 13.sp, color = green())
-                            else TextButton(onClick = { vm.setBalance(Accounts.keyOf(s.bank, s.last), view?.name ?: "", cl, "statement"); balanceSet = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Use this as the account balance") }
-                        } else Text("This statement ended ${Logic.shortDate(lastLine)}, so it can't tell today's balance.", fontSize = 12.sp, color = muted())
-                        Spacer(Modifier.height(10.dp))
-                    }
                     if (r.missing.isEmpty() && r.extra.isEmpty()) Text("Everything lines up 🎉")
                     if (r.missing.isNotEmpty()) {
                         Text("On the statement, not in the app (${r.missing.size})", fontWeight = FontWeight.SemiBold)
@@ -383,12 +361,12 @@ private fun MonthCard(vm: MainVm, open: () -> Unit) {
     val txns by vm.all.collectAsState()
     val shareList by vm.shares.collectAsState()
     val shares = remember(shareList) { shareList.groupBy { it.txnId } }
-    val ep = Epoch.value   // changes when the month start day is changed
-    val (y, m) = Stats.monthOf(System.currentTimeMillis())
-    val spent = remember(txns, shares, ep) { Stats.spentInMonth(txns, shares, y, m) }
+    val cal = java.util.Calendar.getInstance()
+    val y = cal.get(java.util.Calendar.YEAR); val m = cal.get(java.util.Calendar.MONTH)
+    val spent = remember(txns, shares) { Stats.spentInMonth(txns, shares, y, m) }
     val limit = Budgets.decode(Repo.getPref(ctx, "budgets", ""))[Budgets.TOTAL]
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface).clickable(onClick = open).padding(18.dp)) {
-        Text(if (Stats.startDay <= 1) "Spent in ${Stats.monthLabel(m)}" else "Spent · ${Stats.periodTitle(y, m)}", fontSize = 13.sp, color = muted())
+        Text("Spent in ${Stats.monthLabel(m)}", fontSize = 13.sp, color = muted())
         Text(Logic.money(spent), fontSize = 28.sp, fontWeight = FontWeight.Bold)
         if (limit != null) {
             val st = Budgets.state(spent, limit)

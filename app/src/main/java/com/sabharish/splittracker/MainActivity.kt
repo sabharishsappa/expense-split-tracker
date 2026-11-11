@@ -61,12 +61,11 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    companion object { const val EXTRA_TXN = "txnId"; const val ACTION_ADD = "com.sabharish.splittracker.ADD" }
+    companion object { const val EXTRA_TXN = "txnId" }
 
     private fun readIntent(i: Intent?) {
         val id = i?.getLongExtra(EXTRA_TXN, 0L) ?: 0L
         if (id > 0) { vm.openId.value = id; i?.removeExtra(EXTRA_TXN) }
-        if (i?.action == ACTION_ADD) { vm.openEntry.value = true; i.action = Intent.ACTION_MAIN }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -88,9 +87,7 @@ class MainActivity : ComponentActivity() {
         // a brand-new person sees the welcome choice first; permissions are asked right after it
         if (Repo.getPref(this, "trackFrom", "").isNotEmpty() || getSharedPreferences("st", Context.MODE_PRIVATE).getBoolean("imported2", false)) askPermissions()
         readIntent(intent)
-        addShortcut()
         ThemeState.mode = Repo.getPref(this, "theme", "system")
-        Stats.loadStartDay(Repo.getPref(this, "monthStart", "1"))
         enableEdgeToEdge()
         setContent { MaterialTheme(colorScheme = if (isDarkNow()) DarkColors else LightColors) { App(vm) { askPermissions() } } }
     }
@@ -105,24 +102,6 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         Epoch.value++
-    }
-
-    override fun onStart() {
-        super.onStart()
-        vm.autoBackup()
-        DigestReceiver.schedule(this)
-    }
-
-    private fun addShortcut() {
-        try {
-            val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
-            sm.dynamicShortcuts = listOf(
-                android.content.pm.ShortcutInfo.Builder(this, "add")
-                    .setShortLabel("Add entry").setLongLabel("Add an expense")
-                    .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
-                    .setIntent(Intent(this, MainActivity::class.java).setAction(ACTION_ADD)).build()
-            )
-        } catch (_: Exception) { }
     }
 
     override fun onResume() {
@@ -164,7 +143,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     LaunchedEffect(pager) { androidx.compose.runtime.snapshotFlow { pager.settledPage }.collect { if (it != tab) tab = it } }
     var inboxSection by remember { mutableIntStateOf(0) }
     var showNewSplit by remember { mutableStateOf(false) }
-    val showEntry by vm.openEntry.collectAsState()
+    var showEntry by remember { mutableStateOf(false) }
     var opened by remember { mutableStateOf<Txn?>(null) }
     val openId by vm.openId.collectAsState()
     var searching by remember(tab) { mutableStateOf(false) }
@@ -174,7 +153,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     val status by vm.status.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var showMore by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
 
     val undoable: (Long, String) -> Unit = { id, msg ->
         scope.launch {
@@ -205,11 +184,6 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            if (tab in 0..3) androidx.compose.material3.FloatingActionButton(
-                onClick = { vm.openEntry.value = true }, containerColor = MaterialTheme.colorScheme.primary
-            ) { Icon(Icons.Default.Add, contentDescription = "Add an entry") }
-        },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
@@ -236,11 +210,12 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (tab in 0..3) {
                         IconButton(onClick = { showNewSplit = true }) { Icon(SplitIcon, contentDescription = "Split a bill") }
+                        IconButton(onClick = { showEntry = true }) { Icon(Icons.Default.AddCircle, contentDescription = "Add an expense") }
                     }
                     if (tab in 1..3) IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                         Icon(if (searching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
                     }
-                    IconButton(onClick = { showMore = true }) { Icon(Icons.Default.Settings, contentDescription = "More") }
+                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
                 }
             }
             if (searching && tab in 1..3) {
@@ -256,7 +231,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                         1 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
                         2 -> PendingScreen(vm, query)
                         3 -> AllScreen(vm, query)
-                        else -> SummaryScreen(vm) { tag, y, m -> vm.jump.value = MainVm.Jump(tag, y, m); tab = 3 }
+                        else -> SummaryScreen(vm)
                     }
                 }
             }
@@ -279,15 +254,12 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
             askPermissions()
         }
     )
-    var tour by remember { mutableStateOf(Repo.getPref(appCtx, "tourDone", "").isEmpty() && Repo.getPref(appCtx, "selfAsked", "").isEmpty()) }
-    if (!welcome && !askName && tour) TourDialog { Repo.putPref(appCtx, "tourDone", "1"); tour = false }
     if (!welcome && askName) NameDialog { n ->
         if (n.isNotEmpty()) Repo.putPref(appCtx, "selfnames", n)
         Repo.putPref(appCtx, "selfAsked", "1"); askName = false
     }
     if (showNewSplit) NewSplitFlow(vm) { showNewSplit = false }
-    if (showEntry) AddEntryDialog(vm) { vm.openEntry.value = false }
+    if (showEntry) AddEntryDialog(vm) { showEntry = false }
     opened?.let { t -> TagSheet(vm, t, onDismiss = { opened = null }, onSaved = { undoable(t.id, it) }) }
-    if (showMore) MoreDialog(vm) { showMore = false }
-    LockGate()
+    if (showSettings) SettingsDialog(vm) { showSettings = false }
 }
