@@ -857,10 +857,8 @@ fun SummaryScreen(vm: MainVm) {
                 }
                 if (forOthers > 0.004 || receivable > 0.004) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Paid for others ${Repo.money(forOthers)} · still to recover ${Repo.money(receivable)}", fontSize = 13.sp, color = teal())
+                    Text("Others owe you ${Repo.money(receivable)}", fontSize = 13.sp, color = muted())
                 }
-                Spacer(Modifier.height(4.dp))
-                Text("Your share only. Spends still in the Inbox count in full until you tag them.", fontSize = 12.sp, color = muted())
             }
         }
         item {
@@ -868,7 +866,6 @@ fun SummaryScreen(vm: MainVm) {
                 Text("Budget", fontWeight = FontWeight.Medium, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 if (total == null) {
-                    Text("Set a monthly limit and see how much is safe to spend each day.", fontSize = 13.sp, color = muted())
                     TextButton(onClick = { editKey = Budgets.TOTAL }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Set monthly budget") }
                 } else BudgetRow("This month", spent, total, onClick = { editKey = Budgets.TOTAL }, perDay = if (offset == 0) Budgets.perDay(total, spent, Budgets.daysLeftInMonth(System.currentTimeMillis())) else null)
                 val catLimits = budgets.filterKeys { it != Budgets.TOTAL }

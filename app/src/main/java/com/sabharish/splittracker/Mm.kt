@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -280,7 +281,8 @@ private fun PickerPanel(title: String, onClose: () -> Unit, modifier: Modifier =
             if (onEdit != null) IconButton(onClick = onEdit) { Icon(Icons.Default.Add, contentDescription = "New", tint = Color(0xFF17181B)) }
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF17181B)) }
         }
-        Box(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) { content() }
+        Box(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) { content() }
+        Spacer(Modifier.windowInsetsBottomHeight(androidx.compose.foundation.layout.WindowInsets.navigationBars))
     }
 }
 
@@ -375,9 +377,9 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
             onSelectAll = { picked.clear(); picked.addAll(merged.shown.map { it.id }) },
             onDone = { picked.clear(); selecting = false }, partners = merged.partner)
         val drafts = merged.shown.filter { Drafts.isSpendDraft(it) }
-        if (drafts.isNotEmpty()) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${drafts.size} draft${if (drafts.size == 1) "" else "s"} not counted yet", Modifier.weight(1f).clickable(onClick = onOpenDrafts), fontSize = 14.sp, color = amber())
-            TextButton(onClick = { vm.confirmAll(drafts) }) { Text("✓ Confirm all", color = coral()) }
+        if (drafts.isNotEmpty()) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 0.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("${drafts.size} to confirm", Modifier.weight(1f).clickable(onClick = onOpenDrafts), fontSize = 13.sp, color = muted())
+            TextButton(onClick = { vm.confirmAll(drafts) }) { Text("Confirm all", color = coral(), fontSize = 13.sp) }
         }
         LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
             days.forEach { (d, list) ->
@@ -431,7 +433,7 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
     val own = t.status == "SELF" && partner != null
     val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
     val state = when (t.status) {
-        "INBOX" -> "Draft · tick to confirm"; "IGNORED" -> "Skipped"; "REVERSED" -> "Reversed"; "FAILED" -> "Failed · waiting for refund"
+        "INBOX" -> ""; "IGNORED" -> "Skipped"; "REVERSED" -> "Reversed"; "FAILED" -> "Failed · waiting for refund"
         "REPAID" -> "Repayment"; "BILLPAY" -> "Card bill payment"; else -> ""
     }
     val live = ss.filter { it.amount > 0.004 && it.person != Repo.ME }
@@ -446,9 +448,9 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
         )
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
             Text(if (own) "${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner!!.bank, partner.card)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(Repo.acct(t.bank, t.card), fontSize = 12.sp, color = muted())
-            if (state.isNotEmpty()) Text(state, fontSize = 12.sp, color = if (t.status == "INBOX" || t.status == "FAILED") amber() else muted())
-            if (owes > 0.004) Text("Others owe you ${Logic.money(owes)}", fontSize = 12.sp, color = amber())
+            Text(Repo.acct(t.bank, t.card) + (if (owes > 0.004) " · ${Logic.money(owes).removePrefix("₹")} owed" else ""), fontSize = 12.sp, color = muted())
+            if (state.isNotEmpty()) Text(state, fontSize = 12.sp, color = muted())
+            
         }
         val draft = Drafts.isDraft(t)
         Text(
