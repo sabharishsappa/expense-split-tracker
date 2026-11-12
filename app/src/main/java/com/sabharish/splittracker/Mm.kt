@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -250,7 +251,13 @@ fun AddEntryScreen(vm: MainVm, onDismiss: () -> Unit) {
                         }
                     }
                     "account", "from", "to" -> PickerPanel(if (panel == "to") "To" else if (type == "Transfer") "From" else "Account", { panel = "" }, modifier = Modifier.align(Alignment.BottomCenter)) {
-                        Grid3(accounts.map { it.label }) { i -> if (panel == "to") to = accounts[i] else from = accounts[i]; panel = "" }
+                        accounts.forEach { a ->
+                            Row(Modifier.fillMaxWidth().height(48.dp).clickable { if (panel == "to") to = a else from = a; panel = "" }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(a.label, Modifier.weight(1f), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(IconChevronR, contentDescription = null, tint = muted())
+                            }
+                            Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
+                        }
                     }
                 }
             }
@@ -515,16 +522,16 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
         else -> ""
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).combinedClickable(onClick = onTap, onLongClick = onLong).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).combinedClickable(onClick = onTap, onLongClick = onLong).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         val noTag = !own && t.category.isBlank() && !incoming
         Text(
             if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "Add tag") else t.category,
-            color = if (noTag) coral() else muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
+            color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         Row(Modifier.weight(1f).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else (alias ?: shortName(t.merchant)), Modifier.weight(1f, fill = false), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else (alias ?: shortName(t.merchant)), Modifier.weight(1f, fill = false), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!own) {
                 Spacer(Modifier.width(6.dp))
                 Tag(modeTag(t), muted())
@@ -541,7 +548,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
             }
         }
         Text(
-            Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 70.dp),
+            Logic.money(t.amount).removePrefix("₹"), fontSize = 14.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 70.dp),
             color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
         )
         // the tick is always the right-most thing; the slot is kept on every row so amounts line up
@@ -902,4 +909,102 @@ private fun BackupPage(vm: MainVm, onBack: () -> Unit) = SubPage("Backup", onBac
         if (note.isNotEmpty()) Text(note, color = teal(), fontSize = 13.sp, modifier = Modifier.padding(20.dp))
         Text("Nothing is uploaded. The backup stays in the place you choose.", color = muted(), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stats page, drawn like Money Manager: period switch, Income / Expenses tabs, full pie, % chips
+// ---------------------------------------------------------------------------------------------
+
+private val PIE_COLORS = listOf(
+    Color(0xFFFF6B5E), Color(0xFFFF9A4D), Color(0xFFFFD43B), Color(0xFFB6E34B), Color(0xFF4CC38A),
+    Color(0xFF3FD0C9), Color(0xFF4DA3FF), Color(0xFFA78BFA), Color(0xFFF472B6)
+)
+
+@Composable
+fun MmStatsPage(vm: MainVm) {
+    val txns by vm.all.collectAsState()
+    val shareList by vm.shares.collectAsState()
+    val byTxn = remember(shareList) { shareList.groupBy { it.txnId } }
+    var offset by remember { mutableIntStateOf(0) }
+    var annual by remember { mutableStateOf(false) }
+    var income by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+    var budget by remember { mutableStateOf(false) }
+    val now = remember { Calendar.getInstance() }
+    val (sy, sm) = Stats.shift(now.get(Calendar.YEAR), now.get(Calendar.MONTH), if (annual) 0 else offset)
+    val year = if (annual) now.get(Calendar.YEAR) + offset else sy
+    val months = if (annual) (0..11).toList() else listOf(sm)
+    val spent = remember(txns, byTxn, year, months) {
+        months.flatMap { Stats.byCategory(txns, byTxn, year, it) }.groupBy({ it.first }, { it.second }).map { (k, v) -> k to v.sum() }.sortedByDescending { it.second }
+    }
+    val earned = remember(txns, year, months) {
+        months.flatMap { mo -> txns.filter { Stats.inMonth(it, year, mo) && Stats.incomeOf(it) > 0 }.map { it.note.removePrefix("Received:").trim().ifBlank { "Income" } to it.amount } }
+            .groupBy({ it.first }, { it.second }).map { (k, v) -> k to v.sum() }.sortedByDescending { it.second }
+    }
+    val spentTotal = spent.sumOf { it.second }
+    val earnedTotal = earned.sumOf { it.second }
+    val rows = if (income) earned else spent
+    val total = if (income) earnedTotal else spentTotal
+    val label = if (annual) "$year" else "${Stats.monthLabel(sm)} $sy"
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { offset -= 1 }) { Icon(IconChevronL, contentDescription = "Previous") }
+            Text(label, fontSize = 17.sp)
+            IconButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Icon(IconChevronR, contentDescription = "Next") }
+            Spacer(Modifier.weight(1f))
+            Box {
+                Row(Modifier.clip(RoundedCornerShape(6.dp)).border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(6.dp)).clickable { menu = true }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (annual) "Annually" else "Monthly", fontSize = 14.sp)
+                    Text(" ▾", fontSize = 12.sp, color = muted())
+                }
+                androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("Monthly") }, onClick = { annual = false; offset = 0; menu = false })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("Annually") }, onClick = { annual = true; offset = 0; menu = false })
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+        }
+        Row(Modifier.fillMaxWidth()) {
+            listOf(true to earnedTotal, false to spentTotal).forEach { (isIncome, amt) ->
+                val on = income == isIncome
+                Column(Modifier.weight(1f).clickable { income = isIncome }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(Modifier.height(10.dp))
+                    Text((if (isIncome) "Income " else "Expenses ") + Logic.money(amt), fontSize = 14.sp, color = if (on) MaterialTheme.colorScheme.onSurface else muted(), maxLines = 1)
+                    Spacer(Modifier.height(10.dp))
+                    Box(Modifier.fillMaxWidth().height(2.dp).background(if (on) coral() else Color.Transparent))
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline))
+        if (rows.isEmpty()) { EmptyState("No data available."); return@Column }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+            item {
+                val gap = MaterialTheme.colorScheme.background
+                androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(240.dp).padding(vertical = 16.dp)) {
+                    val d = minOf(size.width, size.height)
+                    val tl = androidx.compose.ui.geometry.Offset((size.width - d) / 2, (size.height - d) / 2)
+                    var start = -90f
+                    rows.forEachIndexed { i, r ->
+                        val sweep = (r.second / total * 360.0).toFloat()
+                        drawArc(PIE_COLORS[i % PIE_COLORS.size], start, sweep, true, tl, androidx.compose.ui.geometry.Size(d, d))
+                        drawArc(gap, start, sweep, true, tl, androidx.compose.ui.geometry.Size(d, d), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f))
+                        start += sweep
+                    }
+                }
+            }
+            itemsIndexed(rows) { i, r ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(46.dp).clip(RoundedCornerShape(4.dp)).background(PIE_COLORS[i % PIE_COLORS.size]).padding(vertical = 2.dp), contentAlignment = Alignment.Center) {
+                        Text("${Math.round(r.second / total * 100)}%", fontSize = 12.sp, color = Color(0xFF17181B))
+                    }
+                    Text(r.first, Modifier.weight(1f).padding(horizontal = 12.dp), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(Logic.money(r.second), fontSize = 14.sp)
+                }
+            }
+            item {
+                TextButton(onClick = { budget = true }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Budget and 6-month trend ›", color = coral(), fontSize = 14.sp) }
+            }
+        }
+    }
+    if (budget) SubPage("Budget and trend", { budget = false }) { Box(Modifier.padding(horizontal = 14.dp)) { SummaryScreen(vm) } }
 }

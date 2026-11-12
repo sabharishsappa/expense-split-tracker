@@ -258,10 +258,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                             }
                         }
                     }
-                    1 -> Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-                        Text("Stats", fontSize = 20.sp, modifier = Modifier.padding(vertical = 16.dp))
-                        SummaryScreen(vm)
-                    }
+                    1 -> MmStatsPage(vm)
                     2 -> {
                         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("Accounts", fontSize = 20.sp, modifier = Modifier.weight(1f))
