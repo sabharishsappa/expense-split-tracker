@@ -82,8 +82,9 @@ private fun daysSince(ms: Long) = ((System.currentTimeMillis() - ms) / 86_400_00
 private fun AppCard(onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(6.dp),
+        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
@@ -135,7 +136,7 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
     }
     Spacer(Modifier.height(8.dp))
     if (q.isNotBlank() && spends.isEmpty() && money.isEmpty() && auto.isEmpty() && failed.isEmpty())
-        Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 15.sp)
+        Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 16.sp)
     when (section) {
         0 -> {
             val cards = spends.count { it.kind == "SPEND" }
@@ -162,14 +163,14 @@ internal fun SelectRow(t: Txn, aliases: Map<String, String>, checked: Boolean, p
             Checkbox(checked = checked, onCheckedChange = { onToggle() })
             Column(Modifier.weight(1f)) {
                 if (partner != null) {
-                    Text("Own transfer", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("Own transfer", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                 } else {
-                    Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     Text("${Repo.shortDate(t.txnDate)} · ${if (t.category.isBlank()) "no tag" else t.category}", fontSize = 12.sp, color = muted())
                 }
             }
-            Text(Repo.money(t.amount), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(Repo.money(t.amount), fontSize = 16.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -238,7 +239,7 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         val smsCtx = androidx.compose.ui.platform.LocalContext.current
         val smsOk = remember(Perm.tick) { Repo.hasPermission(smsCtx, android.Manifest.permission.READ_SMS) }
         if (!smsOk) { SmsBanner(); return }
-        Text("You're all caught up. New payments will show up here.", color = muted(), fontSize = 15.sp)
+        Text("You're all caught up. New payments will show up here.", color = muted(), fontSize = 16.sp)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { vm.importDays(365) }) { Text("Import last 12 months of messages") }
         return
@@ -313,8 +314,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
             TagMenu(vm, catMenu, { catMenu = false }) { vm.setCategory(t, it) }
         }
         Spacer(Modifier.height(12.dp))
-        Text("Whose spend?", fontSize = 13.sp, color = muted())
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(2.dp))
         fun toggle(p: String) { setSel(if (p in sel) sel - p else sel + p) }
         val s = sug
         val asBefore = if (s != null && s.action == "PEOPLE") s.people.split(",").filter { it.isNotBlank() } else if (s != null && s.action == "MINE") listOf(Repo.ME) else emptyList()
@@ -333,9 +333,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
         }
         if (groups.isNotEmpty()) {
             // saved groups sit in their own row, so they are not mistaken for people
-            Spacer(Modifier.height(10.dp))
-            Text("Groups", fontSize = 13.sp, color = muted())
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 groups.take(4).forEach { g ->
                     val on = g.people.all { it in sel }
@@ -345,15 +343,14 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
         }
         if (sel.isEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Draft · tick to count it as yours", Modifier.weight(1f), fontSize = 13.sp, color = muted())
-                FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm") }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+                FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm") }
             }
         }
         if (sel.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(Logic.selectionSummary(t.amount, sel.toList()), Modifier.weight(1f), fontSize = 15.sp)
+                Text(Logic.selectionSummary(t.amount, sel.toList()), Modifier.weight(1f), fontSize = 16.sp)
                 FilledIconButton(onClick = {
                     val people = sel.toList()
                     val shares = if (people.size == 1) listOf(NewShare(people[0], t.amount, people[0] == Repo.ME))
@@ -376,7 +373,7 @@ private fun MoneyInList(vm: MainVm, items: List<Txn>) {
     var pickFor by remember { mutableStateOf<Txn?>(null) }
     var linkFor by remember { mutableStateOf<Txn?>(null) }
     if (items.isEmpty()) {
-        Text("No money received to review.", color = muted(), fontSize = 15.sp)
+        Text("No money received to review.", color = muted(), fontSize = 16.sp)
         return
     }
     val owed = pending.groupBy { it.person }.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.map { it.key }
@@ -426,7 +423,7 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
             val g = guess
             if (g != null) {
                 Text("Looks like a refund for:", fontSize = 13.sp, color = muted())
-                Text("${Repo.title(g.merchant, aliases)} · ${Repo.money(g.amount)} · ${fullDate(g.txnDate)}", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text("${Repo.title(g.merchant, aliases)} · ${Repo.money(g.amount)} · ${fullDate(g.txnDate)}", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = { vm.linkRefund(t.id, g.id) }) { Text("Yes, close it") }
@@ -460,7 +457,7 @@ private fun AutoList(vm: MainVm, items: List<Txn>) {
     val aliases by vm.aliases.collectAsState()
     var sheetFor by remember { mutableStateOf<Txn?>(null) }
     if (items.isEmpty()) {
-        Text("Nothing auto-sorted yet. Payments from merchants you've tagged before will show up here.", color = muted(), fontSize = 15.sp)
+        Text("Nothing auto-sorted yet. Payments from merchants you've tagged before will show up here.", color = muted(), fontSize = 16.sp)
         return
     }
     Text("Sorted automatically from what you tagged before. They count once you tick them.", fontSize = 13.sp, color = muted())
@@ -491,7 +488,7 @@ private fun FailedList(vm: MainVm, items: List<Txn>) {
     var refundFor by remember { mutableStateOf<Txn?>(null) }
     refundFor?.let { t -> RefundDialog(t, { refundFor = null }) { a -> refundFor = null; vm.refunded(t, a) } }
     if (items.isEmpty()) {
-        Text("No failed payments. Mark one from its ⋮ menu; it closes when the refund arrives.", color = muted(), fontSize = 15.sp)
+        Text("No failed payments. Mark one from its ⋮ menu; it closes when the refund arrives.", color = muted(), fontSize = 16.sp)
         return
     }
     Text("Waiting for refunds. These close when the bank's refund message arrives.", fontSize = 13.sp, color = muted())
@@ -545,7 +542,7 @@ fun PendingScreen(vm: MainVm, q: String) {
         }
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
         TextButton(onClick = { addOwe = true }) { Text("+ I owe someone", color = coral(), fontSize = 14.sp) }
-        if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp, modifier = Modifier.padding(16.dp))
+        if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 16.sp, modifier = Modifier.padding(16.dp))
             }
         }
         if (oweBy.isNotEmpty()) {
@@ -587,7 +584,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                 val sorted = remember(e.value) { e.value.sortedByDescending { it.txnDate } }
                 Column {
                 (if (expanded) sorted else sorted.take(3)).forEach { r ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
+                    Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp).clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
                         verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
                         Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
@@ -903,10 +900,10 @@ fun SummaryScreen(vm: MainVm) {
                 Row(Modifier.fillMaxWidth().height(130.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                     trend.forEachIndexed { i, (name, v) ->
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
-                            Text(if (v > 0) Repo.compact(v) else "", fontSize = 10.sp, color = muted(), maxLines = 1)
+                            Text(if (v > 0) Repo.compact(v) else "", fontSize = 12.sp, color = muted(), maxLines = 1)
                             Box(Modifier.fillMaxWidth().height((90 * (v / top)).toFloat().coerceAtLeast(if (v > 0) 4f else 1f).dp)
                                 .background(if (i == trend.lastIndex) teal() else teal().copy(alpha = 0.45f), RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)))
-                            Text(name, fontSize = 11.sp, color = muted())
+                            Text(name, fontSize = 12.sp, color = muted())
                         }
                     }
                 }
@@ -928,7 +925,7 @@ fun SummaryScreen(vm: MainVm) {
                 }
             }
         }
-        if (spent <= 0.0 && income <= 0.0) item { Text("Nothing recorded for this month yet.", color = muted(), fontSize = 15.sp) }
+        if (spent <= 0.0 && income <= 0.0) item { Text("Nothing recorded for this month yet.", color = muted(), fontSize = 16.sp) }
     }
     editKey?.let { key ->
         BudgetDialog(if (key == Budgets.TOTAL) "Monthly budget" else "Budget for $key", budgets[key], { editKey = null }) { v -> saveBudgets(Budgets.set(budgets, key, v)); editKey = null }
@@ -1056,8 +1053,8 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text(d.toString(), fontSize = 13.sp, fontWeight = if (isToday) FontWeight.Medium else FontWeight.Normal, color = if (isToday) teal() else MaterialTheme.colorScheme.onSurface)
-                                    if (tot != null && tot.spent > 0) Text(Repo.compact(tot.spent), fontSize = 10.sp, color = MaterialTheme.colorScheme.error, maxLines = 1)
-                                    if (tot != null && tot.income > 0) Text(Repo.compact(tot.income), fontSize = 10.sp, color = green(), maxLines = 1)
+                                    if (tot != null && tot.spent > 0) Text(Repo.compact(tot.spent), fontSize = 12.sp, color = MaterialTheme.colorScheme.error, maxLines = 1)
+                                    if (tot != null && tot.income > 0) Text(Repo.compact(tot.income), fontSize = 12.sp, color = green(), maxLines = 1)
                                 }
                             }
                         }
@@ -1068,7 +1065,7 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
         item {
             val t = totals[picked]
             Text("${picked} ${Stats.monthLabel(m)}" + (if (t != null) " · spent ${Repo.money(t.spent)}" + (if (t.income > 0) " · income ${Repo.money(t.income)}" else "") else ""),
-                fontWeight = FontWeight.Medium, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+                fontWeight = FontWeight.Medium, fontSize = 16.sp, modifier = Modifier.padding(top = 6.dp))
             if (merged.shown.isEmpty()) Text("Nothing on this day.", color = muted(), fontSize = 14.sp)
         }
         items(merged.shown, key = { it.id }) { t ->

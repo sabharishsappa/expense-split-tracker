@@ -102,10 +102,10 @@ val AppTypography = androidx.compose.material3.Typography(
     bodySmall = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, letterSpacing = 0.sp),
     titleLarge = androidx.compose.ui.text.TextStyle(fontSize = 20.sp, letterSpacing = 0.sp),
     titleMedium = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, letterSpacing = 0.sp),
-    titleSmall = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, letterSpacing = 0.sp),
+    titleSmall = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, letterSpacing = 0.sp),
     labelLarge = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, letterSpacing = 0.sp),
     labelMedium = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, letterSpacing = 0.sp),
-    labelSmall = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, letterSpacing = 0.sp)
+    labelSmall = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, letterSpacing = 0.sp)
 )
 val AppShapes = androidx.compose.material3.Shapes(
     extraSmall = RoundedCornerShape(4.dp), small = RoundedCornerShape(6.dp), medium = RoundedCornerShape(10.dp),

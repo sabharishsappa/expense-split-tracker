@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -179,7 +180,7 @@ fun AddEntryScreen(vm: MainVm, onDismiss: () -> Unit) {
                         Row(Modifier.fillMaxWidth().clickable { pickDate = true }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(DATE_FMT.format(Date(at)), fontSize = 16.sp)
                             Spacer(Modifier.width(16.dp))
-                            Text(TIME_FMT.format(Date(at)), fontSize = 18.sp)
+                            Text(TIME_FMT.format(Date(at)), fontSize = 17.sp)
                         }
                     }
                     FormRow("Amount") {
@@ -315,7 +316,7 @@ private fun Grid3(items: List<String>, onPick: (Int) -> Unit) {
 fun MonthBar(label: String, onPrev: () -> Unit, onNext: () -> Unit, nextEnabled: Boolean, arrows: Boolean = true, actions: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (arrows) IconButton(onClick = onPrev) { Icon(IconChevronL, contentDescription = "Previous month") } else Spacer(Modifier.width(12.dp))
-        Text(label, fontSize = 18.sp)
+        Text(label, fontSize = 17.sp)
         if (arrows) IconButton(onClick = onNext, enabled = nextEnabled) { Icon(IconChevronR, contentDescription = "Next month", tint = if (nextEnabled) MaterialTheme.colorScheme.onSurface else muted().copy(alpha = 0.3f)) }
         Spacer(Modifier.weight(1f))
         actions()
@@ -354,6 +355,7 @@ fun SummaryStrip(income: Double, expense: Double) {
 private fun dayOf(ms: Long, c: Calendar = Calendar.getInstance()): Int = c.apply { timeInMillis = ms }.get(Calendar.DAY_OF_MONTH)
 
 @OptIn(ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifier: Modifier = Modifier, onOpenDrafts: () -> Unit = {}) {
     val aliases by vm.aliases.collectAsState()
@@ -370,6 +372,7 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
     val totals = remember(txns, byTxn, y, m) { Stats.dayTotals(txns, byTxn, y, m) }
     var sheetFor by remember { mutableStateOf<Txn?>(null) }
     var actions by remember { mutableStateOf<Txn?>(null) }
+    var delFor by remember { mutableStateOf<Txn?>(null) }
     val picked = remember(Epoch.value) { mutableStateListOf<Long>() }
     var selecting by remember(Epoch.value) { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = selecting) { picked.clear(); selecting = false }
@@ -388,16 +391,38 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
                 item(key = "h$d") { DayHeader(d, y, m, totals[d]) }
                 items(list, key = { it.id }) { t ->
                     if (selecting) SelectRow(t, aliases, t.id in picked, merged.partner[t.id]) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-                    else MmRow(t, byTxn[t.id] ?: emptyList(), aliases, merged.partner[t.id],
-                        onTap = { if (isSpendLike(t) && t.status != "REVERSED") sheetFor = t else actions = t },
-                        onLong = { selecting = true; picked.clear(); picked.add(t.id) },
-                        onConfirm = if (Drafts.isDraft(t)) ({ vm.confirm(t) }) else null)
+                    else {
+                        val draft = Drafts.isDraft(t)
+                        val st = androidx.compose.material3.rememberSwipeToDismissBoxState(confirmValueChange = { v ->
+                            if (v == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd && draft) vm.confirm(t)
+                            else if (v == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) delFor = t
+                            false
+                        })
+                        androidx.compose.material3.SwipeToDismissBox(
+                            state = st, enableDismissFromStartToEnd = draft,
+                            backgroundContent = {
+                                val right = st.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart
+                                Box(Modifier.fillMaxSize().background(if (right) MaterialTheme.colorScheme.error else blue()).padding(horizontal = 24.dp),
+                                    contentAlignment = if (right) Alignment.CenterEnd else Alignment.CenterStart) {
+                                    Icon(if (right) Icons.Default.Delete else Icons.Default.Check, contentDescription = null, tint = Color.White)
+                                }
+                            }
+                        ) {
+                            Box(Modifier.background(MaterialTheme.colorScheme.background)) {
+                                MmRow(t, byTxn[t.id] ?: emptyList(), aliases, merged.partner[t.id],
+                                    onTap = { if (isSpendLike(t) && t.status != "REVERSED") sheetFor = t else actions = t },
+                                    onLong = { selecting = true; picked.clear(); picked.add(t.id) },
+                                    onConfirm = if (draft) ({ vm.confirm(t) }) else null)
+                            }
+                        }
+                    }
                 }
             }
         }
     }
     sheetFor?.let { t -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = {}) }
     actions?.let { t -> TxnActions(vm, t, merged.partner[t.id], aliases) { actions = null } }
+    delFor?.let { t -> ConfirmDelete(1, { delFor = null }) { delFor = null; vm.deleteAll(listOfNotNull(t, merged.partner[t.id])) } }
 }
 
 /** Simple payment mode shown on rows; the exact bank and card are one tap away. */
@@ -454,10 +479,10 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
     ) {
         Text(
             if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "—") else t.category,
-            color = muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 2, overflow = TextOverflow.Ellipsis
+            color = muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(if (own) "${payMode(t)} → ${payMode(partner!!)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(if (own) "${payMode(t)} → ${payMode(partner!!)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(payMode(t) + (if (owes > 0.004) " · ${Logic.money(owes).removePrefix("₹")} owed" else ""), fontSize = 12.sp, color = muted())
             if (state.isNotEmpty()) Text(state, fontSize = 12.sp, color = muted())
             
@@ -530,8 +555,8 @@ fun CalendarMm(vm: MainVm, y: Int, m: Int, today: Calendar, modifier: Modifier =
                                 )
                                 val tot = totals[d]
                                 Spacer(Modifier.weight(1f))
-                                if (tot != null && tot.income > 0) Text(Repo.compact(tot.income), fontSize = 10.sp, color = blue(), maxLines = 1, modifier = Modifier.align(Alignment.End))
-                                if (tot != null && tot.spent > 0) Text(Repo.compact(tot.spent), fontSize = 10.sp, color = coral(), maxLines = 1, modifier = Modifier.align(Alignment.End))
+                                if (tot != null && tot.income > 0) Text(Repo.compact(tot.income), fontSize = 12.sp, color = blue(), maxLines = 1, modifier = Modifier.align(Alignment.End))
+                                if (tot != null && tot.spent > 0) Text(Repo.compact(tot.spent), fontSize = 12.sp, color = coral(), maxLines = 1, modifier = Modifier.align(Alignment.End))
                             }
                         }
                     }
@@ -579,10 +604,10 @@ fun MonthlyPane(vm: MainVm, year: Int, onPick: (Int) -> Unit) {
                         Text("1.${mo + 1} ~ ${Calendar.getInstance().apply { set(year, mo, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH)}.${mo + 1}", fontSize = 12.sp, color = muted())
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(Logic.money(inc).removePrefix("₹"), color = blue(), fontSize = 15.sp)
-                        Text(Logic.money(exp).removePrefix("₹"), color = coral(), fontSize = 15.sp)
+                        Text(Logic.money(inc).removePrefix("₹"), color = blue(), fontSize = 16.sp)
+                        Text(Logic.money(exp).removePrefix("₹"), color = coral(), fontSize = 16.sp)
                     }
-                    Text(Logic.money(inc - exp).removePrefix("₹"), fontSize = 15.sp, modifier = Modifier.width(96.dp), textAlign = TextAlign.End)
+                    Text(Logic.money(inc - exp).removePrefix("₹"), fontSize = 16.sp, modifier = Modifier.width(96.dp), textAlign = TextAlign.End)
                 }
                 Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
             }
@@ -683,8 +708,8 @@ fun AccountsPage(vm: MainVm, query: String, section: Int, onSection: (Int) -> Un
 @Composable
 private fun GroupHeader(title: String, total: String) {
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = muted(), fontSize = 15.sp, modifier = Modifier.weight(1f))
-        Text(total, color = blue(), fontSize = 15.sp)
+        Text(title, color = muted(), fontSize = 16.sp, modifier = Modifier.weight(1f))
+        Text(total, color = blue(), fontSize = 16.sp)
     }
 }
 
@@ -762,7 +787,7 @@ private fun SubPage(title: String, onBack: () -> Unit, content: @Composable () -
 
 @Composable
 private fun InfoPage(title: String, text: String, onBack: () -> Unit) = SubPage(title, onBack) {
-    Text(text, fontSize = 15.sp, modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()))
+    Text(text, fontSize = 16.sp, modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()))
 }
 
 @Composable

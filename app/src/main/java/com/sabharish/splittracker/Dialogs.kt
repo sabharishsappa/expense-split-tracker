@@ -169,7 +169,7 @@ fun TagSheet(
                         Text("New split", Modifier.weight(1f).padding(horizontal = 6.dp), fontSize = 22.sp, fontWeight = FontWeight.Medium)
                     } else Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
                         Text(Repo.money(t.amount), fontSize = 26.sp, fontWeight = FontWeight.Medium)
-                        Text(Repo.title(t.merchant, aliases), fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                         Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                     }
                     FilledIconButton(
@@ -307,7 +307,7 @@ fun TagSheet(
                             Spacer(Modifier.height(6.dp))
                         }
                         (shares ?: emptyList()).forEach { sh ->
-                            Text("${if (sh.person == Repo.ME) "You" else sh.person}: ${Repo.money(sh.amount)}", fontSize = 15.sp)
+                            Text("${if (sh.person == Repo.ME) "You" else sh.person}: ${Repo.money(sh.amount)}", fontSize = 16.sp)
                         }
                         Spacer(Modifier.height(6.dp))
                         Text(
@@ -583,7 +583,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Section("Privacy", "This app has no internet permission. Your messages, people and amounts stay on this phone. They only leave if you choose to: a backup file you save, or a reminder you send yourself.") {
-                        Text("🔒 Nothing is uploaded or published", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text("🔒 Nothing is uploaded or published", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     }
                     Section("Payments", "Your UPI ID is put in the reminder message so people know where to pay.") {
                         OutlinedTextField(value = upi, onValueChange = { upi = it; Repo.putPref(ctx, "upi", it.trim()) }, singleLine = true,
@@ -627,7 +627,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     var showRules by remember { mutableStateOf(false) }
                     Section("Remembered merchants", "A merchant you tagged once is tagged automatically next time.") {
                         Row(Modifier.fillMaxWidth().clickable { showRules = !showRules }, verticalAlignment = Alignment.CenterVertically) {
-                            Text("${rules.size} remembered", Modifier.weight(1f), fontSize = 15.sp)
+                            Text("${rules.size} remembered", Modifier.weight(1f), fontSize = 16.sp)
                             Text(if (showRules) "Hide" else "Show", color = teal())
                         }
                         if (showRules) {
@@ -660,11 +660,11 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     var showUnparsed by remember { mutableStateOf(false) }
                     if (unparsed.isNotEmpty()) Section("Messages I couldn't read", "Bank-like messages that matched nothing. Copy one and send it to the developer so it can be added.") {
                         Row(Modifier.fillMaxWidth().clickable { showUnparsed = !showUnparsed }, verticalAlignment = Alignment.CenterVertically) {
-                            Text("${unparsed.size} found", Modifier.weight(1f), fontSize = 15.sp)
+                            Text("${unparsed.size} found", Modifier.weight(1f), fontSize = 16.sp)
                             Text(if (showUnparsed) "Hide" else "Show", color = teal())
                         }
                         if (showUnparsed) {
-                            unparsed.forEach { Text(it, fontSize = 11.sp, color = muted()) }
+                            unparsed.forEach { Text(it, fontSize = 12.sp, color = muted()) }
                             val cb = LocalClipboardManager.current
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(onClick = { cb.setText(AnnotatedString(unparsed.joinToString("\n\n") { Diagnostics.anonymise(it) })); note = "Copied without numbers" }) { Text("Copy without numbers") }
@@ -675,7 +675,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                     var crash by remember { mutableStateOf(CrashLog.read(ctx)) }
                     val clipboard = LocalClipboardManager.current
                     if (crash.isNotEmpty()) Section("Problem report", "Copy this and send it to the developer.") {
-                        Text(crash.take(600), fontSize = 10.sp, color = muted())
+                        Text(crash.take(600), fontSize = 12.sp, color = muted())
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = { clipboard.setText(AnnotatedString(crash)); note = "Report copied" }) { Text("Copy") }
                             OutlinedButton(onClick = { CrashLog.clear(ctx); crash = "" }) { Text("Clear") }

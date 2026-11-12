@@ -235,7 +235,7 @@ private fun ClarityRing(fraction: Float) {
             drawArc(track, -90f, 360f, false, style = stroke)
             drawArc(bar, -90f, 360f * fraction, false, style = stroke)
         }
-        Text("${(fraction * 100).toInt()}%", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text("${(fraction * 100).toInt()}%", fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -341,7 +341,7 @@ private fun BillsCard(bills: List<Bill>, onTap: (Bill) -> Unit) {
             val c = when (Bills.urgency(days)) { "OVERDUE" -> MaterialTheme.colorScheme.error; "SOON" -> amber(); else -> green() }
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onTap(b) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("${Repo.bankName(b.bank)} ••${b.card}", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("${Repo.bankName(b.bank)} ••${b.card}", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     Text(if (b.minDue > 0) "Minimum ${Logic.money(b.minDue)}" else "Full amount", fontSize = 12.sp, color = muted())
                 }
                 Column(horizontalAlignment = Alignment.End) {

@@ -80,7 +80,7 @@ private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
         Surface(Modifier.fillMaxSize().padding(LocalScreenInsets.current), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 Text("Split saved", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp))
-                Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 15.sp, color = muted())
+                Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 16.sp, color = muted())
                 Spacer(Modifier.height(12.dp))
                 if (others.isEmpty()) Text("Nobody else is in this split, so there's nothing to ask for.", color = muted())
                 else {
