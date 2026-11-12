@@ -235,7 +235,6 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
     var sheetFor by remember { mutableStateOf<Pair<Txn, List<String>>?>(null) }
     // chosen people live here, not inside each card, so scrolling or searching never loses them
     val chosenBy = remember(Epoch.value) { androidx.compose.runtime.mutableStateMapOf<Long, List<String>>() }
-    var confirmAll by remember { mutableStateOf(false) }
     if (items.isEmpty()) {
         val smsCtx = androidx.compose.ui.platform.LocalContext.current
         val smsOk = remember(Perm.tick) { Repo.hasPermission(smsCtx, android.Manifest.permission.READ_SMS) }
@@ -260,7 +259,6 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { selecting = true }) { Text("Select") }
-            if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
         }
     }
     LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 96.dp)) {
@@ -274,20 +272,11 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
                 MmRow(t, emptyList(), aliasesNow, null,
                     onTap = { sheetFor = t to (chosenBy[t.id] ?: emptyList()) },
                     onLong = { selecting = true; picked.clear(); picked.add(t.id) },
-                    onConfirm = { vm.confirm(t) })
+                    onConfirm = { vm.confirm(t); undoable(t.id, "Confirmed") })
             }
         }
     }
     sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen, groups = groups) }
-    if (confirmAll) {
-        AlertDialog(
-            onDismissRequest = { confirmAll = false },
-            title = { Text("Mark all ${items.size} as yours?") },
-            text = { Text("All untagged payments will be marked as yours. You can edit any of them later.") },
-            confirmButton = { TextButton(onClick = { vm.tagAllMine(items); confirmAll = false }) { Text("Mark all mine") } },
-            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("Cancel") } }
-        )
-    }
 }
 
 @Composable
