@@ -481,6 +481,8 @@ private fun DayHeader(d: Int, y: Int, m: Int, tot: Stats.DayTotal?) {
 }
 
 /** Only the first word of a merchant is shown on a row; the full name is in the details. */
+internal fun shortNameOf(full: String): String = shortName(full)
+
 private fun shortName(full: String): String {
     val words = full.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     val first = if (words.firstOrNull().orEmpty().length < 3) words.take(2).joinToString(" ") else words.firstOrNull().orEmpty()

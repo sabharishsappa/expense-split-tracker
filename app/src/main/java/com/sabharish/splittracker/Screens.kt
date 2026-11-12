@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -384,53 +385,39 @@ private fun MoneyCard(t: Txn, vm: MainVm, owed: List<String>, known: List<String
     var confirm by remember { mutableStateOf<String?>(null) }
     var borrowPick by remember { mutableStateOf(false) }
     val guess by produceState<Txn?>(null, t.id) { value = if (t.kind == "REFUND") vm.suggestRefund(t) else null }
-    AppCard {
-        TxnHeader(t, aliases, incoming = true)
-        Spacer(Modifier.height(12.dp))
-        if (t.kind == "UPI_IN") {
-            val match = Repo.bestMatch(t.merchant, known)
-            Text("Is someone paying you back?", fontSize = 13.sp, color = muted())
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (match != null) Pill("Repayment from $match", { confirm = match }, strong = true)
-                val others = owed.filter { it != match }.take(5)
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(shortNameOf(Repo.nameOnly(t.merchant, aliases)), Modifier.weight(1f, fill = false), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.width(6.dp))
+            Text(if (t.kind == "UPI_IN") "UPI" else "Refund", fontSize = 12.sp, color = muted())
+            Spacer(Modifier.weight(1f))
+            Text(Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, color = blue())
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (t.kind == "UPI_IN") {
+                val match = Repo.bestMatch(t.merchant, known)
+                if (match != null) Pill(firstNames(listOf(match)).first(), { confirm = match }, strong = true, compact = true)
+                val others = owed.filter { it != match }.take(3)
                 val labels = firstNames(others)
-                others.forEachIndexed { i, p -> Pill(labels[i], { confirm = p }) }
-                Pill("Someone else…", { onPick(t) })
-            }
-            Spacer(Modifier.height(10.dp))
-            Text("Or it was…", fontSize = 13.sp, color = muted())
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Pill("Borrowed — I'll pay back", { borrowPick = true })
-                Pill("Salary", { vm.receivedFor(t, "Received: Salary") })
-                Pill("Gift", { vm.receivedFor(t, "Received: Gift") })
-                Pill("Other", { vm.receivedFor(t, "Received: Other") })
-                Pill("Refund", { onLink(t) })
-                Pill("My own transfer", { vm.ownTransfer(t) })
-            }
-            Row { Spacer(Modifier.weight(1f)); TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) } }
-        } else {
-            val g = guess
-            if (g != null) {
-                Text("Looks like a refund for:", fontSize = 13.sp, color = muted())
-                Text("${Repo.title(g.merchant, aliases)} · ${Repo.money(g.amount)} · ${fullDate(g.txnDate)}", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = { vm.linkRefund(t.id, g.id) }) { Text("Yes, close it") }
-                    OutlinedButton(onClick = { onLink(t) }) { Text("Pick another") }
-                }
+                others.forEachIndexed { i, p -> Pill(labels[i], { confirm = p }, compact = true) }
+                Pill("Other person", { onPick(t) }, compact = true)
+                Pill("Salary", { vm.receivedFor(t, "Received: Salary") }, compact = true)
+                Pill("Gift", { vm.receivedFor(t, "Received: Gift") }, compact = true)
+                Pill("Income", { vm.receivedFor(t, "Received: Other") }, compact = true)
+                Pill("Borrowed", { borrowPick = true }, compact = true)
+                Pill("Refund", { onLink(t) }, compact = true)
+                Pill("Own", { vm.ownTransfer(t) }, compact = true)
             } else {
-                Text("No matching purchase found. Link it so the books stay clear.", fontSize = 13.sp, color = muted())
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = { onLink(t) }) { Text("Link to purchase") }
-                    OutlinedButton(onClick = { vm.keepAsRefund(t.id) }) { Text("Just keep") }
-                }
+                val g = guess
+                if (g != null) Pill("Match " + shortNameOf(Repo.nameOnly(g.merchant, aliases)), { vm.linkRefund(t.id, g.id) }, strong = true, compact = true)
+                Pill(if (g != null) "Other" else "Link", { onLink(t) }, strong = g == null, compact = true)
+                Pill("Keep", { vm.keepAsRefund(t.id) }, compact = true)
             }
-            Row { Spacer(Modifier.weight(1f)); TextButton(onClick = { vm.ignore(t) }) { Text("Ignore", color = muted()) } }
+            Pill("Ignore", { vm.ignore(t) }, compact = true)
         }
     }
+    Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
     if (borrowPick) PersonPickerDialog(vm, "Who lent you this?", { borrowPick = false }) { vm.borrowed(t, it); borrowPick = false }
     confirm?.let { person ->
         AlertDialog(
