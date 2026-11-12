@@ -482,7 +482,8 @@ private fun DayHeader(d: Int, y: Int, m: Int, tot: Stats.DayTotal?) {
 
 /** Only the first word of a merchant is shown on a row; the full name is in the details. */
 private fun shortName(full: String): String {
-    val first = full.substringBefore(" · ").trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+    val words = full.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val first = if (words.firstOrNull().orEmpty().length < 3) words.take(2).joinToString(" ") else words.firstOrNull().orEmpty()
     return first.ifEmpty { full }.lowercase().replaceFirstChar { it.uppercase() }
 }
 
@@ -513,7 +514,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
         )
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else shortName(Repo.title(t.merchant, aliases)), Modifier.weight(1f, fill = false), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else shortName(Repo.nameOnly(t.merchant, aliases).let { if (it.equals(t.category, true)) t.merchant else it }), Modifier.weight(1f, fill = false), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (!own) {
                     Spacer(Modifier.width(6.dp))
                     Tag(modeTag(t), muted())
