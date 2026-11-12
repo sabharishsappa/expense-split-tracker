@@ -14,7 +14,12 @@ class StatsTest {
     @Test fun expenseIsYourShareOfATaggedSpend() =
         assertEquals(50.0, Stats.expenseOf(t(1, 0, 150.0), listOf(me(1, 50.0), other(1, 100.0))), 0.001)
 
-    @Test fun inboxSpendCountsInFullForNow() = assertEquals(80.0, Stats.expenseOf(t(1, 0, 80.0, "INBOX"), emptyList()), 0.001)
+    @Test fun draftsAreNotCountedUntilConfirmed() {
+        assertEquals(0.0, Stats.expenseOf(t(1, 0, 80.0, "INBOX"), emptyList()), 0.001)
+        assertEquals(0.0, Stats.expenseOf(t(2, 0, 80.0).copy(auto = true), listOf(me(2, 80.0))), 0.001)
+        assertEquals(80.0, Stats.expenseOf(t(3, 0, 80.0), listOf(me(3, 80.0))), 0.001)
+        assertTrue(Drafts.isSpendDraft(t(4, 0, 10.0, "INBOX"))); assertFalse(Drafts.isDraft(t(5, 0, 10.0)))
+    }
 
     @Test fun ownTransfersFailedAndReversedAreNotExpenses() {
         for (s in listOf("SELF", "FAILED", "REVERSED", "IGNORED", "BILLPAY")) assertEquals(0.0, Stats.expenseOf(t(1, 0, 80.0, s), emptyList()), 0.001)
@@ -26,21 +31,22 @@ class StatsTest {
         assertEquals(0.0, Stats.incomeOf(t(3, 0, 500.0, "REPAID", "UPI_IN")), 0.001)
     }
 
+    // "COUNTED" stands for any confirmed status without a split: these tests are about adding rows up
     @Test fun dayTotalsGroupByDay() {
-        val rows = listOf(t(1, day(2026, 10, 3), 100.0, "INBOX"), t(2, day(2026, 10, 3), 40.0, "INBOX"),
-            t(3, day(2026, 10, 9), 5000.0, "RECEIVED", "UPI_IN", note = "Received: Salary"), t(4, day(2026, 9, 3), 999.0, "INBOX"))
+        val rows = listOf(t(1, day(2026, 10, 3), 100.0, "COUNTED"), t(2, day(2026, 10, 3), 40.0, "COUNTED"),
+            t(3, day(2026, 10, 9), 5000.0, "RECEIVED", "UPI_IN", note = "Received: Salary"), t(4, day(2026, 9, 3), 999.0, "COUNTED"))
         val d = Stats.dayTotals(rows, emptyMap(), 2026, 10)
         assertEquals(140.0, d[3]!!.spent, 0.001); assertEquals(5000.0, d[9]!!.income, 0.001); assertNull(d[4])
         assertEquals(2, d.size)
     }
 
     @Test fun categoriesBiggestFirstUntaggedNamed() {
-        val rows = listOf(t(1, day(2026, 10, 1), 100.0, "INBOX", cat = "Food"), t(2, day(2026, 10, 2), 300.0, "INBOX", cat = ""), t(3, day(2026, 10, 2), 50.0, "INBOX", cat = "Food"))
+        val rows = listOf(t(1, day(2026, 10, 1), 100.0, "COUNTED", cat = "Food"), t(2, day(2026, 10, 2), 300.0, "COUNTED", cat = ""), t(3, day(2026, 10, 2), 50.0, "COUNTED", cat = "Food"))
         assertEquals(listOf("Untagged" to 300.0, "Food" to 150.0), Stats.byCategory(rows, emptyMap(), 2026, 10))
     }
 
     @Test fun trendCoversLastMonthsAcrossYearEnd() {
-        val rows = listOf(t(1, day(2026, 0, 5), 10.0, "INBOX"), t(2, day(2025, 11, 5), 20.0, "INBOX"))
+        val rows = listOf(t(1, day(2026, 0, 5), 10.0, "COUNTED"), t(2, day(2025, 11, 5), 20.0, "COUNTED"))
         val tr = Stats.trend(rows, emptyMap(), 2026, 0, 3)
         assertEquals(listOf("Nov", "Dec", "Jan"), tr.map { it.first }); assertEquals(listOf(0.0, 20.0, 10.0), tr.map { it.second })
     }
