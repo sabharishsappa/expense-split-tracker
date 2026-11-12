@@ -279,6 +279,21 @@ object Repo {
         }
     }
 
+    /** Ticking a draft: an untagged spend becomes yours (with its usual tag); an auto-sorted one just loses its draft mark. */
+    suspend fun confirmDrafts(ctx: Context, list: List<Txn>) {
+        val db = Db.get(ctx); val dao = db.dao()
+        db.withTransaction {
+            for (t in list) {
+                if (t.status == "INBOX") {
+                    if (dao.sharesFor(t.id).isEmpty()) dao.insertShare(Share(txnId = t.id, person = ME, amount = t.amount, settled = t.amount))
+                    dao.setStatus(t.id, "TAGGED")
+                    dao.setCategory(t.id, t.category.ifBlank { Categories.guess(t.merchant) })
+                }
+                dao.setAuto(t.id, false)
+            }
+        }
+    }
+
     suspend fun untag(ctx: Context, id: Long) {
         val db = Db.get(ctx); val dao = db.dao()
         db.withTransaction { dao.deleteShares(id); dao.setStatus(id, "INBOX") }

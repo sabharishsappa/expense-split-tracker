@@ -130,6 +130,8 @@ class MainVm(app: Application) : AndroidViewModel(app) {
     fun tag(t: Txn, shares: List<NewShare>, category: String, remember: Boolean, splitAdded: Boolean) =
         viewModelScope.launch(safe) { Repo.tag(getApplication(), t, shares, category, remember, splitAdded) }
 
+    fun confirm(t: Txn) = viewModelScope.launch(safe) { Repo.confirmDrafts(getApplication(), listOf(t)); status.value = "Confirmed" }
+    fun confirmAll(list: List<Txn>) = viewModelScope.launch(safe) { Repo.confirmDrafts(getApplication(), list); status.value = "Confirmed ${list.size}" }
     fun tagAllMine(list: List<Txn>) = viewModelScope.launch(safe) { Repo.tagAllMine(getApplication(), list) }
     fun untag(id: Long) = viewModelScope.launch(safe) { Repo.untag(getApplication(), id) }
     fun addSpent(title: String, amount: Double, key: String) = viewModelScope.launch(safe) {

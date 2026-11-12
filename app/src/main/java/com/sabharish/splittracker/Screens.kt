@@ -345,6 +345,13 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
                 }
             }
         }
+        if (sel.isEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Draft · tick to count it as yours", Modifier.weight(1f), fontSize = 13.sp, color = muted())
+                FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm") }
+            }
+        }
         if (sel.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -458,7 +465,9 @@ private fun AutoList(vm: MainVm, items: List<Txn>) {
         Text("Nothing auto-sorted yet. Payments from merchants you've tagged before will show up here.", color = muted(), fontSize = 15.sp)
         return
     }
-    Text("Counted as yours automatically. Change any that were for someone else.", fontSize = 13.sp, color = muted())
+    Text("Sorted automatically from what you tagged before. They count once you tick them.", fontSize = 13.sp, color = muted())
+    Spacer(Modifier.height(6.dp))
+    OutlinedButton(onClick = { vm.confirmAll(items) }) { Text("✓ Confirm all ${items.size}") }
     Spacer(Modifier.height(6.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
@@ -469,6 +478,8 @@ private fun AutoList(vm: MainVm, items: List<Txn>) {
                     if (t.category.isNotBlank()) Pill(t.category, {})
                     Spacer(Modifier.weight(1f))
                     OutlinedButton(onClick = { sheetFor = t }) { Text("Change") }
+                    Spacer(Modifier.padding(4.dp))
+                    FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm") }
                 }
             }
         }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -350,7 +351,7 @@ private fun dayOf(ms: Long, c: Calendar = Calendar.getInstance()): Int = c.apply
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifier: Modifier = Modifier) {
+fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifier: Modifier = Modifier, onOpenDrafts: () -> Unit = {}) {
     val aliases by vm.aliases.collectAsState()
     val txns by vm.all.collectAsState()
     val shares by vm.shares.collectAsState()
@@ -373,6 +374,11 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
         if (selecting) BulkBar(vm, merged.shown.filter { it.id in picked },
             onSelectAll = { picked.clear(); picked.addAll(merged.shown.map { it.id }) },
             onDone = { picked.clear(); selecting = false }, partners = merged.partner)
+        val drafts = merged.shown.filter { Drafts.isSpendDraft(it) }
+        if (drafts.isNotEmpty()) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("${drafts.size} draft${if (drafts.size == 1) "" else "s"} not counted yet", Modifier.weight(1f).clickable(onClick = onOpenDrafts), fontSize = 14.sp, color = amber())
+            TextButton(onClick = { vm.confirmAll(drafts) }) { Text("✓ Confirm all", color = coral()) }
+        }
         LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
             days.forEach { (d, list) ->
                 item(key = "h$d") { DayHeader(d, y, m, totals[d]) }
@@ -380,7 +386,8 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
                     if (selecting) SelectRow(t, aliases, t.id in picked, merged.partner[t.id]) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
                     else MmRow(t, byTxn[t.id] ?: emptyList(), aliases, merged.partner[t.id],
                         onTap = { if (isSpendLike(t) && t.status != "REVERSED") sheetFor = t else actions = t },
-                        onLong = { selecting = true; picked.clear(); picked.add(t.id) })
+                        onLong = { selecting = true; picked.clear(); picked.add(t.id) },
+                        onConfirm = if (Drafts.isSpendDraft(t)) ({ vm.confirm(t) }) else null)
                 }
             }
         }
@@ -420,11 +427,11 @@ private fun DayHeader(d: Int, y: Int, m: Int, tot: Stats.DayTotal?) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner: Txn?, onTap: () -> Unit, onLong: () -> Unit) {
+private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner: Txn?, onTap: () -> Unit, onLong: () -> Unit, onConfirm: (() -> Unit)? = null) {
     val own = t.status == "SELF" && partner != null
     val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
     val state = when (t.status) {
-        "INBOX" -> "Needs tagging"; "IGNORED" -> "Skipped"; "REVERSED" -> "Reversed"; "FAILED" -> "Failed · waiting for refund"
+        "INBOX" -> "Draft · tick to confirm"; "IGNORED" -> "Skipped"; "REVERSED" -> "Reversed"; "FAILED" -> "Failed · waiting for refund"
         "REPAID" -> "Repayment"; "BILLPAY" -> "Card bill payment"; else -> ""
     }
     val live = ss.filter { it.amount > 0.004 && it.person != Repo.ME }
@@ -443,10 +450,17 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
             if (state.isNotEmpty()) Text(state, fontSize = 12.sp, color = if (t.status == "INBOX" || t.status == "FAILED") amber() else muted())
             if (owes > 0.004) Text("Others owe you ${Logic.money(owes)}", fontSize = 12.sp, color = amber())
         }
+        val draft = Drafts.isDraft(t)
         Text(
             Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1,
-            color = if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
+            color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
         )
+        if (onConfirm != null) {
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.size(34.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(20.dp))
+            }
+        }
     }
     Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
 }
@@ -714,7 +728,7 @@ fun MorePage(vm: MainVm, openSettings: () -> Unit, openStatement: () -> Unit) {
     }
 }
 
-private const val HELP_TEXT = "Trans.  Your money record. Daily, Calendar, Monthly, Total and Note views, like Money Manager. The Inbox tab holds payments read from messages that still need a decision.\n\n" +
+private const val HELP_TEXT = "Trans.  Your money record. Daily, Calendar, Monthly, Total and Note views, like Money Manager. The Drafts tab holds payments read from messages. Tick one to confirm it; until then it is not counted.\n\n" +
     "Stats  Where your money goes, budgets and the six-month trend.\n\n" +
     "Accounts  Balances, who owes you, who you owe, and a statement check.\n\n" +
     "+ button  Add an income, expense or transfer by hand. Cash and other-bank spends need this because no message is sent for them.\n\n" +

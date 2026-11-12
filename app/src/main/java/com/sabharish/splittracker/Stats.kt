@@ -14,7 +14,7 @@ object Stats {
 
     private val SKIP = setOf("SELF", "IGNORED", "REVERSED", "FAILED", "REFUND", "BILLPAY")
 
-    fun isSpend(t: Txn) = (t.kind == "SPEND" || t.kind == "UPI_OUT") && t.status !in SKIP
+    fun isSpend(t: Txn) = (t.kind == "SPEND" || t.kind == "UPI_OUT") && t.status !in SKIP && !Drafts.isDraft(t)
 
     /** Your expense for one transaction. */
     fun expenseOf(t: Txn, shares: List<Share>): Double {
