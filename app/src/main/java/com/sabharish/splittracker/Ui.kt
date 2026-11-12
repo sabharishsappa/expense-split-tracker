@@ -59,6 +59,8 @@ val LightColors = lightColorScheme(
     secondary = Color(0xFF5F6368),
     background = Color(0xFFF3F3F5),
     surface = Color.White,
+    surfaceTint = Color.Transparent,
+    surfaceContainer = Color.White, surfaceContainerHigh = Color.White, surfaceContainerHighest = Color(0xFFE9E9EC), surfaceContainerLow = Color.White, surfaceContainerLowest = Color.White,
     surfaceVariant = Color(0xFFE9E9EC),
     onSurface = Color(0xFF1B1C20),
     onSurfaceVariant = Color(0xFF6A6C73),
@@ -75,6 +77,8 @@ val DarkColors = darkColorScheme(
     secondary = Color(0xFF9AA0A6),
     background = Color(0xFF212226),
     surface = Color(0xFF26272D),
+    surfaceTint = Color.Transparent,
+    surfaceContainer = Color(0xFF26272D), surfaceContainerHigh = Color(0xFF2B2D34), surfaceContainerHighest = Color(0xFF30323A), surfaceContainerLow = Color(0xFF26272D), surfaceContainerLowest = Color(0xFF212226),
     surfaceVariant = Color(0xFF30323A),
     onSurface = Color(0xFFECECEF),
     onSurfaceVariant = Color(0xFF9A9CA4),
@@ -121,14 +125,15 @@ fun Pill(
     val on = selected || strong
     Box(
         modifier
-            .heightIn(min = if (compact) 40.dp else 48.dp)
-            .clip(RoundedCornerShape(50))
-            .background(if (on) scheme.primary else scheme.surfaceVariant)
+            .heightIn(min = if (compact) 36.dp else 44.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (on) scheme.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
+            .border(androidx.compose.foundation.BorderStroke(1.dp, if (on) scheme.primary else scheme.outline), RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = if (compact) 12.dp else 16.dp, vertical = if (compact) 6.dp else 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = if (on) scheme.onPrimary else scheme.onSurface, fontSize = if (compact) 13.sp else 15.sp, maxLines = 1)
+        Text(text, color = if (on) scheme.primary else scheme.onSurface, fontSize = if (compact) 13.sp else 15.sp, maxLines = 1)
     }
 }
 
