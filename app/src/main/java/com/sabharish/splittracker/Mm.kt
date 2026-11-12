@@ -473,7 +473,7 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
     val live = ss.filter { it.amount > 0.004 && it.person != Repo.ME }
     val owes = live.sumOf { it.amount - it.settled }
     Row(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onLong).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).combinedClickable(onClick = onTap, onLongClick = onLong).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -487,16 +487,16 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
             
         }
         val draft = Drafts.isDraft(t)
-        Text(
-            Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1,
-            color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
-        )
-        if (onConfirm != null) {
-            Spacer(Modifier.width(10.dp))
-            Box(Modifier.size(34.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(20.dp))
+        // fixed slot so every row keeps the same height and the amounts line up
+        Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
+            if (onConfirm != null) Box(Modifier.size(24.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(15.dp))
             }
         }
+        Text(
+            Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1, textAlign = TextAlign.End,
+            color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
+        )
     }
     Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
 }

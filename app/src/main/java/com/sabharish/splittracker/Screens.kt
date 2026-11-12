@@ -214,7 +214,7 @@ internal fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onD
                 Pill("More", { more = true }, compact = true)
             }
             Spacer(Modifier.size(8.dp))
-            FilledIconButton(enabled = ready, modifier = Modifier.size(44.dp), onClick = { vm.bulkApply(picked.filter { it.status != "SELF" }, tag, people.toList()); onDone() }) {
+            FilledIconButton(enabled = ready, modifier = Modifier.size(36.dp), onClick = { vm.bulkApply(picked.filter { it.status != "SELF" }, tag, people.toList()); onDone() }) {
                 Icon(Icons.Default.Check, contentDescription = "Apply to all")
             }
         }
@@ -344,7 +344,7 @@ private fun SpendCard(t: Txn, vm: MainVm, recents: List<String>, groups: List<Gr
         if (sel.isEmpty()) {
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm") }
+                FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm", modifier = Modifier.size(20.dp)) }
             }
         }
         if (sel.isNotEmpty()) {
@@ -474,7 +474,7 @@ private fun AutoList(vm: MainVm, items: List<Txn>) {
                     Spacer(Modifier.weight(1f))
                     OutlinedButton(onClick = { sheetFor = t }) { Text("Change") }
                     Spacer(Modifier.padding(4.dp))
-                    FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm") }
+                    FilledIconButton(onClick = { vm.confirm(t) }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Check, contentDescription = "Confirm") }
                 }
             }
         }
