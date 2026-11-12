@@ -507,7 +507,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
             }
         }
         Text(
-            Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1, textAlign = TextAlign.End,
+            Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 76.dp),
             color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
         )
     }

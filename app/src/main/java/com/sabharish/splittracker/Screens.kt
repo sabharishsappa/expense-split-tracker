@@ -99,7 +99,7 @@ private fun AppCard(onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = 
 private fun TxnHeader(t: Txn, aliases: Map<String, String>, incoming: Boolean = false, trailing: @Composable () -> Unit = {}) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 13.sp, color = muted())
         }
         Text(
