@@ -36,6 +36,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -502,8 +504,8 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
         val draft = Drafts.isDraft(t)
         // fixed slot so every row keeps the same height and the amounts line up
         Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
-            if (onConfirm == null && t.status == "FAILED") Text("↻", color = amber(), fontSize = 18.sp)
-            else if (onConfirm == null && t.status == "REVERSED") Text("↩", color = blue(), fontSize = 18.sp)
+            if (onConfirm == null && t.status == "FAILED") Icon(Icons.Default.Schedule, contentDescription = "Refund expected", tint = amber(), modifier = Modifier.size(20.dp))
+            else if (onConfirm == null && t.status == "REVERSED") Icon(Icons.Default.CheckCircle, contentDescription = "Refund received", tint = blue(), modifier = Modifier.size(20.dp))
             if (onConfirm != null) Box(Modifier.size(24.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(15.dp))
             }
