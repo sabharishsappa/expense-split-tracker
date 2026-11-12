@@ -231,3 +231,28 @@ fun FullScreenDialog(onDismiss: () -> Unit, content: @androidx.compose.runtime.C
         content = content
     )
 }
+
+
+/** One button style for the whole app: flat, 6dp corners, 44dp tall. Filled for the main action, outlined for the rest. */
+@Composable
+fun Button(
+    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
+) = androidx.compose.material3.Button(
+    onClick = onClick, modifier = modifier.heightIn(min = 44.dp), enabled = enabled,
+    shape = RoundedCornerShape(6.dp), elevation = null,
+    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White),
+    content = content
+)
+
+@Composable
+fun OutlinedButton(
+    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
+) = androidx.compose.material3.OutlinedButton(
+    onClick = onClick, modifier = modifier.heightIn(min = 44.dp), enabled = enabled,
+    shape = RoundedCornerShape(6.dp),
+    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+    content = content
+)

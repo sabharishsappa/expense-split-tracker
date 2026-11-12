@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -36,7 +35,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -600,8 +598,8 @@ fun PendingScreen(vm: MainVm, q: String) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
-                    OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
+                    OutlinedButton(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
+                    OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
                         Text(if (ticked.isEmpty()) "Mark all paid" else "Paid · ${ticked.size} · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}", maxLines = 1)
                     }
                 }
