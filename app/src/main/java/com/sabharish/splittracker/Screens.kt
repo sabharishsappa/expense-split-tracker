@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -262,10 +263,19 @@ private fun SpendList(vm: MainVm, items: List<Txn>, undoable: (Long, String) -> 
             if (items.size > 1) TextButton(onClick = { confirmAll = true }) { Text("All mine") }
         }
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+    LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 96.dp)) {
         items(items, key = { it.id }) { t ->
             if (selecting) SelectRow(t, aliasesNow, t.id in picked) { if (t.id in picked) picked.remove(t.id) else picked.add(t.id) }
-            else SpendCard(t, vm, recents, groups, undoable, sel = chosenBy[t.id] ?: emptyList(), setSel = { chosenBy[t.id] = it }, onSimilar = { selecting = true; picked.clear(); picked.add(t.id); Logic.similar(t, items).forEach { picked.add(it.id) } }, onSelect = { selecting = true; picked.clear(); picked.add(t.id) }) { tx, chosen -> sheetFor = tx to chosen }
+            else Box(Modifier.layout { m, c ->
+                val w = c.maxWidth + 28.dp.roundToPx()
+                val p = m.measure(c.copy(minWidth = w, maxWidth = w))
+                layout(c.maxWidth, p.height) { p.place(-14.dp.roundToPx(), 0) }
+            }) {
+                MmRow(t, emptyList(), aliasesNow, null,
+                    onTap = { sheetFor = t to (chosenBy[t.id] ?: emptyList()) },
+                    onLong = { selecting = true; picked.clear(); picked.add(t.id) },
+                    onConfirm = { vm.confirm(t) })
+            }
         }
     }
     sheetFor?.let { (t, chosen) -> TagSheet(vm, t, onDismiss = { sheetFor = null }, onSaved = { undoable(t.id, it) }, initial = chosen, groups = groups) }

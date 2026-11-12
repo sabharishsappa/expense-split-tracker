@@ -432,6 +432,14 @@ private fun payMode(t: Txn): String = when {
     else -> "Bank"
 }
 
+/** Short tag shown on a row: ₹ cash, UPI, CC credit card, DC debit card. */
+private fun modeTag(t: Txn): String = when {
+    t.bank.equals("CASH", true) || t.bank.isBlank() -> "₹"
+    t.kind == "UPI_OUT" || t.kind == "UPI_IN" || t.bank == "UPI" -> "UPI"
+    t.kind == "SPEND" || t.kind == "REFUND" || t.kind == "PAYMENT" -> if (t.bank.equals("KOTAK", true)) "DC" else "CC"
+    else -> "Bank"
+}
+
 private fun isSpendLike(t: Txn) = t.kind == "SPEND" || t.kind == "UPI_OUT"
 
 @Composable
@@ -463,12 +471,11 @@ private fun DayHeader(d: Int, y: Int, m: Int, tot: Stats.DayTotal?) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner: Txn?, onTap: () -> Unit, onLong: () -> Unit, onConfirm: (() -> Unit)? = null) {
+internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner: Txn?, onTap: () -> Unit, onLong: () -> Unit, onConfirm: (() -> Unit)? = null) {
     val own = t.status == "SELF" && partner != null
     val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
     val state = when (t.status) {
-        "INBOX" -> ""; "IGNORED" -> "Skipped"; "REVERSED" -> "Reversed"; "FAILED" -> "Failed · waiting for refund"
-        "REPAID" -> "Repayment"; "BILLPAY" -> "Card bill payment"; else -> ""
+        "IGNORED" -> "Skipped"; "REPAID" -> "Repayment"; "BILLPAY" -> "Card bill"; else -> ""
     }
     val live = ss.filter { it.amount > 0.004 && it.person != Repo.ME }
     val owes = live.sumOf { it.amount - it.settled }
@@ -481,14 +488,20 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
             color = muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(if (own) "${payMode(t)} → ${payMode(partner!!)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(payMode(t) + (if (owes > 0.004) " · ${Logic.money(owes).removePrefix("₹")} owed" else ""), fontSize = 12.sp, color = muted())
-            if (state.isNotEmpty()) Text(state, fontSize = 12.sp, color = muted())
-            
+            Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!own) Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.clip(RoundedCornerShape(3.dp)).border(BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
+                    Text(modeTag(t), fontSize = 12.sp, color = muted(), maxLines = 1)
+                }
+                val extra = listOfNotNull(if (owes > 0.004) "${Logic.money(owes).removePrefix("₹")} owed" else null, state.ifEmpty { null }).joinToString(" · ")
+                if (extra.isNotEmpty()) Text(extra, Modifier.padding(start = 6.dp), fontSize = 12.sp, color = muted(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         val draft = Drafts.isDraft(t)
         // fixed slot so every row keeps the same height and the amounts line up
         Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
+            if (onConfirm == null && t.status == "FAILED") Text("↻", color = amber(), fontSize = 18.sp)
+            else if (onConfirm == null && t.status == "REVERSED") Text("↩", color = blue(), fontSize = 18.sp)
             if (onConfirm != null) Box(Modifier.size(24.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(15.dp))
             }
