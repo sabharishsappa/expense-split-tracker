@@ -242,7 +242,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                         }
                         Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (sub == 0 || sub == 4) 14.dp else 0.dp)) {
                             when (sub) {
-                                0 -> InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it }
+                                0 -> Column(Modifier.fillMaxSize()) { InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it } }
                                 1 -> DailyPane(vm, y, m, query, flt, onOpenDrafts = { sub = 0 })
                                 2 -> CalendarMm(vm, y, m, today)
                                 3 -> MonthlyPane(vm, y) { mo -> monthOffset = (mo - today.get(java.util.Calendar.MONTH)) + 12 * (y - today.get(java.util.Calendar.YEAR)); sub = 1 }
