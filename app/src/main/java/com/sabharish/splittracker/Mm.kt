@@ -457,7 +457,9 @@ fun EmptyState(text: String) {
 private fun DayHeader(d: Int, y: Int, m: Int, tot: Stats.DayTotal?) {
     val c = Calendar.getInstance().apply { set(y, m, d) }
     val dow = c.get(Calendar.DAY_OF_WEEK)
-    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column {
+    Spacer(Modifier.fillMaxWidth().height(10.dp).background(MaterialTheme.colorScheme.background))
+    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("$d", fontSize = 20.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.width(8.dp))
         Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if (dow == Calendar.SUNDAY) coral().copy(alpha = 0.25f) else if (dow == Calendar.SATURDAY) blue().copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 6.dp, vertical = 2.dp)) {
@@ -468,6 +470,20 @@ private fun DayHeader(d: Int, y: Int, m: Int, tot: Stats.DayTotal?) {
         Spacer(Modifier.weight(1f))
         Text(if (tot != null && tot.income > 0) Logic.money(tot.income).removePrefix("₹") else "", color = blue(), fontSize = 14.sp, modifier = Modifier.width(80.dp), textAlign = TextAlign.End)
         Text(if (tot != null && tot.spent > 0) Logic.money(tot.spent).removePrefix("₹") else "", color = coral(), fontSize = 14.sp, modifier = Modifier.width(80.dp), textAlign = TextAlign.End)
+    }
+    }
+}
+
+/** Only the first word of a merchant is shown on a row; the full name is in the details. */
+private fun shortName(full: String): String {
+    val first = full.substringBefore(" · ").trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+    return first.ifEmpty { full }.lowercase().replaceFirstChar { it.uppercase() }
+}
+
+@Composable
+private fun Tag(text: String, color: Color) {
+    Box(Modifier.clip(RoundedCornerShape(3.dp)).border(BorderStroke(0.5.dp, color), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
+        Text(text, fontSize = 12.sp, color = color, maxLines = 1, softWrap = false)
     }
 }
 
@@ -490,18 +506,17 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
             color = muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (!own) Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.clip(RoundedCornerShape(3.dp)).border(BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
-                    Text(modeTag(t), fontSize = 12.sp, color = muted(), maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else shortName(Repo.title(t.merchant, aliases)), Modifier.weight(1f, fill = false), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!own) {
+                    Spacer(Modifier.width(6.dp))
+                    Tag(modeTag(t), muted())
+                    val chip = when (t.status) { "FAILED" -> "Refund due" to amber(); "REVERSED" -> "Refunded" to blue(); else -> null }
+                    if (chip != null) { Spacer(Modifier.width(4.dp)); Tag(chip.first, chip.second) }
                 }
-                val chip = when (t.status) { "FAILED" -> "Refund due" to amber(); "REVERSED" -> "Refunded" to blue(); else -> null }
-                if (chip != null) Box(Modifier.padding(start = 6.dp).clip(RoundedCornerShape(3.dp)).border(BorderStroke(0.5.dp, chip.second), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
-                    Text(chip.first, fontSize = 12.sp, color = chip.second, maxLines = 1)
-                }
-                val extra = listOfNotNull(if (owes > 0.004) "${Logic.money(owes).removePrefix("₹")} owed" else null, state.ifEmpty { null }).joinToString(" · ")
-                if (extra.isNotEmpty()) Text(extra, Modifier.padding(start = 6.dp), fontSize = 12.sp, color = muted(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            val extra = listOfNotNull(if (owes > 0.004) "${Logic.money(owes).removePrefix("₹")} owed" else null, state.ifEmpty { null }).joinToString(" · ")
+            if (extra.isNotEmpty()) Text(extra, fontSize = 12.sp, color = muted(), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         val draft = Drafts.isDraft(t)
         // fixed slot so every row keeps the same height and the amounts line up

@@ -224,7 +224,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                         MonthBar(if (sub == 0) "Drafts" else "${Stats.monthLabel(m)} $y",
                             { monthOffset -= 1 }, { if (monthOffset < 0) monthOffset += 1 }, monthOffset < 0, arrows = sub != 0, actions = actions)
                         val subs = listOf(0, 1, 4, 5)
-                        MmTabs(listOf(if (inboxCount > 0) "Drafts $inboxCount" else "Drafts", "Daily", "Total", "Note"), subs.indexOf(sub).coerceAtLeast(0)) { sub = subs[it] }
+                        MmTabs(listOf(if (inboxCount > 0) "Drafts $inboxCount" else "Drafts", "Activity", "Total", "Note"), subs.indexOf(sub).coerceAtLeast(0)) { sub = subs[it] }
                         if (searching) Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { SearchBox(query, { query = it }, "Name, amount, tag or message") }
                         if (showFilters && sub in 1..5) Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterPill("Type", Filters.types, flt.type) { flt = flt.copy(type = it) }
