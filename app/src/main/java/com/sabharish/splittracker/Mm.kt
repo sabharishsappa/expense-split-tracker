@@ -371,6 +371,12 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
     val merged = remember(inMonth) { Transfers.merge(inMonth) }
     val days = remember(merged) { merged.shown.groupBy { dayOf(it.txnDate) }.toSortedMap(compareByDescending { it }) }
     val totals = remember(txns, byTxn, y, m) { Stats.dayTotals(txns, byTxn, y, m) }
+    // same merchant, amount, day and account more than once: every copy after the first is flagged for you to check
+    val dupIds = remember(merged) {
+        merged.shown.filter { isSpendLike(it) }
+            .groupBy { listOf(it.merchant.lowercase().trim(), it.amount, dayOf(it.txnDate), it.bank, it.card) }
+            .values.filter { it.size > 1 }.flatMap { g -> g.sortedBy { it.id }.drop(1) }.map { it.id }.toSet()
+    }
     var sheetFor by remember { mutableStateOf<Txn?>(null) }
     var actions by remember { mutableStateOf<Txn?>(null) }
     var delFor by remember { mutableStateOf<Txn?>(null) }
@@ -413,7 +419,7 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
                                 MmRow(t, byTxn[t.id] ?: emptyList(), aliases, merged.partner[t.id],
                                     onTap = { if (isSpendLike(t) && t.status != "REVERSED") sheetFor = t else actions = t },
                                     onLong = { selecting = true; picked.clear(); picked.add(t.id) },
-                                    onConfirm = if (draft) ({ vm.confirm(t) }) else null)
+                                    onConfirm = if (draft) ({ vm.confirm(t) }) else null, dup = t.id in dupIds)
                             }
                         }
                     }
@@ -489,7 +495,7 @@ private fun Tag(text: String, color: Color) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner: Txn?, onTap: () -> Unit, onLong: () -> Unit, onConfirm: (() -> Unit)? = null) {
+internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner: Txn?, onTap: () -> Unit, onLong: () -> Unit, onConfirm: (() -> Unit)? = null, dup: Boolean = false) {
     val own = t.status == "SELF" && partner != null
     val incoming = t.kind == "UPI_IN" || t.kind == "REFUND"
     val state = when (t.status) {
@@ -513,6 +519,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
                     Tag(modeTag(t), muted())
                     val chip = when (t.status) { "FAILED" -> "Refund due" to amber(); "REVERSED" -> "Refunded" to blue(); else -> null }
                     if (chip != null) { Spacer(Modifier.width(4.dp)); Tag(chip.first, chip.second) }
+                    if (dup) { Spacer(Modifier.width(4.dp)); Tag("Duplicate?", amber()) }
                 }
             }
             val extra = listOfNotNull(if (owes > 0.004) "${Logic.money(owes).removePrefix("₹")} owed" else null, state.ifEmpty { null }).joinToString(" · ")
