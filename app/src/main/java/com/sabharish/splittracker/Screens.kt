@@ -1014,7 +1014,7 @@ internal fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> U
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (count == 1) "Delete this transaction?" else "Delete $count transactions?") },
-        text = { Text("They are removed together with their splits. Use this for duplicates or entries you don't want. They won't come back when messages are read again.") },
+        text = { Text("This can't be undone.", maxLines = 1) },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

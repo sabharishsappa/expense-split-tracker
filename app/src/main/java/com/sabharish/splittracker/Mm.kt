@@ -523,8 +523,13 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
                     if (dup) { Spacer(Modifier.width(4.dp)); Tag("Duplicate?", amber()) }
                 }
             }
-            val extra = listOfNotNull(if (owes > 0.004) "${Logic.money(owes).removePrefix("₹")} owed" else null, state.ifEmpty { null }).joinToString(" · ")
-            if (extra.isNotEmpty()) Text(extra, fontSize = 12.sp, color = muted(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (owes > 0.004 || state.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                if (owes > 0.004) {
+                    Icon(SplitIcon, contentDescription = "Split", tint = muted(), modifier = Modifier.size(14.dp))
+                    Text(Logic.money(owes).removePrefix("₹"), Modifier.padding(start = 3.dp), fontSize = 12.sp, color = muted(), maxLines = 1)
+                }
+                if (state.isNotEmpty()) Text((if (owes > 0.004) " · " else "") + state, fontSize = 12.sp, color = muted(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         val draft = Drafts.isDraft(t)
         // fixed slot so every row keeps the same height and the amounts line up
