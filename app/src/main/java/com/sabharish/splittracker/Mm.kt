@@ -37,7 +37,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -98,6 +97,7 @@ val IconTune: ImageVector by lazy {
     vec("Tune", "M3,17v2h6v-2H3z M3,5v2h10V5H3z M13,21v-2h8v-2h-8v-2h-2v6h2z M7,9v2H3v2h4v2h2V9H7z M21,13v-2H11v2h10z M15,9h2V7h4V5h-4V3h-2v6z")
 }
 val IconSwap: ImageVector by lazy { vec("Swap", "M16,17.01V10h-2v7.01h-3L15,21l4,-3.99h-3z M9,3L5,6.99h3V14h2V6.99h3L9,3z") }
+val IconClock: ImageVector by lazy { vec("Clock", "M11.99,2C6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12S17.52,2 11.99,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8zM12.5,7H11v6l5.25,3.15 0.75,-1.23 -4.5,-2.67z") }
 val IconChevronL: ImageVector by lazy { vec("ChevL", "M15.41,7.41L14,6l-6,6 6,6 1.41,-1.41L10.83,12z") }
 val IconChevronR: ImageVector by lazy { vec("ChevR", "M10,6L8.59,7.41 13.17,12l-4.58,4.59L10,18l6,-6z") }
 
@@ -504,7 +504,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
         val draft = Drafts.isDraft(t)
         // fixed slot so every row keeps the same height and the amounts line up
         Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
-            if (onConfirm == null && t.status == "FAILED") Icon(Icons.Default.Schedule, contentDescription = "Refund expected", tint = amber(), modifier = Modifier.size(20.dp))
+            if (onConfirm == null && t.status == "FAILED") Icon(IconClock, contentDescription = "Refund expected", tint = amber(), modifier = Modifier.size(20.dp))
             else if (onConfirm == null && t.status == "REVERSED") Icon(Icons.Default.CheckCircle, contentDescription = "Refund received", tint = blue(), modifier = Modifier.size(20.dp))
             if (onConfirm != null) Box(Modifier.size(24.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(15.dp))
