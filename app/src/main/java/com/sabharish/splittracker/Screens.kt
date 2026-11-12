@@ -126,15 +126,7 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
         add("Spent" to spends.size); add("Received" to money.size); add("Auto" to auto.size)
         add("Refunds" to failed.size)
     }
-    androidx.compose.material3.TabRow(
-        selectedTabIndex = section.coerceAtMost(tabs.size - 1),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent
-    ) {
-        tabs.forEachIndexed { i, (name, n) ->
-            androidx.compose.material3.Tab(selected = section == i, onClick = { onSection(i) },
-                text = { Text(if (n > 0) "$name $n" else name, fontSize = 13.sp, maxLines = 1) })
-        }
-    }
+    MmTabs(tabs.map { (name, n) -> if (n > 0) "$name $n" else name }, section.coerceAtMost(tabs.size - 1), onSection)
     Spacer(Modifier.height(8.dp))
     if (q.isNotBlank() && spends.isEmpty() && money.isEmpty() && auto.isEmpty() && failed.isEmpty())
         Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 16.sp)

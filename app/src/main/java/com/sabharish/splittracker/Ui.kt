@@ -152,23 +152,21 @@ fun Avatar(name: String, size: Int = 40) {
 }
 
 
-/** A joined, equal-width choice control for a *filter* inside a page (the page tabs above stay underlined). */
+/** Equal-width choice boxes, drawn like the Income / Expense / Transfer switch on the entry screen. */
 @Composable
 fun Segmented(options: List<String>, selected: String, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    androidx.compose.foundation.layout.Row(
-        modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(scheme.surfaceVariant).padding(3.dp)
-    ) {
+    androidx.compose.foundation.layout.Row(modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
         options.forEach { o ->
             val on = o == selected
+            val shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
             Box(
-                Modifier.weight(1f).heightIn(min = 40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                    .background(if (on) scheme.surface else androidx.compose.ui.graphics.Color.Transparent)
+                Modifier.weight(1f).heightIn(min = 40.dp).clip(shape)
+                    .border(androidx.compose.foundation.BorderStroke(1.dp, if (on) scheme.primary else scheme.outline), shape)
                     .clickable { onPick(o) },
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
-                Text(o, fontSize = 13.sp, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.Medium else androidx.compose.ui.text.font.FontWeight.Normal,
-                    color = if (on) scheme.onSurface else scheme.onSurfaceVariant)
+                Text(o, fontSize = 14.sp, color = if (on) scheme.primary else scheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
