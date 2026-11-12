@@ -203,9 +203,9 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                     icon = {
                         androidx.compose.material3.BadgedBox(badge = { if (inboxCount > 0) androidx.compose.material3.Badge { Text("$inboxCount") } }) { Icon(Icons.AutoMirrored.Filled.List, null) }
                     }, label = { Text("Trans.", fontSize = 12.sp) })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = navColors, icon = { Icon(IconBars, null) }, label = { Text("Stats", fontSize = 12.sp) })
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = navColors, icon = { Icon(IconWallet, null) }, label = { Text("Accounts", fontSize = 12.sp) })
                 NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = navColors, icon = { Icon(Icons.Default.Person, null) }, label = { Text("Owed", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = navColors, icon = { Icon(IconWallet, null) }, label = { Text("Accounts", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = navColors, icon = { Icon(IconBars, null) }, label = { Text("Stats", fontSize = 12.sp) })
                 NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, colors = navColors, icon = { Icon(IconMore, null) }, label = { Text("More", fontSize = 12.sp) })
             }
         }
