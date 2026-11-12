@@ -284,8 +284,9 @@ private fun PickerPanel(title: String, onClose: () -> Unit, modifier: Modifier =
             if (onEdit != null) IconButton(onClick = onEdit) { Icon(Icons.Default.Add, contentDescription = "New", tint = Color(0xFF17181B)) }
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF17181B)) }
         }
-        Box(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) { content() }
+        Box(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) { content() }
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        Spacer(Modifier.height(20.dp))
     }
 }
 
