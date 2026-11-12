@@ -517,7 +517,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
     val alias = Repo.nameOnly(t.merchant, aliases).takeIf { !it.equals(t.merchant, true) && !it.equals(t.category, true) }
     val draft = Drafts.isDraft(t)
     val who = when {
-        live.isNotEmpty() -> firstNames(live.map { it.person }.distinct()).take(2).joinToString(", ")
+        live.isNotEmpty() -> live.map { it.person }.distinct().let { p -> firstNames(p.take(1)).joinToString() + if (p.size > 1) "+${p.size - 1}" else "" }
         draft && !own -> "Me"
         else -> ""
     }
@@ -530,16 +530,20 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
             if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "Add tag") else t.category,
             color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
-        Row(Modifier.weight(1f).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else (alias ?: shortName(t.merchant)), Modifier.weight(1f, fill = false), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!own) {
-                Spacer(Modifier.width(6.dp))
-                Tag(modeTag(t), muted())
                 val chip = when (t.status) { "FAILED" -> "Refund due" to amber(); "REVERSED" -> "Refunded" to blue(); else -> null }
                 if (chip != null) { Spacer(Modifier.width(4.dp)); Tag(chip.first, chip.second) }
                 if (state.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Tag(state, muted()) }
                 if (dup) { Spacer(Modifier.width(4.dp)); Tag("Duplicate?", amber()) }
-                if (who.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Tag(who, if (draft) coral() else muted()) }
+            }
+        }
+        // fixed columns so mode and who/split line up on every row of every page
+        Box(Modifier.width(36.dp), contentAlignment = Alignment.CenterStart) { if (!own) Tag(modeTag(t), muted()) }
+        Row(Modifier.width(84.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (!own) {
+                if (who.isNotEmpty()) Tag(who, if (draft) coral() else muted())
                 if (owes > 0.004) {
                     Spacer(Modifier.width(4.dp))
                     Icon(SplitIcon, contentDescription = "Split", tint = muted(), modifier = Modifier.size(14.dp))
@@ -552,9 +556,9 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
             color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
         )
         // the tick is always the right-most thing; the slot is kept on every row so amounts line up
-        Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
-            if (onConfirm != null) Box(Modifier.size(28.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(16.dp))
+        Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
+            if (onConfirm != null) Box(Modifier.size(22.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(13.dp))
             }
         }
     }
