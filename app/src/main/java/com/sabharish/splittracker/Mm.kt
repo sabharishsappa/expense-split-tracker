@@ -327,12 +327,12 @@ fun MonthBar(label: String, onPrev: () -> Unit, onNext: () -> Unit, nextEnabled:
 
 @Composable
 fun MmTabs(titles: List<String>, selected: Int, onPick: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+    Row(Modifier.fillMaxWidth()) {
         titles.forEachIndexed { i, t ->
             val on = i == selected
-            Column(Modifier.clickable { onPick(i) }.padding(horizontal = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.weight(1f).clickable { onPick(i) }, horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(12.dp))
-                Text(t, fontSize = 16.sp, color = if (on) MaterialTheme.colorScheme.onSurface else muted(), fontWeight = if (on) FontWeight.Medium else FontWeight.Normal)
+                Text(t, maxLines = 1, softWrap = false, fontSize = 16.sp, color = if (on) MaterialTheme.colorScheme.onSurface else muted(), fontWeight = if (on) FontWeight.Medium else FontWeight.Normal)
                 Spacer(Modifier.height(10.dp))
                 Box(Modifier.height(3.dp).width(if (on) 36.dp else 0.dp).background(coral()))
             }
@@ -406,7 +406,7 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
                             false
                         })
                         androidx.compose.material3.SwipeToDismissBox(
-                            state = st, enableDismissFromStartToEnd = draft,
+                            state = st, enableDismissFromStartToEnd = draft, enableDismissFromEndToStart = false,
                             backgroundContent = {
                                 val right = st.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart
                                 Box(Modifier.fillMaxSize().background(if (right) MaterialTheme.colorScheme.error else blue()).padding(horizontal = 24.dp),
@@ -476,6 +476,7 @@ private fun DayHeader(d: Int, y: Int, m: Int, tot: Stats.DayTotal?) {
         Spacer(Modifier.weight(1f))
         Text(if (tot != null && tot.income > 0) Logic.money(tot.income).removePrefix("₹") else "", color = blue(), fontSize = 14.sp, modifier = Modifier.width(80.dp), textAlign = TextAlign.End)
         Text(if (tot != null && tot.spent > 0) Logic.money(tot.spent).removePrefix("₹") else "", color = coral(), fontSize = 14.sp, modifier = Modifier.width(80.dp), textAlign = TextAlign.End)
+        Spacer(Modifier.width(36.dp))
     }
     }
 }
@@ -506,44 +507,49 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
     }
     val live = ss.filter { it.amount > 0.004 && it.person != Repo.ME }
     val owes = live.sumOf { it.amount - it.settled }
+    val alias = Repo.nameOnly(t.merchant, aliases).takeIf { !it.equals(t.merchant, true) && !it.equals(t.category, true) }
+    val draft = Drafts.isDraft(t)
+    val who = when {
+        live.isNotEmpty() -> firstNames(live.map { it.person }.distinct()).take(2).joinToString(", ")
+        draft && !own -> "Me"
+        else -> ""
+    }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).combinedClickable(onClick = onTap, onLongClick = onLong).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).combinedClickable(onClick = onTap, onLongClick = onLong).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val noTag = !own && t.category.isBlank() && !incoming
         Text(
-            if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "—") else t.category,
-            color = muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
+            if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "Add tag") else t.category,
+            color = if (noTag) coral() else muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
-        Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else shortName(Repo.nameOnly(t.merchant, aliases).let { if (it.equals(t.category, true)) t.merchant else it }), Modifier.weight(1f, fill = false), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (!own) {
-                    Spacer(Modifier.width(6.dp))
-                    Tag(modeTag(t), muted())
-                    val chip = when (t.status) { "FAILED" -> "Refund due" to amber(); "REVERSED" -> "Refunded" to blue(); else -> null }
-                    if (chip != null) { Spacer(Modifier.width(4.dp)); Tag(chip.first, chip.second) }
-                    if (dup) { Spacer(Modifier.width(4.dp)); Tag("Duplicate?", amber()) }
-                }
-            }
-            if (owes > 0.004 || state.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else (alias ?: shortName(t.merchant)), Modifier.weight(1f, fill = false), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!own) {
+                Spacer(Modifier.width(6.dp))
+                Tag(modeTag(t), muted())
+                val chip = when (t.status) { "FAILED" -> "Refund due" to amber(); "REVERSED" -> "Refunded" to blue(); else -> null }
+                if (chip != null) { Spacer(Modifier.width(4.dp)); Tag(chip.first, chip.second) }
+                if (state.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Tag(state, muted()) }
+                if (dup) { Spacer(Modifier.width(4.dp)); Tag("Duplicate?", amber()) }
+                if (who.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Tag(who, if (draft) coral() else muted()) }
                 if (owes > 0.004) {
+                    Spacer(Modifier.width(4.dp))
                     Icon(SplitIcon, contentDescription = "Split", tint = muted(), modifier = Modifier.size(14.dp))
-                    Text(Logic.money(owes).removePrefix("₹"), Modifier.padding(start = 3.dp), fontSize = 12.sp, color = muted(), maxLines = 1)
+                    Text(Logic.money(owes).removePrefix("₹"), Modifier.padding(start = 2.dp), fontSize = 12.sp, color = muted(), maxLines = 1, softWrap = false)
                 }
-                if (state.isNotEmpty()) Text((if (owes > 0.004) " · " else "") + state, fontSize = 12.sp, color = muted(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        val draft = Drafts.isDraft(t)
-        // fixed slot so every row keeps the same height and the amounts line up
-        Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
-            if (onConfirm != null) Box(Modifier.size(24.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(15.dp))
             }
         }
         Text(
-            Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 76.dp),
+            Logic.money(t.amount).removePrefix("₹"), fontSize = 16.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 70.dp),
             color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
         )
+        // the tick is always the right-most thing; the slot is kept on every row so amounts line up
+        Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
+            if (onConfirm != null) Box(Modifier.size(28.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(16.dp))
+            }
+        }
     }
     Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
 }

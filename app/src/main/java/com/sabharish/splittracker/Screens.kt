@@ -72,7 +72,7 @@ fun kindLabel(kind: String) = when (kind) {
     else -> kind
 }
 
-private fun firstNames(people: List<String>): List<String> {
+internal fun firstNames(people: List<String>): List<String> {
     val firsts = people.map { it.trim().substringBefore(" ") }
     return people.mapIndexed { i, p -> if (firsts.count { it == firsts[i] } > 1) p else firsts[i] }
 }
@@ -196,16 +196,7 @@ internal fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onD
                     Pill(if (tag.isBlank()) "Tag ▾" else "$tag ▾", { tagMenu = true }, selected = tag.isNotBlank(), compact = true)
                     TagMenu(vm, tagMenu, { tagMenu = false }) { tag = it; tagMenu = false }
                 }
-                Logic.selectedFirst(chips, people.toList()).forEach { p ->
-                    Pill(if (p == Repo.ME) "Me" else p.substringBefore(" "), { if (p in people) people.remove(p) else people.add(p) }, selected = p in people, compact = true)
-                }
-                groups.forEach { g ->
-                    val on = g.people.all { it in people }
-                    Pill(g.name, {
-                        if (on) people.removeAll(g.people.toSet()) else (listOf(Repo.ME) + g.people).forEach { if (it !in people) people.add(it) }
-                    }, selected = on, compact = true)
-                }
-                Pill("More", { more = true }, compact = true)
+                Pill(if (people.isEmpty()) "Who ▾" else firstNames(people.toList()).take(2).joinToString(", ") + " ▾", { more = true }, selected = people.isNotEmpty(), compact = true)
             }
             Spacer(Modifier.size(8.dp))
             FilledIconButton(enabled = ready, modifier = Modifier.size(36.dp), onClick = { vm.bulkApply(picked.filter { it.status != "SELF" }, tag, people.toList()); onDone() }) {
@@ -217,7 +208,7 @@ internal fun BulkBar(vm: MainVm, picked: List<Txn>, onSelectAll: () -> Unit, onD
             Text(Logic.bulkSummary(picked.size, picked.sumOf { it.amount }, tag, people.toList()), fontSize = 12.sp, color = muted())
         }
     }
-    if (more) PeopleSelectDialog(vm, "Who were these for?", { more = false }) { chosen -> chosen.forEach { if (it !in people) people.add(it) }; more = false }
+    if (more) PeopleSelectDialog(vm, "Who were these for?", { more = false }) { chosen -> people.clear(); people.addAll(chosen); more = false }
     if (confirmDelete) ConfirmDelete(picked.size, { confirmDelete = false }) { confirmDelete = false; vm.deleteAll(picked + picked.mapNotNull { partners[it.id] }); onDone() }
 }
 

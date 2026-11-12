@@ -776,7 +776,9 @@ fun PeopleSelectDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onDone:
     var query by remember { mutableStateOf("") }
     val q = query.trim()
     val pool = (listOf(Repo.ME) + recents + contacts).distinct()
-    val results = pool.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }.take(12)
+    var showAll by remember { mutableStateOf(false) }
+    // by default only you and your recent contacts; More shows everyone else; typing searches all
+    val results = if (q.isEmpty() && !showAll) (listOf(Repo.ME) + recents).distinct().take(6) else pool.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }.take(60)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -793,6 +795,7 @@ fun PeopleSelectDialog(vm: MainVm, title: String, onDismiss: () -> Unit, onDone:
                         Text(if (n == Repo.ME) "Me" else n, fontSize = 16.sp)
                     }
                 }
+                if (q.isEmpty() && !showAll && pool.size > results.size) TextButton(onClick = { showAll = true }) { Text("More contacts", color = coral()) }
                 if (chosen.isNotEmpty()) Text(if (chosen.size == 1) "All of each spend goes to ${if (chosen[0] == Repo.ME) "you" else chosen[0]}" else "Each spend is split ${chosen.size} ways, equally",
                     fontSize = 12.sp, color = muted(), modifier = Modifier.padding(top = 6.dp))
             }
