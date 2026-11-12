@@ -284,7 +284,10 @@ object Repo {
         val db = Db.get(ctx); val dao = db.dao()
         db.withTransaction {
             for (t in list) {
-                if (t.status == "INBOX") {
+                if (t.status == "INBOX" && t.kind != "SPEND" && t.kind != "UPI_OUT") {
+                    val back = t.kind == "REFUND" || t.merchant.contains("reversal", true) || t.merchant.contains("refund", true)
+                    dao.setStatusNote(t.id, "RECEIVED", if (back) "Refund" else "Received: Income")
+                } else if (t.status == "INBOX") {
                     if (dao.sharesFor(t.id).isEmpty()) dao.insertShare(Share(txnId = t.id, person = ME, amount = t.amount, settled = t.amount))
                     dao.setStatus(t.id, "TAGGED")
                     dao.setCategory(t.id, t.category.ifBlank { Categories.guess(t.merchant) })

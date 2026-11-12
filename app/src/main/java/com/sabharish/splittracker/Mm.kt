@@ -378,7 +378,7 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
         if (selecting) BulkBar(vm, merged.shown.filter { it.id in picked },
             onSelectAll = { picked.clear(); picked.addAll(merged.shown.map { it.id }) },
             onDone = { picked.clear(); selecting = false }, partners = merged.partner)
-        val drafts = merged.shown.filter { Drafts.isSpendDraft(it) }
+        val drafts = merged.shown.filter { Drafts.isDraft(it) }
         if (drafts.isNotEmpty()) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 0.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${drafts.size} to confirm", Modifier.weight(1f).clickable(onClick = onOpenDrafts), fontSize = 13.sp, color = muted())
             TextButton(onClick = { vm.confirmAll(drafts) }) { Text("Confirm all", color = coral(), fontSize = 13.sp) }
@@ -391,7 +391,7 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
                     else MmRow(t, byTxn[t.id] ?: emptyList(), aliases, merged.partner[t.id],
                         onTap = { if (isSpendLike(t) && t.status != "REVERSED") sheetFor = t else actions = t },
                         onLong = { selecting = true; picked.clear(); picked.add(t.id) },
-                        onConfirm = if (Drafts.isSpendDraft(t)) ({ vm.confirm(t) }) else null)
+                        onConfirm = if (Drafts.isDraft(t)) ({ vm.confirm(t) }) else null)
                 }
             }
         }
