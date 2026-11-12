@@ -354,8 +354,7 @@ fun SummaryStrip(income: Double, expense: Double) {
 
 private fun dayOf(ms: Long, c: Calendar = Calendar.getInstance()): Int = c.apply { timeInMillis = ms }.get(Calendar.DAY_OF_MONTH)
 
-@OptIn(ExperimentalFoundationApi::class)
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifier: Modifier = Modifier, onOpenDrafts: () -> Unit = {}) {
     val aliases by vm.aliases.collectAsState()
