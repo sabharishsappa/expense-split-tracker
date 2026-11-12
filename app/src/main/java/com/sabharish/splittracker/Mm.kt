@@ -400,6 +400,14 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
     actions?.let { t -> TxnActions(vm, t, merged.partner[t.id], aliases) { actions = null } }
 }
 
+/** Simple payment mode shown on rows; the exact bank and card are one tap away. */
+private fun payMode(t: Txn): String = when {
+    t.bank.equals("CASH", true) || t.bank.isBlank() -> "Cash"
+    t.kind == "UPI_OUT" || t.kind == "UPI_IN" || t.bank == "UPI" -> "UPI"
+    t.card.isNotEmpty() && t.card.all { it.isDigit() } && t.kind == "SPEND" -> "Card"
+    else -> "Bank"
+}
+
 private fun isSpendLike(t: Txn) = t.kind == "SPEND" || t.kind == "UPI_OUT"
 
 @Composable
@@ -449,8 +457,8 @@ private fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partner
             color = muted(), fontSize = 13.sp, modifier = Modifier.width(84.dp), maxLines = 2, overflow = TextOverflow.Ellipsis
         )
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(if (own) "${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner!!.bank, partner.card)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(Repo.acct(t.bank, t.card) + (if (owes > 0.004) " · ${Logic.money(owes).removePrefix("₹")} owed" else ""), fontSize = 12.sp, color = muted())
+            Text(if (own) "${payMode(t)} → ${payMode(partner!!)}" else Repo.title(t.merchant, aliases), fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(payMode(t) + (if (owes > 0.004) " · ${Logic.money(owes).removePrefix("₹")} owed" else ""), fontSize = 12.sp, color = muted())
             if (state.isNotEmpty()) Text(state, fontSize = 12.sp, color = muted())
             
         }
