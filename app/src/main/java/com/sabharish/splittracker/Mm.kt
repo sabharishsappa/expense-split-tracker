@@ -794,7 +794,7 @@ fun MorePage(vm: MainVm, openSettings: () -> Unit, openStatement: () -> Unit) {
     }
 }
 
-private const val HELP_TEXT = "Trans.  Your money record. Daily, Calendar, Monthly, Total and Note views, like Money Manager. The Drafts tab holds payments read from messages. Tick one to confirm it; until then it is not counted.\n\n" +
+private const val HELP_TEXT = "Trans.  Your money record. Activity (every payment by day), Total and Note. The Drafts tab holds payments read from messages. Tick one to confirm it; until then it is not counted.\n\n" +
     "Stats  Where your money goes, budgets and the six-month trend.\n\n" +
     "Accounts  Balances, who owes you, who you owe, and a statement check.\n\n" +
     "+ button  Add an income, expense or transfer by hand. Cash and other-bank spends need this because no message is sent for them.\n\n" +
