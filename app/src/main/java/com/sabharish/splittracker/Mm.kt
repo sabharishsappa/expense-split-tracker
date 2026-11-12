@@ -630,8 +630,6 @@ fun SearchIconButton(active: Boolean, onClick: () -> Unit) {
 @Composable
 fun AccountsPage(vm: MainVm, query: String, section: Int, onSection: (Int) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        MmTabs(listOf("Accounts", "Owed to you"), section, onSection)
-        if (section == 1) { PendingScreen(vm, query); return }
         val accounts by vm.accounts.collectAsState()
         val pending by vm.pending.collectAsState()
         val payables by vm.payables.collectAsState()

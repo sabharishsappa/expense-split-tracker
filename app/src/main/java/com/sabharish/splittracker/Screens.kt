@@ -126,13 +126,13 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
         add("Spent" to spends.size); add("Received" to money.size); add("Auto" to auto.size)
         add("Refunds" to failed.size)
     }
-    androidx.compose.material3.ScrollableTabRow(
-        selectedTabIndex = section.coerceAtMost(tabs.size - 1), edgePadding = 0.dp,
+    androidx.compose.material3.TabRow(
+        selectedTabIndex = section.coerceAtMost(tabs.size - 1),
         containerColor = androidx.compose.ui.graphics.Color.Transparent
     ) {
         tabs.forEachIndexed { i, (name, n) ->
             androidx.compose.material3.Tab(selected = section == i, onClick = { onSection(i) },
-                text = { Text(if (n > 0) "$name · $n" else name, fontSize = 14.sp) })
+                text = { Text(if (n > 0) "$name $n" else name, fontSize = 13.sp, maxLines = 1) })
         }
     }
     Spacer(Modifier.height(8.dp))
@@ -537,27 +537,25 @@ fun PendingScreen(vm: MainVm, q: String) {
     val ordered = remember(grouped) { grouped.entries.sortedByDescending { e -> e.value.sumOf { it.amount - it.settled } }.toList() }
     val ticks = remember(Epoch.value) { mutableMapOf<String, androidx.compose.runtime.snapshots.SnapshotStateList<Long>>() }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
+    LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
         item(key = "owed-head") {
             Column {
-        AppCard {
-            Text("Owed to you", fontSize = 13.sp, color = muted())
-            Text(Repo.money(total), fontSize = 34.sp, fontWeight = FontWeight.Medium, color = if (total > 0) teal() else muted())
-            Text("${grouped.size} people · ${rows.size} items", fontSize = 13.sp, color = muted())
-            val lent = Logic.lentTotal(rows)
-            TextButton(onClick = { addOwe = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("+ I owe someone") }
-            if (lent > 0.004) Text("Cash lent ${Repo.money(lent)} · Shared spends ${Repo.money(total - lent)}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = teal())
+        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Owed to you", fontSize = 14.sp); Text(Logic.money(total).removePrefix("₹"), color = blue(), fontSize = 17.sp) }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("You owe", fontSize = 14.sp); Text(Logic.money(oweBy.sumOf { it.second }).removePrefix("₹"), color = coral(), fontSize = 17.sp) }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("People", fontSize = 14.sp); Text("${grouped.size}", fontSize = 17.sp) }
         }
-        Spacer(Modifier.height(12.dp))
-        if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp)
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
+        TextButton(onClick = { addOwe = true }) { Text("+ I owe someone", color = coral(), fontSize = 14.sp) }
+        if (rows.isEmpty()) Text("No one owes you right now.", color = muted(), fontSize = 15.sp, modifier = Modifier.padding(16.dp))
             }
         }
         if (oweBy.isNotEmpty()) {
             item(key = "owe-head") {
-                Text("You owe · ${Repo.money(oweBy.sumOf { it.second })}", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("You owe", fontSize = 14.sp, color = muted(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
             items(oweBy, key = { "owe-" + it.first }) { (person, amt) ->
-                AppCard {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Avatar(person, 36)
                         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -570,19 +568,19 @@ fun PendingScreen(vm: MainVm, q: String) {
                     }
                 }
             }
-            item(key = "owe-gap") { Spacer(Modifier.height(4.dp)); Text("Owed to you", fontSize = 16.sp, fontWeight = FontWeight.Medium) }
+            item(key = "owe-gap") { Text("Owed to you", fontSize = 14.sp, color = muted(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
         }
         items(ordered, key = { it.key }) { e ->
             val owed = e.value.sumOf { it.amount - it.settled }
             val days = daysSince(e.value.minOf { it.txnDate })
-            AppCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
-                        Text(e.key, fontSize = 19.sp, fontWeight = FontWeight.Medium)
+                        Text(e.key, fontSize = 17.sp)
                         Text("${e.value.size} items · oldest $days days", fontSize = 13.sp,
-                            color = if (days > 30) MaterialTheme.colorScheme.error else if (days > 14) amber() else muted())
+                            color = muted())
                     }
-                    Text(Repo.money(owed), fontSize = 22.sp, fontWeight = FontWeight.Medium)
+                    Text(Logic.money(owed).removePrefix("₹"), fontSize = 17.sp, color = blue())
                 }
                 Spacer(Modifier.height(8.dp))
                 val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
@@ -591,7 +589,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                 val sorted = remember(e.value) { e.value.sortedByDescending { it.txnDate } }
                 Column {
                 (if (expanded) sorted else sorted.take(3)).forEach { r ->
-                    Row(Modifier.fillMaxWidth().clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
                         verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
                         Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
@@ -601,9 +599,9 @@ fun PendingScreen(vm: MainVm, q: String) {
                     if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}") }
                 }
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
-                    OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
+                Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
+                    OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
                         Text(if (ticked.isEmpty()) "Mark all paid" else "Paid · ${ticked.size} · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}", maxLines = 1)
                     }
                 }

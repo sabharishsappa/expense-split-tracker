@@ -205,7 +205,8 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                     }, label = { Text("Trans.", fontSize = 12.sp) })
                 NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = navColors, icon = { Icon(IconBars, null) }, label = { Text("Stats", fontSize = 12.sp) })
                 NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = navColors, icon = { Icon(IconWallet, null) }, label = { Text("Accounts", fontSize = 12.sp) })
-                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = navColors, icon = { Icon(IconMore, null) }, label = { Text("More", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, colors = navColors, icon = { Icon(Icons.Default.Person, null) }, label = { Text("Owed", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, colors = navColors, icon = { Icon(IconMore, null) }, label = { Text("More", fontSize = 12.sp) })
             }
         }
     ) { pad ->
@@ -247,7 +248,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                                 4 -> HomeScreen(vm) { code ->
                                     when (code) {
                                         1 -> { inboxSection = 0; sub = 0 }
-                                        2 -> { tab = 2; accSection = 1 }
+                                        2 -> tab = 3
                                         4 -> tab = 1
                                         11 -> { inboxSection = 3; sub = 0 }
                                     }
@@ -265,13 +266,20 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                             Text("Accounts", fontSize = 20.sp, modifier = Modifier.weight(1f))
                             SearchIconButton(searching) { searching = !searching; if (!searching) query = "" }
                         }
-                        if (searching && accSection == 1) Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { SearchBox(query, { query = it }, "Search a person or bill") }
-                        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (accSection == 1) 14.dp else 0.dp)) { AccountsPage(vm, query, accSection) { accSection = it } }
+                        Box(Modifier.weight(1f).fillMaxWidth()) { AccountsPage(vm, query, 0) { } }
+                    }
+                    3 -> {
+                        Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Owed", fontSize = 20.sp, modifier = Modifier.weight(1f))
+                            SearchIconButton(searching) { searching = !searching; if (!searching) query = "" }
+                        }
+                        if (searching) Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { SearchBox(query, { query = it }, "Search a person or bill") }
+                        Box(Modifier.weight(1f).fillMaxWidth()) { PendingScreen(vm, query) }
                     }
                     else -> MorePage(vm, openSettings = { showSettings = true }, openStatement = { showStatement = true })
                 }
             }
-            if (loaded && ((tab == 0 && sub != 0) || (tab == 2 && accSection == 0) || tab == 1)) {
+            if (loaded && ((tab == 0 && sub != 0) || (tab == 2) || tab == 1)) {
                 RoundAddButton({ showEntry = true }, Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp))
             }
         }
