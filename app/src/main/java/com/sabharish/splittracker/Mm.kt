@@ -334,7 +334,7 @@ fun MonthBar(label: String, onPrev: () -> Unit, onNext: () -> Unit, nextEnabled:
 }
 
 @Composable
-fun MmTabs(titles: List<String>, selected: Int, onPick: (Int) -> Unit, bleed: androidx.compose.ui.unit.Dp = 0.dp) {
+fun MmTabs(titles: List<String>, selected: Int, bleed: androidx.compose.ui.unit.Dp = 0.dp, onPick: (Int) -> Unit) {
     // bleed: draw edge to edge even when the parent has horizontal padding
     Column(Modifier.layout { measurable, c ->
         val e = bleed.roundToPx()
