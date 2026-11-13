@@ -64,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
@@ -937,7 +938,8 @@ private fun BackupPage(vm: MainVm, onBack: () -> Unit) = SubPage("Backup", onBac
 
 private val PIE_COLORS = listOf(
     Color(0xFFFF6B5E), Color(0xFFFF9A4D), Color(0xFFFFD43B), Color(0xFFB6E34B), Color(0xFF4CC38A),
-    Color(0xFF3FD0C9), Color(0xFF4DA3FF), Color(0xFFA78BFA), Color(0xFFF472B6)
+    Color(0xFF3FD0C9), Color(0xFF4DA3FF), Color(0xFFA78BFA), Color(0xFFF472B6),
+    Color(0xFFE0A458), Color(0xFF6EA8A0), Color(0xFF8C9EFF), Color(0xFFC77DFF), Color(0xFF9AA5B1)
 )
 
 @Composable
@@ -1000,14 +1002,31 @@ fun MmStatsPage(vm: MainVm) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
             item {
                 val gap = MaterialTheme.colorScheme.background
-                androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(240.dp).padding(vertical = 16.dp)) {
-                    val d = minOf(size.width, size.height)
-                    val tl = androidx.compose.ui.geometry.Offset((size.width - d) / 2, (size.height - d) / 2)
+                val labelColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(280.dp).padding(vertical = 12.dp)) {
+                    val d = minOf(size.width, size.height) * 0.68f
+                    val r = d / 2f
+                    val cx = size.width / 2f; val cy = size.height / 2f
+                    val tl = androidx.compose.ui.geometry.Offset(cx - r, cy - r)
+                    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = labelColor; textSize = 12.sp.toPx() }
                     var start = -90f
-                    rows.forEachIndexed { i, r ->
-                        val sweep = (r.second / total * 360.0).toFloat()
-                        drawArc(PIE_COLORS[i % PIE_COLORS.size], start, sweep, true, tl, androidx.compose.ui.geometry.Size(d, d))
-                        drawArc(gap, start, sweep, true, tl, androidx.compose.ui.geometry.Size(d, d), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f))
+                    rows.forEachIndexed { i, row ->
+                        val sweep = (row.second / total * 360.0).toFloat()
+                        val col = PIE_COLORS[i % PIE_COLORS.size]
+                        drawArc(col, start, sweep, true, tl, androidx.compose.ui.geometry.Size(d, d))
+                        val pct = Math.round(row.second / total * 100).toInt()
+                        if (pct >= 3) {
+                            val mid = Math.toRadians((start + sweep / 2).toDouble())
+                            val ux = Math.cos(mid).toFloat(); val uy = Math.sin(mid).toFloat()
+                            val p1 = androidx.compose.ui.geometry.Offset(cx + ux * r * 1.02f, cy + uy * r * 1.02f)
+                            val p2 = androidx.compose.ui.geometry.Offset(cx + ux * r * 1.2f, cy + uy * r * 1.2f)
+                            drawLine(col, p1, p2, strokeWidth = 1.5f)
+                            val label = "$pct%"
+                            val tw = paint.measureText(label)
+                            val right = ux >= 0
+                            val tx = if (right) p2.x + 4.dp.toPx() else p2.x - 4.dp.toPx() - tw
+                            drawContext.canvas.nativeCanvas.drawText(label, tx, p2.y + paint.textSize / 3f, paint)
+                        }
                         start += sweep
                     }
                 }

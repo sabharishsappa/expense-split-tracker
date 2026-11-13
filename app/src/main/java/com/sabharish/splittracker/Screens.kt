@@ -127,8 +127,10 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
         add("Spent" to spends.size); add("Received" to money.size); add("Auto" to auto.size)
         add("Pending" to failed.size)
     }
-    MmTabs(tabs.map { (name, _) -> name }, section.coerceAtMost(tabs.size - 1), bleed = 14.dp, onPick = onSection)
-    Spacer(Modifier.height(8.dp))
+    val names = tabs.map { (name, _) -> name }
+    Spacer(Modifier.height(10.dp))
+    Segmented(names, names[section.coerceAtMost(names.size - 1)], { onSection(names.indexOf(it)) })
+    Spacer(Modifier.height(10.dp))
     if (q.isNotBlank() && spends.isEmpty() && money.isEmpty() && auto.isEmpty() && failed.isEmpty())
         Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 16.sp)
     when (section) {
