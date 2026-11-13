@@ -554,9 +554,9 @@ fun PendingScreen(vm: MainVm, q: String) {
                         Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                 }
-                    if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}") }
+                    if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }, modifier = Modifier.height(32.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}", fontSize = 13.sp) }
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(2.dp))
                 Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
                     OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
