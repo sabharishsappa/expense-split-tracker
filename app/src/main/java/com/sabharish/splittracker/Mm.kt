@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -509,9 +508,9 @@ private fun shortName(full: String): String {
 }
 
 @Composable
-private fun Tag(text: String, color: Color, onClick: (() -> Unit)? = null) {
-    Box(Modifier.clip(RoundedCornerShape(3.dp)).let { if (onClick != null) it.clickable(onClick = onClick) else it }.border(BorderStroke(0.5.dp, color), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
-        Text(text, fontSize = 12.sp, color = color, maxLines = 1, softWrap = false)
+private fun Tag(text: String, color: Color, onClick: (() -> Unit)? = null, maxWidth: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Unspecified) {
+    Box(Modifier.widthIn(max = maxWidth).clip(RoundedCornerShape(3.dp)).let { if (onClick != null) it.clickable(onClick = onClick) else it }.border(BorderStroke(0.5.dp, color), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
+        Text(text, fontSize = 12.sp, color = color, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -525,6 +524,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
     }
     val live = ss.filter { it.amount > 0.004 && it.person != Repo.ME }
     val owes = live.sumOf { it.amount - it.settled }
+    val people = ss.filter { it.amount > 0.004 }.map { it.person }.distinct().size
     val alias = Repo.nameOnly(t.merchant, aliases).takeIf { !it.equals(t.merchant, true) && !it.equals(t.category, true) }
     var info by remember { mutableStateOf(false) }
     val draft = Drafts.isDraft(t)
@@ -540,7 +540,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
         val noTag = !own && t.category.isBlank() && !incoming
         Text(
             if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "Add tag") else t.category,
-            color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(76.dp).padding(end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
+            color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(68.dp).padding(end = 6.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         Row(Modifier.weight(1f).padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else (alias ?: shortName(t.merchant)), Modifier.weight(1f, fill = false), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -549,26 +549,25 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
                 if (dup) { Spacer(Modifier.width(4.dp)); Tag("Duplicate?", amber()) }
             }
         }
-        // fixed columns so mode and who/split line up on every row of every page
-        Box(Modifier.width(36.dp), contentAlignment = Alignment.CenterStart) { if (!own) Tag(modeTag(t), muted()) }
-        Row(Modifier.width(84.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (!own) {
-                if (who.isNotEmpty()) Tag(who, if (draft) coral() else muted())
-                if (owes > 0.004) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(SplitIcon, contentDescription = "Split", tint = muted(), modifier = Modifier.size(14.dp))
-                    Text(Logic.money(owes).removePrefix("₹"), Modifier.padding(start = 2.dp), fontSize = 12.sp, color = muted(), maxLines = 1, softWrap = false)
-                }
+        // fixed columns so mode, who, split count and refund marker line up on every row of every page
+        Box(Modifier.width(34.dp), contentAlignment = Alignment.CenterStart) { if (!own) Tag(modeTag(t), muted()) }
+        Box(Modifier.width(56.dp).padding(end = 4.dp), contentAlignment = Alignment.CenterStart) {
+            if (!own && who.isNotEmpty()) Tag(who, if (draft) coral() else muted(), maxWidth = 52.dp)
+        }
+        Row(Modifier.width(34.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (!own && people > 1) {
+                Icon(SplitIcon, contentDescription = "Split", tint = muted(), modifier = Modifier.size(14.dp))
+                Text("$people", Modifier.padding(start = 2.dp), fontSize = 12.sp, color = muted(), maxLines = 1, softWrap = false)
             }
         }
         val rTag = when (t.status) { "FAILED" -> "RP" to amber(); "REVERSED" -> "R" to blue(); else -> null }
-        Box(Modifier.width(30.dp), contentAlignment = Alignment.CenterStart) { if (!own && rTag != null) Tag(rTag.first, rTag.second) { info = true } }
+        Box(Modifier.width(26.dp), contentAlignment = Alignment.CenterStart) { if (!own && rTag != null) Tag(rTag.first, rTag.second) { info = true } }
         Text(
-            Logic.money(t.amount).removePrefix("₹"), fontSize = 14.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 70.dp).padding(end = 12.dp),
+            Logic.money(t.amount).removePrefix("₹"), fontSize = 14.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 56.dp).padding(end = 8.dp),
             color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
         )
         // the tick is always the right-most thing; the slot is kept on every row so amounts line up
-        Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) {
             if (onConfirm != null) Box(Modifier.size(22.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(13.dp))
             }

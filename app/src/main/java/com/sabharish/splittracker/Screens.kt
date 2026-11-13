@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -532,14 +532,14 @@ fun PendingScreen(vm: MainVm, q: String) {
         }
         items(ordered, key = { it.key }) { e ->
             val owed = e.value.sumOf { it.amount - it.settled }
-            Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text(e.key, fontSize = 17.sp)
                     }
                     Text(Logic.money(owed).removePrefix("₹"), fontSize = 17.sp, color = blue())
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(2.dp))
                 val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
                 // newest first; three rows show, "Show all" opens the rest (no scrolling inside a scrolling list)
                 var expanded by remember(e.key) { mutableStateOf(false) }
@@ -549,7 +549,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                     val single = sorted.size == 1
                     Row(Modifier.fillMaxWidth().padding(start = if (single) 16.dp else 8.dp, end = 16.dp, top = if (single) 4.dp else 0.dp, bottom = if (single) 4.dp else 0.dp).clickable(enabled = !single) { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
                         verticalAlignment = Alignment.CenterVertically) {
-                        if (!single) Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
+                        if (!single) Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) }, modifier = Modifier.scale(0.8f), colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = coral())) }
                         Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
                         Text(Repo.money(r.amount - r.settled).removePrefix("₹"), fontSize = 14.sp)
                     }
@@ -558,8 +558,8 @@ fun PendingScreen(vm: MainVm, q: String) {
                 }
                 Spacer(Modifier.height(2.dp))
                 Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
-                    OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
+                    OutlinedButton(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f), compact = true) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
+                    OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f), compact = true) {
                         Text(if (ticked.isEmpty()) (if (sorted.size == 1) "Mark paid" else "Mark all paid") else "Paid · ${ticked.size} · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}", maxLines = 1)
                     }
                 }

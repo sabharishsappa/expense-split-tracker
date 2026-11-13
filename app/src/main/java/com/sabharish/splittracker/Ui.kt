@@ -245,12 +245,30 @@ fun Button(
 
 @Composable
 fun OutlinedButton(
-    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+    onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, compact: Boolean = false,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) = androidx.compose.material3.OutlinedButton(
-    onClick = onClick, modifier = modifier.heightIn(min = 44.dp), enabled = enabled,
+    onClick = onClick, modifier = modifier.heightIn(min = if (compact) 36.dp else 44.dp), enabled = enabled,
+    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = if (compact) 12.dp else 24.dp, vertical = if (compact) 4.dp else 8.dp),
     shape = RoundedCornerShape(6.dp),
     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
     content = content
+)
+
+
+/** One dialog style for the whole app: flat, 8dp corners, 17sp title, 14sp text, same colour as the page panels. */
+@Composable
+fun AlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: (@Composable () -> Unit)? = null,
+    title: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null
+) = androidx.compose.material3.AlertDialog(
+    onDismissRequest = onDismissRequest, confirmButton = confirmButton, modifier = modifier, dismissButton = dismissButton,
+    title = title?.let { t -> { androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontSize = 17.sp)) { t() } } },
+    text = text?.let { t -> { androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontSize = 14.sp)) { t() } } },
+    shape = RoundedCornerShape(8.dp), containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp
 )
