@@ -309,7 +309,7 @@ fun TagSheet(
                             }
                             if (shares == null) Text(
                                 when (splitMode) { "PERCENT" -> "Percentages must add up to 100"; "PARTS" -> "Enter a number for each person"; else -> "Amounts must add up to ${Repo.money(amt)}" },
-                                color = MaterialTheme.colorScheme.error, fontSize = 13.sp
+                                color = MaterialTheme.colorScheme.error, fontSize = 12.sp
                             )
                             Spacer(Modifier.height(6.dp))
                         }
@@ -354,7 +354,7 @@ fun AliasDialog(raw: String, current: String, onDismiss: () -> Unit, onSave: (St
         title = { Text("Rename merchant") },
         text = {
             Column {
-                Text("Bank shows: $raw", fontSize = 13.sp, color = muted())
+                Text("Bank shows: $raw", fontSize = 12.sp, color = muted())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Show as (for example CRED)") })
                 Spacer(Modifier.height(6.dp))
@@ -586,7 +586,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
-                    Text("Settings", fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                    Text("Settings", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Section("Privacy", "This app has no internet permission. Your messages, people and amounts stay on this phone. They only leave if you choose to: a backup file you save, or a reminder you send yourself.") {
@@ -621,7 +621,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                             OutlinedButton(onClick = { saveFile.launch("PaisaLog-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())}.json") }) { Text("Save backup") }
                             OutlinedButton(onClick = { openFile.launch(arrayOf("*/*")) }) { Text("Restore") }
                         }
-                        if (note.isNotEmpty()) Text(note, fontSize = 13.sp, color = teal())
+                        if (note.isNotEmpty()) Text(note, fontSize = 12.sp, color = teal())
                     }
                     Section("Import older messages", "Safe to repeat — messages already in the app are skipped.") {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -640,7 +640,7 @@ fun SettingsDialog(vm: MainVm, onDismiss: () -> Unit) {
                         if (showRules) {
                             rules.take(40).forEach { r ->
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("${r.ruleKey.removePrefix("cat|")} → ${r.people}", Modifier.weight(1f), fontSize = 13.sp)
+                                    Text("${r.ruleKey.removePrefix("cat|")} → ${r.people}", Modifier.weight(1f), fontSize = 12.sp)
                                     TextButton(onClick = { vm.removeTagRule(r.ruleKey) }) { Text("Forget") }
                                 }
                             }
@@ -729,7 +729,7 @@ fun PaidDialog(person: String, count: Int, amount: Double, onDismiss: () -> Unit
         title = { Text("$person paid $count ${if (count == 1) "bill" else "bills"}") },
         text = {
             Column {
-                Text(Logic.money(amount), fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                Text(Logic.money(amount), fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Pill("UPI", { mode = "UPI" }, selected = mode == "UPI")
                     Pill("Cash", { mode = "Cash" }, selected = mode == "Cash")
@@ -757,11 +757,11 @@ fun EditTagDialog(vm: MainVm, tag: String, custom: Boolean, hidden: Boolean, onD
                     Text("Renaming also updates every transaction and remembered merchant using this tag.", fontSize = 12.sp, color = muted())
                     Spacer(Modifier.height(8.dp))
                     if (confirmDelete) {
-                        Text("Delete \"$tag\"? Its transactions become untagged.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                        Text("Delete \"$tag\"? Its transactions become untagged.", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { vm.deleteTag(tag); onDismiss() }) { Text("Yes, delete") }
                     } else TextButton(onClick = { confirmDelete = true }) { Text("Delete tag", color = MaterialTheme.colorScheme.error) }
                 } else {
-                    Text("Built-in tags can't be renamed. Hide it if you never use it; your old transactions keep it.", fontSize = 13.sp)
+                    Text("Built-in tags can't be renamed. Hide it if you never use it; your old transactions keep it.", fontSize = 12.sp)
                     TextButton(onClick = { vm.toggleHidden(tag); onDismiss() }) { Text(if (hidden) "Show in lists" else "Hide from lists") }
                 }
             }
@@ -836,9 +836,9 @@ fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long)
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Is this your first time, or do you have a backup file from before?", fontWeight = FontWeight.Medium)
-                    Text("Restoring brings back your transactions, people, tags, name and settings, so there is nothing to set up again.", fontSize = 13.sp, color = muted())
+                    Text("Restoring brings back your transactions, people, tags, name and settings, so there is nothing to set up again.", fontSize = 12.sp, color = muted())
                     if (busy) Text("Restoring…", color = teal())
-                    problem?.let { Text(it, fontSize = 13.sp, color = amber()) }
+                    problem?.let { Text(it, fontSize = 12.sp, color = amber()) }
                 }
             },
             confirmButton = { TextButton(enabled = !busy, onClick = { step = "new" }) { Text("I'm new") } },
@@ -856,12 +856,12 @@ fun WelcomeDialog(onRestore: (String, (Boolean) -> Unit) -> Unit, onPick: (Long)
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("From which date should I track your spends?", fontWeight = FontWeight.Medium)
-                Text("Messages from that date go into your Inbox. New ones arrive with a notification and stay in the Inbox until you sort them.", fontSize = 13.sp, color = muted())
+                Text("Messages from that date go into your Inbox. New ones arrive with a notification and stay in the Inbox until you sort them.", fontSize = 12.sp, color = muted())
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     options.forEach { (label, t) -> Pill(label, { sel = t }, selected = sel == t, strong = sel == t) }
                     Pill("Pick a date", { picking = true }, selected = options.none { it.second == sel }, strong = options.none { it.second == sel })
                 }
-                Text("Tracking from ${fmt.format(java.util.Date(sel))}", fontSize = 13.sp, color = teal())
+                Text("Tracking from ${fmt.format(java.util.Date(sel))}", fontSize = 12.sp, color = teal())
             }
         },
         confirmButton = { TextButton(onClick = { onPick(sel) }) { Text("Start") } }
@@ -886,7 +886,7 @@ fun NameDialog(onDone: (String) -> Unit) {
         title = { Text("Your name") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("As it appears on UPI. Payments between your own accounts are then left out of your spends.", fontSize = 13.sp, color = muted())
+                Text("As it appears on UPI. Payments between your own accounts are then left out of your spends.", fontSize = 12.sp, color = muted())
                 OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name or first name") })
             }
         },
@@ -906,7 +906,7 @@ fun RefundDialog(t: Txn, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
         title = { Text("Refund received") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 13.sp, color = muted())
+                Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 12.sp, color = muted())
                 OutlinedTextField(value = amt, onValueChange = { amt = it }, singleLine = true, label = { Text("Amount refunded ₹") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
                 Text("The full amount closes it. A smaller amount reduces what you spent.", fontSize = 12.sp, color = muted())

@@ -79,15 +79,15 @@ private fun RequestStep(vm: MainVm, t: Txn, onClose: () -> Unit) {
     FullScreenDialog(onClose) {
         Surface(Modifier.fillMaxSize().padding(LocalScreenInsets.current), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
-                Text("Split saved", fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp))
+                Text("Split saved", fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp))
                 Text("${t.merchant} · ${Repo.money(t.amount)}", fontSize = 16.sp, color = muted())
                 Spacer(Modifier.height(12.dp))
                 if (others.isEmpty()) Text("Nobody else is in this split, so there's nothing to ask for.", color = muted())
                 else {
                     Text("Ask everyone to pay. When their payment message arrives it's marked paid for you.", fontSize = 14.sp, color = muted())
-                    if (upi.isBlank()) Text("Tip: add your UPI ID in Settings so the message has it.", fontSize = 13.sp, color = amber(), modifier = Modifier.padding(top = 6.dp))
+                    if (upi.isBlank()) Text("Tip: add your UPI ID in Settings so the message has it.", fontSize = 12.sp, color = amber(), modifier = Modifier.padding(top = 6.dp))
                     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${others.size} ${if (others.size == 1) "person" else "people"}", Modifier.weight(1f), fontSize = 13.sp, color = muted())
+                        Text("${others.size} ${if (others.size == 1) "person" else "people"}", Modifier.weight(1f), fontSize = 12.sp, color = muted())
                         androidx.compose.material3.TextButton(onClick = { if (allTicked) ticked.clear() else { ticked.clear(); ticked.addAll(others.map { it.person }) } }) {
                             Text(if (allTicked) "Clear" else "Select all")
                         }

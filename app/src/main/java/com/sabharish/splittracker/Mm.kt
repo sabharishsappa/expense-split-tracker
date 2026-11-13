@@ -184,7 +184,7 @@ fun AddEntryScreen(vm: MainVm, onDismiss: () -> Unit) {
                         Row(Modifier.fillMaxWidth().clickable { pickDate = true }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(DATE_FMT.format(Date(at)), fontSize = 16.sp)
                             Spacer(Modifier.width(16.dp))
-                            Text(TIME_FMT.format(Date(at)), fontSize = 17.sp)
+                            Text(TIME_FMT.format(Date(at)), fontSize = 16.sp)
                         }
                     }
                     FormRow("Amount") {
@@ -219,10 +219,10 @@ fun AddEntryScreen(vm: MainVm, onDismiss: () -> Unit) {
                     Spacer(Modifier.height(16.dp))
                     if (type != "Transfer") {
                         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                            if (title.isEmpty()) Text(if (type == "Expense") "Where or what for?" else "From whom?", color = muted(), fontSize = 17.sp, modifier = Modifier.padding(vertical = 12.dp))
+                            if (title.isEmpty()) Text(if (type == "Expense") "Where or what for?" else "From whom?", color = muted(), fontSize = 16.sp, modifier = Modifier.padding(vertical = 12.dp))
                             BasicTextField(
                                 value = title, onValueChange = { title = it }, singleLine = true,
-                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface),
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface),
                                 cursorBrush = SolidColor(accent), modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
                             )
                         }
@@ -241,7 +241,7 @@ fun AddEntryScreen(vm: MainVm, onDismiss: () -> Unit) {
                                 onDismiss()
                             },
                         contentAlignment = Alignment.Center
-                    ) { Text("Save", fontSize = 17.sp, color = if (type == "Transfer") Color(0xFF17181B) else Color.White) }
+                    ) { Text("Save", fontSize = 16.sp, color = if (type == "Transfer") Color(0xFF17181B) else Color.White) }
                     if (type == "Transfer") Text("Counted in both balances, left out of your spends.", fontSize = 12.sp, color = muted(), modifier = Modifier.padding(20.dp))
                     Spacer(Modifier.height(380.dp))
                 }
@@ -282,7 +282,7 @@ private fun FormRow(label: String, underline: Color? = null, trailing: @Composab
 @Composable
 private fun PickerValue(value: String, placeholder: String = "", onClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp).height(24.dp)) {
-        if (value.isEmpty()) Text(placeholder, color = muted(), fontSize = 16.sp) else Text(value, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (value.isEmpty()) Text(placeholder, color = muted(), fontSize = 16.sp) else Text(value, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -327,7 +327,7 @@ private fun Grid3(items: List<String>, onPick: (Int) -> Unit) {
 fun MonthBar(label: String, onPrev: () -> Unit, onNext: () -> Unit, nextEnabled: Boolean, arrows: Boolean = true, actions: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (arrows) IconButton(onClick = onPrev) { Icon(IconChevronL, contentDescription = "Previous month") } else Spacer(Modifier.width(12.dp))
-        Text(label, fontSize = 17.sp)
+        Text(label, fontSize = 16.sp)
         if (arrows) IconButton(onClick = onNext, enabled = nextEnabled) { Icon(IconChevronR, contentDescription = "Next month", tint = if (nextEnabled) MaterialTheme.colorScheme.onSurface else muted().copy(alpha = 0.3f)) }
         Spacer(Modifier.weight(1f))
         actions()
@@ -364,7 +364,7 @@ fun SummaryStrip(income: Double, expense: Double) {
         listOf(Triple("Income", income, blue()), Triple("Expenses", expense, coral()), Triple("Total", income - expense, MaterialTheme.colorScheme.onSurface)).forEach { (n, v, c) ->
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(n, fontSize = 14.sp)
-                Text(Logic.money(v).removePrefix("₹"), fontSize = 17.sp, color = c, maxLines = 1)
+                Text(Logic.money(v).removePrefix("₹"), fontSize = 16.sp, color = c, maxLines = 1)
             }
         }
     }
@@ -407,8 +407,8 @@ fun DailyPane(vm: MainVm, y: Int, m: Int, query: String, flt: TxnFilter, modifie
             onDone = { picked.clear(); selecting = false }, partners = merged.partner)
         val drafts = merged.shown.filter { Drafts.isDraft(it) }
         if (drafts.isNotEmpty()) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 0.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${drafts.size} to confirm", Modifier.weight(1f).clickable(onClick = onOpenDrafts), fontSize = 13.sp, color = muted())
-            TextButton(onClick = { vm.confirmAll(drafts) }) { Text("Confirm all", color = coral(), fontSize = 13.sp) }
+            Text("${drafts.size} to confirm", Modifier.weight(1f).clickable(onClick = onOpenDrafts), fontSize = 12.sp, color = muted())
+            TextButton(onClick = { vm.confirmAll(drafts) }) { Text("Confirm all", color = coral(), fontSize = 12.sp) }
         }
         LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
             days.forEach { (d, list) ->
@@ -561,7 +561,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
             }
         }
         val rTag = when (t.status) { "FAILED" -> "RP" to amber(); "REVERSED" -> "R" to blue(); else -> null }
-        Box(Modifier.width(26.dp), contentAlignment = Alignment.CenterStart) { if (!own && rTag != null) Tag(rTag.first, rTag.second) { info = true } }
+        Box(Modifier.width(26.dp), contentAlignment = Alignment.CenterStart) { if (!own && rTag != null) Tag(rTag.first, rTag.second, onClick = { info = true }) }
         Text(
             Logic.money(t.amount).removePrefix("₹"), fontSize = 14.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 56.dp).padding(end = 8.dp),
             color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
@@ -618,7 +618,7 @@ fun CalendarMm(vm: MainVm, y: Int, m: Int, today: Calendar, modifier: Modifier =
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEachIndexed { i, s ->
-                Text(s, Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 13.sp, color = if (i == 0) coral() else if (i == 6) blue() else muted())
+                Text(s, Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 12.sp, color = if (i == 0) coral() else if (i == 6) blue() else muted())
             }
         }
         Column(Modifier.weight(1f).fillMaxWidth()) {
@@ -680,7 +680,7 @@ fun MonthlyPane(vm: MainVm, year: Int, onPick: (Int) -> Unit) {
             if (!future) {
                 Row(Modifier.fillMaxWidth().clickable { onPick(mo) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("${Stats.monthLabel(mo)}", fontSize = 17.sp)
+                        Text("${Stats.monthLabel(mo)}", fontSize = 16.sp)
                         Text("1.${mo + 1} ~ ${Calendar.getInstance().apply { set(year, mo, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH)}.${mo + 1}", fontSize = 12.sp, color = muted())
                     }
                     Column(horizontalAlignment = Alignment.End) {
@@ -752,9 +752,9 @@ fun AccountsPage(vm: MainVm, query: String, section: Int, onSection: (Int) -> Un
         LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
             item {
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Assets", fontSize = 14.sp); Text(Logic.money(assets).removePrefix("₹"), color = blue(), fontSize = 17.sp) }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Liabilities", fontSize = 14.sp); Text(Logic.money(liabilities).removePrefix("₹"), color = coral(), fontSize = 17.sp) }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Total", fontSize = 14.sp); Text(Logic.money(assets - liabilities).removePrefix("₹"), fontSize = 17.sp) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Assets", fontSize = 14.sp); Text(Logic.money(assets).removePrefix("₹"), color = blue(), fontSize = 16.sp) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Liabilities", fontSize = 14.sp); Text(Logic.money(liabilities).removePrefix("₹"), color = coral(), fontSize = 16.sp) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Total", fontSize = 14.sp); Text(Logic.money(assets - liabilities).removePrefix("₹"), fontSize = 16.sp) }
                 }
             }
             item { GroupHeader("Accounts", if (withBalance.isEmpty()) "" else Logic.money(withBalance.sumOf { it.balance })) }
@@ -796,7 +796,7 @@ private fun GroupHeader(title: String, total: String) {
 @Composable
 private fun AccountLine(name: String, value: String, hasValue: Boolean, negative: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(name, fontSize = 17.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(name, fontSize = 16.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(value, fontSize = if (hasValue) 17.sp else 13.sp, color = if (!hasValue) muted() else if (negative) coral() else blue())
     }
     Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
@@ -941,7 +941,7 @@ private fun StylePage(onBack: () -> Unit) = SubPage("Style", onBack) {
     Column {
         listOf("system" to "System Mode", "dark" to "Dark Mode", "light" to "Light Mode").forEach { (id, label) ->
             Row(Modifier.fillMaxWidth().clickable { ThemeState.mode = id; Repo.putPref(ctx, "theme", id) }.padding(horizontal = 20.dp, vertical = 22.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(label, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                Text(label, fontSize = 16.sp, modifier = Modifier.weight(1f))
                 Box(Modifier.size(24.dp).clip(CircleShape).border(BorderStroke(2.dp, if (ThemeState.mode == id) coral() else MaterialTheme.colorScheme.outline), CircleShape), contentAlignment = Alignment.Center) {
                     if (ThemeState.mode == id) Box(Modifier.size(12.dp).clip(CircleShape).background(coral()))
                 }
@@ -989,10 +989,10 @@ private fun BackupPage(vm: MainVm, onBack: () -> Unit) = SubPage("Backup", onBac
             "Backup to a file on this phone" to { saveFile.launch("PaisaLog-backup-${SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date())}.json") },
             "Restore from a backup file" to { openFile.launch(arrayOf("*/*")) }
         ).forEach { (label, act) ->
-            Text(label, fontSize = 17.sp, modifier = Modifier.fillMaxWidth().clickable { act() }.padding(horizontal = 20.dp, vertical = 20.dp))
+            Text(label, fontSize = 16.sp, modifier = Modifier.fillMaxWidth().clickable { act() }.padding(horizontal = 20.dp, vertical = 20.dp))
             Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
         }
-        if (note.isNotEmpty()) Text(note, color = teal(), fontSize = 13.sp, modifier = Modifier.padding(20.dp))
+        if (note.isNotEmpty()) Text(note, color = teal(), fontSize = 12.sp, modifier = Modifier.padding(20.dp))
         Text("Nothing is uploaded. The backup stays in the place you choose.", color = muted(), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
     }
 }
@@ -1036,7 +1036,7 @@ fun MmStatsPage(vm: MainVm) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { offset -= 1 }) { Icon(IconChevronL, contentDescription = "Previous") }
-            Text(label, fontSize = 17.sp)
+            Text(label, fontSize = 16.sp)
             IconButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Icon(IconChevronR, contentDescription = "Next") }
             Spacer(Modifier.weight(1f))
             Box {
@@ -1068,31 +1068,48 @@ fun MmStatsPage(vm: MainVm) {
             item {
                 val gap = MaterialTheme.colorScheme.background
                 val labelColor = MaterialTheme.colorScheme.onSurface.toArgb()
-                androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(280.dp).padding(vertical = 12.dp)) {
-                    val d = minOf(size.width, size.height) * 0.68f
+                androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(300.dp).padding(vertical = 8.dp)) {
+                    val d = minOf(size.width, size.height) * 0.62f
                     val r = d / 2f
                     val cx = size.width / 2f; val cy = size.height / 2f
                     val tl = androidx.compose.ui.geometry.Offset(cx - r, cy - r)
                     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = labelColor; textSize = 12.sp.toPx() }
+                    class Lbl(val i: Int, val ux: Float, val uy: Float, var y: Float)
+                    val lbls = mutableListOf<Lbl>()
                     var start = -90f
                     rows.forEachIndexed { i, row ->
                         val sweep = (row.second / total * 360.0).toFloat()
-                        val col = PIE_COLORS[i % PIE_COLORS.size]
-                        drawArc(col, start, sweep, true, tl, androidx.compose.ui.geometry.Size(d, d))
-                        val pct = Math.round(row.second / total * 100).toInt()
-                        if (pct >= 3) {
+                        drawArc(PIE_COLORS[i % PIE_COLORS.size], start, sweep, true, tl, androidx.compose.ui.geometry.Size(d, d))
+                        if (row.second / total * 100 >= 1.0) {
                             val mid = Math.toRadians((start + sweep / 2).toDouble())
                             val ux = Math.cos(mid).toFloat(); val uy = Math.sin(mid).toFloat()
-                            val p1 = androidx.compose.ui.geometry.Offset(cx + ux * r * 1.02f, cy + uy * r * 1.02f)
-                            val p2 = androidx.compose.ui.geometry.Offset(cx + ux * r * 1.2f, cy + uy * r * 1.2f)
-                            drawLine(col, p1, p2, strokeWidth = 1.5f)
-                            val label = "$pct%"
-                            val tw = paint.measureText(label)
-                            val right = ux >= 0
-                            val tx = if (right) p2.x + 4.dp.toPx() else p2.x - 4.dp.toPx() - tw
-                            drawContext.canvas.nativeCanvas.drawText(label, tx, p2.y + paint.textSize / 3f, paint)
+                            lbls += Lbl(i, ux, uy, cy + uy * r * 1.2f)
                         }
                         start += sweep
+                    }
+                    // spread labels on each side so none overlap
+                    val gap = 15.dp.toPx()
+                    for (right in listOf(true, false)) {
+                        val side = lbls.filter { (it.ux >= 0) == right }.sortedBy { it.y }
+                        for (k in 1 until side.size) if (side[k].y - side[k - 1].y < gap) side[k].y = side[k - 1].y + gap
+                        for (k in side.size - 2 downTo 0) if (side[k + 1].y - side[k].y < gap) side[k].y = side[k + 1].y - gap
+                    }
+                    lbls.forEach { l ->
+                        val row = rows[l.i]
+                        val col = PIE_COLORS[l.i % PIE_COLORS.size]
+                        val pct = Math.round(row.second / total * 100).toInt()
+                        val right = l.ux >= 0
+                        val p1 = androidx.compose.ui.geometry.Offset(cx + l.ux * r * 1.02f, cy + l.uy * r * 1.02f)
+                        val p2 = androidx.compose.ui.geometry.Offset(cx + l.ux * r * 1.2f, l.y)
+                        drawLine(col, p1, p2, strokeWidth = 1.5f)
+                        val pctTxt = " $pct%"
+                        val room = (if (right) size.width - p2.x else p2.x) - 10.dp.toPx() - paint.measureText(pctTxt)
+                        val n = paint.breakText(row.first, true, room.coerceAtLeast(0f), null)
+                        val nm = if (n >= row.first.length) row.first else row.first.take(maxOf(n - 1, 0)) + "…"
+                        val label = nm + pctTxt
+                        val tw = paint.measureText(label)
+                        val tx = if (right) p2.x + 4.dp.toPx() else p2.x - 4.dp.toPx() - tw
+                        drawContext.canvas.nativeCanvas.drawText(label, tx, p2.y + paint.textSize / 3f, paint)
                     }
                 }
             }

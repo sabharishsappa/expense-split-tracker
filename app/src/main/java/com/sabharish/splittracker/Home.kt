@@ -76,7 +76,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             ) {
                 Text("Others owe you", color = muted(), fontSize = 14.sp)
                 Spacer(Modifier.height(4.dp))
-                Text(Logic.money(total), color = blue(), fontSize = 26.sp, fontWeight = FontWeight.Medium)
+                Text(Logic.money(total), color = blue(), fontSize = 20.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     if (owed.isEmpty()) "All settled 🎉" else "${owed.size} ${if (owed.size == 1) "person owes" else "people owe"} you",
@@ -85,7 +85,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                 val lent = Logic.lentTotal(pending)
                 if (lent > 0.004) {
                     Spacer(Modifier.height(2.dp))
-                    Text("Cash lent ${Logic.money(lent)} · Shared spends ${Logic.money(total - lent)}", color = muted(), fontSize = 13.sp)
+                    Text("Cash lent ${Logic.money(lent)} · Shared spends ${Logic.money(total - lent)}", color = muted(), fontSize = 12.sp)
                 }
             }
         }
@@ -97,10 +97,10 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("You owe people", fontSize = 13.sp, color = muted())
-                    Text(Logic.money(oweList.sumOf { it.second }), fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                    Text("You owe people", fontSize = 12.sp, color = muted())
+                    Text(Logic.money(oweList.sumOf { it.second }), fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 }
-                Text("${oweList.size} ${if (oweList.size == 1) "person" else "people"} ›", fontSize = 13.sp, color = muted())
+                Text("${oweList.size} ${if (oweList.size == 1) "person" else "people"} ›", fontSize = 12.sp, color = muted())
             }
         }
         item {
@@ -121,9 +121,9 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                     ClarityRing(clarity ?: 1f)
                     Spacer(Modifier.padding(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("This month's clarity", fontSize = 13.sp, color = muted())
+                        Text("This month's clarity", fontSize = 12.sp, color = muted())
                         Text(Habit.clarityLine(spends.size), fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                        Text(if (days > 0) "🔥 $days-day inbox-zero streak" else "Clear your inbox today to start a streak", fontSize = 13.sp, color = if (days > 0) amber() else muted())
+                        Text(if (days > 0) "🔥 $days-day inbox-zero streak" else "Clear your inbox today to start a streak", fontSize = 12.sp, color = if (days > 0) amber() else muted())
                     }
                 }
             }
@@ -147,7 +147,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                                 Text(a.label, fontSize = 16.sp)
                                 Text(if (a.hasBalance) "Updated ${Repo.shortDate(a.asOf)} · tap to correct" else "Tap to set balance", fontSize = 12.sp, color = muted())
                             }
-                            if (a.hasBalance) Text(Logic.money(a.balance), fontSize = 17.sp, fontWeight = FontWeight.Medium,
+                            if (a.hasBalance) Text(Logic.money(a.balance), fontSize = 16.sp, fontWeight = FontWeight.Medium,
                                 color = if (a.balance < 0) MaterialTheme.colorScheme.error else green())
                         }
                     }
@@ -162,7 +162,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Check a statement", fontWeight = FontWeight.Medium, fontSize = 16.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("Upload a statement to find missing or extra payments", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Upload a statement to find missing or extra payments", fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
         }
@@ -178,7 +178,7 @@ fun HomeScreen(vm: MainVm, go: (Int) -> Unit) {
                             Avatar(p)
                             Spacer(Modifier.padding(6.dp))
                             Text(p, Modifier.weight(1f), fontSize = 16.sp)
-                            Text(Logic.money(amt), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = amber())
+                            Text(Logic.money(amt), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = amber())
                         }
                     }
                 }
@@ -196,8 +196,8 @@ private fun StatTile(label: String, value: String, tint: Color, modifier: Modifi
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(value, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = tint)
-            Text(label, fontSize = 13.sp, color = muted())
+            Text(value, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = tint)
+            Text(label, fontSize = 12.sp, color = muted())
         }
     }
 }
@@ -271,14 +271,14 @@ internal fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
             text = {
                 Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                     Text("1. Which card or account?", fontWeight = FontWeight.Medium)
-                    if (sources.isEmpty()) Text("Nothing to check yet.", fontSize = 13.sp, color = muted())
+                    if (sources.isEmpty()) Text("Nothing to check yet.", fontSize = 12.sp, color = muted())
                     sources.forEach { s -> Pill(s.label, { source = s }, selected = source == s, modifier = Modifier.padding(top = 6.dp)) }
                     Spacer(Modifier.height(12.dp))
                     Text("2. PDF password (if any)", fontWeight = FontWeight.Medium)
                     OutlinedTextField(value = password, onValueChange = { password = it }, singleLine = true,
                         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     Text("Used only to open the file on this phone. It is not saved.", fontSize = 12.sp, color = muted())
-                    if (message.isNotEmpty()) { Spacer(Modifier.height(8.dp)); Text(message, fontSize = 13.sp, color = amber()) }
+                    if (message.isNotEmpty()) { Spacer(Modifier.height(8.dp)); Text(message, fontSize = 12.sp, color = amber()) }
                 }
             },
             confirmButton = { TextButton(enabled = source != null, onClick = { pick.launch(arrayOf("*/*")) }) { Text("Choose file") } },
@@ -296,7 +296,7 @@ internal fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
                         Text("On the statement, not in the app (${r.missing.size})", fontWeight = FontWeight.Medium)
                         r.missing.forEach { l ->
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("${Logic.shortDate(l.date)} · ${l.desc.take(28)} · ${Logic.money(l.amount)}${if (l.credit) " (credit)" else ""}", Modifier.weight(1f), fontSize = 13.sp)
+                                Text("${Logic.shortDate(l.date)} · ${l.desc.take(28)} · ${Logic.money(l.amount)}${if (l.credit) " (credit)" else ""}", Modifier.weight(1f), fontSize = 12.sp)
                                 if (!l.credit) {
                                     if (l in added) Text("Added", fontSize = 12.sp, color = green())
                                     else TextButton(onClick = { vm.addFromStatement(s, l); added = added + l }) { Text("Add") }
@@ -308,7 +308,7 @@ internal fun StatementFlow(vm: MainVm, onDone: () -> Unit) {
                     if (r.extra.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
                         Text("In the app, not on the statement (${r.extra.size})", fontWeight = FontWeight.Medium)
-                        r.extra.forEach { t -> Text("${Logic.shortDate(t.txnDate)} · ${t.merchant.take(28)} · ${Logic.money(t.amount)}", fontSize = 13.sp) }
+                        r.extra.forEach { t -> Text("${Logic.shortDate(t.txnDate)} · ${t.merchant.take(28)} · ${Logic.money(t.amount)}", fontSize = 12.sp) }
                         Text("These may be pending on the bank side, or from another card.", fontSize = 12.sp, color = muted())
                     }
                 }
@@ -330,10 +330,10 @@ private fun BillsCard(bills: List<Bill>, onTap: (Bill) -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("You need to pay", fontSize = 13.sp, color = muted())
-                Text(Logic.money(total), fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                Text("You need to pay", fontSize = 12.sp, color = muted())
+                Text(Logic.money(total), fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
-            Text("${bills.size} ${if (bills.size == 1) "bill" else "bills"}", fontSize = 13.sp, color = muted())
+            Text("${bills.size} ${if (bills.size == 1) "bill" else "bills"}", fontSize = 12.sp, color = muted())
         }
         bills.forEach { b ->
             val days = Bills.daysLeft(b.dueDate, now)
@@ -365,8 +365,8 @@ private fun MonthCard(vm: MainVm, open: () -> Unit) {
     val spent = remember(txns, shares) { Stats.spentInMonth(txns, shares, y, m) }
     val limit = Budgets.decode(Repo.getPref(ctx, "budgets", ""))[Budgets.TOTAL]
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).clickable(onClick = open).padding(18.dp)) {
-        Text("Spent in ${Stats.monthLabel(m)}", fontSize = 13.sp, color = muted())
-        Text(Logic.money(spent), fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        Text("Spent in ${Stats.monthLabel(m)}", fontSize = 12.sp, color = muted())
+        Text(Logic.money(spent), fontSize = 16.sp, fontWeight = FontWeight.Medium)
         if (limit != null) {
             val st = Budgets.state(spent, limit)
             val color = when (st) { Budgets.State.OK -> teal(); Budgets.State.CLOSE -> amber(); Budgets.State.OVER -> MaterialTheme.colorScheme.error }
@@ -379,10 +379,10 @@ private fun MonthCard(vm: MainVm, open: () -> Unit) {
             Text(
                 if (st == Budgets.State.OVER) "Over budget by ${Logic.money(spent - limit)}"
                 else "${Logic.money(limit - spent)} left of ${Logic.money(limit)} · safe to spend ${Logic.money(perDay)} today",
-                fontSize = 13.sp, color = if (st == Budgets.State.OVER) MaterialTheme.colorScheme.error else muted()
+                fontSize = 12.sp, color = if (st == Budgets.State.OVER) MaterialTheme.colorScheme.error else muted()
             )
         } else {
-            Text("Set a monthly budget to see what is safe to spend each day ›", fontSize = 13.sp, color = muted())
+            Text("Set a monthly budget to see what is safe to spend each day ›", fontSize = 12.sp, color = muted())
         }
     }
 }

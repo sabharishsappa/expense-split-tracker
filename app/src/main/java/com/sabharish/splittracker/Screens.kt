@@ -101,11 +101,11 @@ private fun TxnHeader(t: Txn, aliases: Map<String, String>, incoming: Boolean = 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
             Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 13.sp, color = muted())
+            Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)} · ${kindLabel(t.kind)}", fontSize = 12.sp, color = muted())
         }
         Text(
             (if (incoming) "+" else "") + Repo.money(t.amount),
-            fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, color = if (incoming) green() else coral()
+            fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, color = if (incoming) green() else coral()
         )
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { trailing() }
     }
@@ -431,7 +431,7 @@ private fun AutoList(vm: MainVm, items: List<Txn>) {
         Text("Nothing auto-sorted yet. Payments from merchants you've tagged before will show up here.", color = muted(), fontSize = 16.sp)
         return
     }
-    Text("Sorted automatically from what you tagged before. They count once you tick them.", fontSize = 13.sp, color = muted())
+    Text("Sorted automatically from what you tagged before. They count once you tick them.", fontSize = 12.sp, color = muted())
     Spacer(Modifier.height(6.dp))
     OutlinedButton(onClick = { vm.confirmAll(items) }) { Text("✓ Confirm all ${items.size}") }
     Spacer(Modifier.height(6.dp))
@@ -462,7 +462,7 @@ private fun FailedList(vm: MainVm, items: List<Txn>) {
         Text("No failed payments. Mark one from its ⋮ menu; it closes when the refund arrives.", color = muted(), fontSize = 16.sp)
         return
     }
-    Text("Waiting for refunds. These close when the bank's refund message arrives.", fontSize = 13.sp, color = muted())
+    Text("Waiting for refunds. These close when the bank's refund message arrives.", fontSize = 12.sp, color = muted())
     Spacer(Modifier.height(6.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
@@ -501,9 +501,9 @@ fun PendingScreen(vm: MainVm, q: String) {
         item(key = "owed-head") {
             Column {
         Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Owed to you", fontSize = 14.sp); Text(Logic.money(total).removePrefix("₹"), color = blue(), fontSize = 17.sp) }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("You owe", fontSize = 14.sp); Text(Logic.money(oweBy.sumOf { it.second }).removePrefix("₹"), color = coral(), fontSize = 17.sp) }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("People", fontSize = 14.sp); Text("${grouped.size}", fontSize = 17.sp) }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("Owed to you", fontSize = 14.sp); Text(Logic.money(total).removePrefix("₹"), color = blue(), fontSize = 16.sp) }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("You owe", fontSize = 14.sp); Text(Logic.money(oweBy.sumOf { it.second }).removePrefix("₹"), color = coral(), fontSize = 16.sp) }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) { Text("People", fontSize = 14.sp); Text("${grouped.size}", fontSize = 16.sp) }
         }
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
         TextButton(onClick = { addOwe = true }) { Text("+ I owe someone", color = coral(), fontSize = 14.sp) }
@@ -519,7 +519,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Avatar(person, 36)
                         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                            Text(person, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                            Text(person, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             Text("You need to pay", fontSize = 12.sp, color = muted())
                         }
                         Text(Repo.money(amt), fontSize = 16.sp, fontWeight = FontWeight.Medium)
@@ -535,9 +535,9 @@ fun PendingScreen(vm: MainVm, q: String) {
             Column(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
-                        Text(e.key, fontSize = 17.sp)
+                        Text(e.key, fontSize = 16.sp)
                     }
-                    Text(Logic.money(owed).removePrefix("₹"), fontSize = 17.sp, color = blue())
+                    Text(Logic.money(owed).removePrefix("₹"), fontSize = 16.sp, color = blue())
                 }
                 Spacer(Modifier.height(2.dp))
                 val ticked = ticks.getOrPut(e.key) { mutableStateListOf<Long>() }
@@ -554,7 +554,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                         Text(Repo.money(r.amount - r.settled).removePrefix("₹"), fontSize = 14.sp)
                     }
                 }
-                    if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }, modifier = Modifier.height(32.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}", fontSize = 13.sp) }
+                    if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }, modifier = Modifier.height(32.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}", fontSize = 12.sp) }
                 }
                 Spacer(Modifier.height(2.dp))
                 Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -694,9 +694,9 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 8.dp)) {
                     Text("Own transfer", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 13.sp, color = muted())
+                    Text("${Repo.acct(t.bank, t.card)} → ${Repo.acct(partner.bank, partner.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                 }
-                Text(Repo.money(t.amount), fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(Repo.money(t.amount), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 Box {
                     IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) { deleteItem() }
@@ -731,8 +731,8 @@ private fun TxnRow(t: Txn, ss: List<Share>, vm: MainVm, aliases: Map<String, Str
                 }
             }
         }
-        if (state.isNotEmpty()) Text(state, fontSize = 13.sp, color = if (t.status == "INBOX" || t.status == "FAILED") amber() else muted())
-        if (t.note.isNotBlank()) Text(t.note, fontSize = 13.sp, color = muted())
+        if (state.isNotEmpty()) Text(state, fontSize = 12.sp, color = if (t.status == "INBOX" || t.status == "FAILED") amber() else muted())
+        if (t.note.isNotBlank()) Text(t.note, fontSize = 12.sp, color = muted())
         if (t.status == "REPAID" && t.note.contains("matched automatically")) TextButton(onClick = { vm.undoAutoSettle(t) }) { Text("Wrong match? Undo") }
         val live = ss.filter { it.amount > 0.004 }
         if (spendLike || live.isNotEmpty()) {
@@ -791,7 +791,7 @@ fun SummaryScreen(vm: MainVm) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
-                Text(label, fontWeight = FontWeight.Medium, fontSize = 17.sp)
+                Text(label, fontWeight = FontWeight.Medium, fontSize = 16.sp)
                 TextButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Text("Next ›") }
             }
         }
@@ -799,12 +799,12 @@ fun SummaryScreen(vm: MainVm) {
             AppCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text("Spent", fontSize = 13.sp, color = muted())
-                        Text(Repo.money(spent), fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                        Text("Spent", fontSize = 12.sp, color = muted())
+                        Text(Repo.money(spent), fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Income", fontSize = 13.sp, color = muted())
-                        Text(Repo.money(income), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = if (income > 0) green() else muted())
+                        Text("Income", fontSize = 12.sp, color = muted())
+                        Text(Repo.money(income), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = if (income > 0) green() else muted())
                     }
                 }
                 if (income > 0) {
@@ -813,7 +813,7 @@ fun SummaryScreen(vm: MainVm) {
                 }
                 if (forOthers > 0.004 || receivable > 0.004) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Others owe you ${Repo.money(receivable)}", fontSize = 13.sp, color = muted())
+                    Text("Others owe you ${Repo.money(receivable)}", fontSize = 12.sp, color = muted())
                 }
             }
         }
@@ -847,7 +847,7 @@ fun SummaryScreen(vm: MainVm) {
                         Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(12.dp).background(sliceColor(i), RoundedCornerShape(3.dp)))
                             Text(sl.label, Modifier.weight(1f).padding(start = 8.dp), fontSize = 14.sp)
-                            Text("${Math.round(sl.fraction * 100)}%", fontSize = 13.sp, color = muted())
+                            Text("${Math.round(sl.fraction * 100)}%", fontSize = 12.sp, color = muted())
                             Spacer(Modifier.size(10.dp))
                             Text(Repo.money(sl.value), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
@@ -992,7 +992,7 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { offset -= 1 }) { Text("‹ Prev") }
-                Text("${Stats.monthLabel(m)} $y", fontWeight = FontWeight.Medium, fontSize = 17.sp)
+                Text("${Stats.monthLabel(m)} $y", fontWeight = FontWeight.Medium, fontSize = 16.sp)
                 TextButton(onClick = { if (offset < 0) offset += 1 }, enabled = offset < 0) { Text("Next ›") }
             }
             Row(Modifier.fillMaxWidth()) {
@@ -1015,7 +1015,7 @@ private fun CalendarPane(vm: MainVm, txns: List<Txn>, byTxn: Map<Long, List<Shar
                                         .clickable { picked = d }.padding(top = 4.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Text(d.toString(), fontSize = 13.sp, fontWeight = if (isToday) FontWeight.Medium else FontWeight.Normal, color = if (isToday) teal() else MaterialTheme.colorScheme.onSurface)
+                                    Text(d.toString(), fontSize = 12.sp, fontWeight = if (isToday) FontWeight.Medium else FontWeight.Normal, color = if (isToday) teal() else MaterialTheme.colorScheme.onSurface)
                                     if (tot != null && tot.spent > 0) Text(Repo.compact(tot.spent), fontSize = 12.sp, color = MaterialTheme.colorScheme.error, maxLines = 1)
                                     if (tot != null && tot.income > 0) Text(Repo.compact(tot.income), fontSize = 12.sp, color = green(), maxLines = 1)
                                 }

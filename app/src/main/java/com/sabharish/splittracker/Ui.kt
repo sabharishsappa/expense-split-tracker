@@ -101,7 +101,7 @@ val AppTypography = androidx.compose.material3.Typography(
     bodyMedium = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, letterSpacing = 0.sp),
     bodySmall = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, letterSpacing = 0.sp),
     titleLarge = androidx.compose.ui.text.TextStyle(fontSize = 20.sp, letterSpacing = 0.sp),
-    titleMedium = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, letterSpacing = 0.sp),
+    titleMedium = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, letterSpacing = 0.sp),
     titleSmall = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, letterSpacing = 0.sp),
     labelLarge = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, letterSpacing = 0.sp),
     labelMedium = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, letterSpacing = 0.sp),
@@ -134,7 +134,7 @@ fun Pill(
             .padding(horizontal = if (compact) 12.dp else 16.dp, vertical = if (compact) 6.dp else 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = if (on) scheme.primary else scheme.onSurface, fontSize = if (compact) 13.sp else 15.sp, maxLines = 1)
+        Text(text, color = if (on) scheme.primary else scheme.onSurface, fontSize = if (compact) 12.sp else 14.sp, maxLines = 1)
     }
 }
 
@@ -183,7 +183,7 @@ fun SmsBanner() {
         Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(16.dp)
     ) {
         Text("Allow SMS access", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = MaterialTheme.colorScheme.onErrorContainer)
-        Text("Bank messages are read on this phone to find your payments. Nothing is uploaded.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+        Text("Bank messages are read on this phone to find your payments. Nothing is uploaded.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onErrorContainer)
         androidx.compose.material3.TextButton(onClick = {
             ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + ctx.packageName)))
         }) { Text("Open settings") }
@@ -268,7 +268,7 @@ fun AlertDialog(
     text: (@Composable () -> Unit)? = null
 ) = androidx.compose.material3.AlertDialog(
     onDismissRequest = onDismissRequest, confirmButton = confirmButton, modifier = modifier, dismissButton = dismissButton,
-    title = title?.let { t -> { androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontSize = 17.sp)) { t() } } },
+    title = title?.let { t -> { androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontSize = 16.sp)) { t() } } },
     text = text?.let { t -> { androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontSize = 14.sp)) { t() } } },
     shape = RoundedCornerShape(8.dp), containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp
 )

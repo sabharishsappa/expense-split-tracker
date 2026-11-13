@@ -36,7 +36,7 @@ fun AddEntryDialog(vm: MainVm, onDismiss: () -> Unit) {
 
     @Composable
     fun picker(label: String, current: AccountView, onPick: (AccountView) -> Unit) {
-        Text(label, fontSize = 13.sp, color = muted())
+        Text(label, fontSize = 12.sp, color = muted())
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             accounts.forEach { a -> Pill(a.label, { onPick(a) }, selected = a.key == current.key) }
         }
