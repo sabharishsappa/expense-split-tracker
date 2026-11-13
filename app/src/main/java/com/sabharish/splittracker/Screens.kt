@@ -125,7 +125,7 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
     val spends = allSpends.search(); val money = allMoney.search(); val auto = allAuto.search(); val failed = allFailed.search()
     val tabs = buildList {
         add("Spent" to spends.size); add("Received" to money.size); add("Auto" to auto.size)
-        add("Refunds" to failed.size)
+        add("Pending" to failed.size)
     }
     MmTabs(tabs.map { (name, n) -> if (n > 0) "$name $n" else name }, section.coerceAtMost(tabs.size - 1), onSection, bleed = 14.dp)
     Spacer(Modifier.height(8.dp))
