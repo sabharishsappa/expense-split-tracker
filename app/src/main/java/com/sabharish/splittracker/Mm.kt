@@ -540,7 +540,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
         val noTag = !own && t.category.isBlank() && !incoming
         Text(
             if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "Add tag") else t.category,
-            color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(92.dp).padding(end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
+            color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(76.dp).padding(end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         Row(Modifier.weight(1f).padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else (alias ?: shortName(t.merchant)), Modifier.weight(1f, fill = false), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
