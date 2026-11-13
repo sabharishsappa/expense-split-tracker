@@ -127,7 +127,7 @@ fun InboxScreen(vm: MainVm, undoable: (Long, String) -> Unit, q: String, section
         add("Spent" to spends.size); add("Received" to money.size); add("Auto" to auto.size)
         add("Pending" to failed.size)
     }
-    MmTabs(tabs.map { (name, n) -> if (n > 0) "$name $n" else name }, section.coerceAtMost(tabs.size - 1), onSection, bleed = 14.dp)
+    MmTabs(tabs.map { (name, _) -> name }, section.coerceAtMost(tabs.size - 1), onSection, bleed = 14.dp)
     Spacer(Modifier.height(8.dp))
     if (q.isNotBlank() && spends.isEmpty() && money.isEmpty() && auto.isEmpty() && failed.isEmpty())
         Text("Nothing matches \"${q.trim()}\".", color = muted(), fontSize = 16.sp)
@@ -464,14 +464,8 @@ private fun FailedList(vm: MainVm, items: List<Txn>) {
     Spacer(Modifier.height(6.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 6.dp, bottom = 24.dp)) {
         items(items, key = { it.id }) { t ->
-            val d = daysSince(t.txnDate)
             AppCard {
                 TxnHeader(t, aliases)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    if (d > 10) "Waiting $d days. Worth checking with the bank." else "Waiting $d days",
-                    fontSize = 13.sp, color = if (d > 10) amber() else muted()
-                )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { refundFor = t }) { Text("Refund received") }
