@@ -498,8 +498,8 @@ private fun shortName(full: String): String {
 }
 
 @Composable
-private fun Tag(text: String, color: Color) {
-    Box(Modifier.clip(RoundedCornerShape(3.dp)).border(BorderStroke(0.5.dp, color), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
+private fun Tag(text: String, color: Color, onClick: (() -> Unit)? = null) {
+    Box(Modifier.clip(RoundedCornerShape(3.dp)).let { if (onClick != null) it.clickable(onClick = onClick) else it }.border(BorderStroke(0.5.dp, color), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
         Text(text, fontSize = 12.sp, color = color, maxLines = 1, softWrap = false)
     }
 }
@@ -515,6 +515,7 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
     val live = ss.filter { it.amount > 0.004 && it.person != Repo.ME }
     val owes = live.sumOf { it.amount - it.settled }
     val alias = Repo.nameOnly(t.merchant, aliases).takeIf { !it.equals(t.merchant, true) && !it.equals(t.category, true) }
+    var info by remember { mutableStateOf(false) }
     val draft = Drafts.isDraft(t)
     val who = when {
         live.isNotEmpty() -> live.map { it.person }.distinct().let { p -> firstNames(p.take(1)).joinToString() + if (p.size > 1) "+${p.size - 1}" else "" }
@@ -528,13 +529,11 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
         val noTag = !own && t.category.isBlank() && !incoming
         Text(
             if (own) "Transfer" else if (t.category.isBlank()) (if (incoming) "Income" else "Add tag") else t.category,
-            color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(84.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
+            color = if (noTag) coral() else muted(), fontSize = 12.sp, modifier = Modifier.width(92.dp).padding(end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         Row(Modifier.weight(1f).padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (own) "${modeTag(t)} → ${modeTag(partner!!)}" else (alias ?: shortName(t.merchant)), Modifier.weight(1f, fill = false), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!own) {
-                val chip = when (t.status) { "FAILED" -> "Refund due" to amber(); "REVERSED" -> "Refunded" to blue(); else -> null }
-                if (chip != null) { Spacer(Modifier.width(4.dp)); Tag(chip.first, chip.second) }
                 if (state.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Tag(state, muted()) }
                 if (dup) { Spacer(Modifier.width(4.dp)); Tag("Duplicate?", amber()) }
             }
@@ -551,17 +550,25 @@ internal fun MmRow(t: Txn, ss: List<Share>, aliases: Map<String, String>, partne
                 }
             }
         }
+        val rTag = when (t.status) { "FAILED" -> "RP" to amber(); "REVERSED" -> "R" to blue(); else -> null }
+        Box(Modifier.width(30.dp), contentAlignment = Alignment.CenterStart) { if (!own && rTag != null) Tag(rTag.first, rTag.second) { info = true } }
         Text(
-            Logic.money(t.amount).removePrefix("₹"), fontSize = 14.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 70.dp),
+            Logic.money(t.amount).removePrefix("₹"), fontSize = 14.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 70.dp).padding(end = 12.dp),
             color = if (draft) muted() else if (own) MaterialTheme.colorScheme.onSurface else if (incoming) blue() else coral()
         )
         // the tick is always the right-most thing; the slot is kept on every row so amounts line up
-        Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
             if (onConfirm != null) Box(Modifier.size(22.dp).clip(CircleShape).border(BorderStroke(1.5.dp, coral()), CircleShape).clickable(onClick = onConfirm), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, contentDescription = "Confirm", tint = coral(), modifier = Modifier.size(13.dp))
             }
         }
     }
+    if (info) AlertDialog(
+        onDismissRequest = { info = false },
+        title = { Text(if (t.status == "FAILED") "RP: Refund pending" else "R: Refunded") },
+        text = { Text(if (t.status == "FAILED") "This payment failed or was cancelled, but the money was debited. The refund has not reached you yet. It turns to R when the refund arrives." else "This payment was refunded. The refund has been matched to it.") },
+        confirmButton = { TextButton(onClick = { info = false }) { Text("OK") } }
+    )
     Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
 }
 
