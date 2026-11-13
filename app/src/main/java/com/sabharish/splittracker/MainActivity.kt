@@ -221,10 +221,10 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                             SearchIconButton(searching) { searching = !searching; if (!searching) query = "" }
                             if (sub in 1..5) IconButton(onClick = { showFilters = !showFilters }) { Icon(IconTune, contentDescription = "Filter", tint = if (flt.active) coral() else MaterialTheme.colorScheme.onSurface) }
                         }
-                        MonthBar(if (sub == 0) "Drafts" else "${Stats.monthLabel(m)} $y",
+                        MonthBar(if (sub == 0) "Review" else "${Stats.monthLabel(m)} $y",
                             { monthOffset -= 1 }, { if (monthOffset < 0) monthOffset += 1 }, monthOffset < 0, arrows = sub != 0, actions = actions)
-                        val subs = listOf(0, 1, 4, 5)
-                        MmTabs(listOf(if (inboxCount > 0) "Drafts $inboxCount" else "Drafts", "Activity", "Total", "Refunds"), subs.indexOf(sub).coerceAtLeast(0)) { sub = subs[it] }
+                        val subs = listOf(0, 1, 5)
+                        MmTabs(listOf(if (inboxCount > 0) "Drafts $inboxCount" else "Drafts", "Activity", "Refunds"), subs.indexOf(sub).coerceAtLeast(0)) { sub = subs[it] }
                         if (searching) Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { SearchBox(query, { query = it }, "Name, amount, tag or message") }
                         if (showFilters && sub in 1..5) Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterPill("Type", Filters.types, flt.type) { flt = flt.copy(type = it) }
@@ -240,7 +240,7 @@ private fun AppBody(vm: MainVm, askPermissions: () -> Unit) {
                             val byTxn = remember(shareList) { shareList.groupBy { it.txnId } }
                             SummaryStrip(Stats.incomeInMonth(txns, y, m), Stats.spentInMonth(txns, byTxn, y, m))
                         }
-                        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (sub == 0 || sub == 4) 14.dp else 0.dp)) {
+                        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (sub == 0) 14.dp else 0.dp)) {
                             when (sub) {
                                 0 -> Column(Modifier.fillMaxSize()) { InboxScreen(vm, undoable, query, inboxSection) { inboxSection = it } }
                                 1 -> DailyPane(vm, y, m, query, flt, onOpenDrafts = { sub = 0 })

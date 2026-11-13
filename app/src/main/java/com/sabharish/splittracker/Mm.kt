@@ -62,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -333,7 +334,14 @@ fun MonthBar(label: String, onPrev: () -> Unit, onNext: () -> Unit, nextEnabled:
 }
 
 @Composable
-fun MmTabs(titles: List<String>, selected: Int, onPick: (Int) -> Unit) {
+fun MmTabs(titles: List<String>, selected: Int, onPick: (Int) -> Unit, bleed: androidx.compose.ui.unit.Dp = 0.dp) {
+    // bleed: draw edge to edge even when the parent has horizontal padding
+    Column(Modifier.layout { measurable, c ->
+        val e = bleed.roundToPx()
+        val w = c.maxWidth + 2 * e
+        val p = measurable.measure(c.copy(minWidth = w, maxWidth = w))
+        layout(c.maxWidth, p.height) { p.place(-e, 0) }
+    }) {
     Row(Modifier.fillMaxWidth()) {
         titles.forEachIndexed { i, t ->
             val on = i == selected
@@ -346,6 +354,7 @@ fun MmTabs(titles: List<String>, selected: Int, onPick: (Int) -> Unit) {
         }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline))
+    }
 }
 
 @Composable

@@ -12,6 +12,8 @@ import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.FilledIconButton
@@ -166,16 +168,17 @@ fun TagSheet(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
                     if (creating) {
-                        Text("New split", Modifier.weight(1f).padding(horizontal = 6.dp), fontSize = 22.sp, fontWeight = FontWeight.Medium)
+                        Text("New split", Modifier.weight(1f).padding(horizontal = 6.dp), fontSize = 20.sp)
                     } else Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
-                        Text(Repo.money(t.amount), fontSize = 26.sp, fontWeight = FontWeight.Medium)
-                        Text(Repo.title(t.merchant, aliases), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Text(Repo.money(t.amount), fontSize = 20.sp)
+                        Text(Repo.title(t.merchant, aliases), fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         Text("${Repo.acct(t.bank, t.card)} · ${Repo.shortDate(t.txnDate)}", fontSize = 12.sp, color = muted())
                     }
-                    FilledIconButton(
-                        enabled = shares != null && amt > 0.004, modifier = Modifier.size(52.dp),
+                    androidx.compose.material3.OutlinedIconButton(
+                        enabled = shares != null && amt > 0.004, modifier = Modifier.size(36.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, if (shares != null && amt > 0.004) coral() else muted()),
                         onClick = {
-                            val sh = build() ?: return@FilledIconButton
+                            val sh = build() ?: return@OutlinedIconButton
                             if (creating) {
                                 val people = sh.map { it.person }
                                 val title = titleText
@@ -194,13 +197,18 @@ fun TagSheet(
                                 onDismiss()
                             }
                         }
-                    ) { Icon(Icons.Default.Check, contentDescription = "Save") }
+                    ) { Icon(Icons.Default.Check, contentDescription = "Save", tint = if (shares != null && amt > 0.004) coral() else muted(), modifier = Modifier.size(18.dp)) }
+                    Spacer(Modifier.width(8.dp))
                 }
-                if (!creating) Row {
-                    TextButton(onClick = { rename = true }) { Text("Rename merchant") }
-                    if (t.kind == "SPEND" || t.kind == "UPI_OUT") TextButton(onClick = { refundFor = true }) { Text("Refund received") }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                if (!creating) {
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
+                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { rename = true }) { Text("Rename", fontSize = 14.sp) }
+                        if (t.kind == "SPEND" || t.kind == "UPI_OUT") TextButton(onClick = { refundFor = true }) { Text("Refund received", fontSize = 14.sp) }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { confirmDelete = true }) { Text("Delete", fontSize = 14.sp, color = MaterialTheme.colorScheme.error) }
+                    }
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
                 }
                 if (refundFor) RefundDialog(t, { refundFor = false }) { a -> refundFor = false; vm.refunded(t, a); onDismiss() }
                 if (confirmDelete) AlertDialog(
