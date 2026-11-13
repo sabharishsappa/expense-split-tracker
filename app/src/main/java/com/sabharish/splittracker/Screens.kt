@@ -544,11 +544,12 @@ fun PendingScreen(vm: MainVm, q: String) {
                 val sorted = remember(e.value) { e.value.sortedByDescending { it.txnDate } }
                 Column {
                 (if (expanded) sorted else sorted.take(3)).forEach { r ->
-                    Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp).clickable { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
+                    val single = sorted.size == 1
+                    Row(Modifier.fillMaxWidth().padding(start = if (single) 16.dp else 8.dp, end = 16.dp, top = if (single) 4.dp else 0.dp, bottom = if (single) 4.dp else 0.dp).clickable(enabled = !single) { if (r.shareId in ticked) ticked.remove(r.shareId) else ticked.add(r.shareId) },
                         verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
+                        if (!single) Checkbox(checked = r.shareId in ticked, onCheckedChange = { if (it) ticked.add(r.shareId) else ticked.remove(r.shareId) })
                         Text("${Repo.shortDate(r.txnDate)} · ${if (r.category.isNotBlank() && r.category != "Other") r.category + " · " else ""}${Repo.nameOnly(r.merchant, aliases)}", Modifier.weight(1f), fontSize = 14.sp)
-                        Text(Repo.money(r.amount - r.settled), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(Repo.money(r.amount - r.settled).removePrefix("₹"), fontSize = 14.sp)
                     }
                 }
                     if (sorted.size > 3) TextButton(onClick = { expanded = !expanded }, modifier = Modifier.height(32.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)) { Text(if (expanded) "Show fewer" else "Show all ${sorted.size}", fontSize = 13.sp) }
@@ -557,7 +558,7 @@ fun PendingScreen(vm: MainVm, q: String) {
                 Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { remindFor = e.key }, modifier = Modifier.weight(1f)) { Text(if (ticked.isEmpty()) "Remind" else "Remind · ${ticked.size}", maxLines = 1) }
                     OutlinedButton(onClick = { settleFor = e.key }, modifier = Modifier.weight(2f)) {
-                        Text(if (ticked.isEmpty()) "Mark all paid" else "Paid · ${ticked.size} · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}", maxLines = 1)
+                        Text(if (ticked.isEmpty()) (if (sorted.size == 1) "Mark paid" else "Mark all paid") else "Paid · ${ticked.size} · ${Logic.money(Logic.dueOf(e.value, ticked.toSet()))}", maxLines = 1)
                     }
                 }
             }
