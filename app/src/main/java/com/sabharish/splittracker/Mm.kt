@@ -820,6 +820,7 @@ fun MorePage(vm: MainVm, openSettings: () -> Unit, openStatement: () -> Unit) {
             Triple("Configuration", IconTune, "cfg"),
             Triple("Backup", IconSwap, "backup"),
             Triple("Style", IconBars, "style"),
+            Triple("Repeating", IconSwap, "repeat"),
             Triple("Statement", IconWallet, "stmt"),
             Triple("Help", IconMore, "help"),
             Triple("Privacy", IconChevronR, "privacy")
@@ -833,10 +834,12 @@ fun MorePage(vm: MainVm, openSettings: () -> Unit, openStatement: () -> Unit) {
                         Text(label, fontSize = 16.sp)
                     }
                 }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
     when (page) {
+        "repeat" -> RecurringPage(vm) { page = "" }
         "style" -> StylePage { page = "" }
         "backup" -> BackupPage(vm) { page = "" }
         "help" -> InfoPage("Help", HELP_TEXT) { page = "" }
@@ -863,6 +866,68 @@ private fun SubPage(title: String, onBack: () -> Unit, content: @Composable () -
                 content()
             }
         }
+    }
+}
+
+/** Salary, rent, subscriptions: added for you on the chosen day each month, to the account you pick (Cash or a bank). */
+@Composable
+private fun RecurringPage(vm: MainVm, onBack: () -> Unit) = SubPage("Repeating entries", onBack) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val accounts = Accounts.options(vm.accounts.collectAsState().value)
+    var items by remember { mutableStateOf(Recurrings.decode(Repo.getPref(ctx, Recurrings.KEY, ""))) }
+    var adding by remember { mutableStateOf(false) }
+    fun store(l: List<Recurring>) { items = l; Repo.putPref(ctx, Recurrings.KEY, Recurrings.encode(l)) }
+    fun ord(d: Int) = "$d" + if (d in 11..13) "th" else when (d % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (items.isEmpty() && !adding) Text("Nothing repeating yet. Add your salary, rent or a subscription once. On that day each month it is entered for you, even if the app was closed (it appears the next time you open the app).", fontSize = 14.sp, color = muted(), modifier = Modifier.padding(16.dp))
+        items.forEach { r ->
+            val acct = accounts.firstOrNull { it.key == r.account }?.label ?: r.account.substringBefore("|")
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(r.title.ifBlank { r.category }, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${r.kind} · ${r.category} · ${ord(r.day)} of every month · $acct", fontSize = 12.sp, color = muted())
+                }
+                Text(Logic.money(r.amount).removePrefix("₹"), fontSize = 16.sp, color = if (r.kind == "Income") blue() else coral())
+                TextButton(onClick = { store(items.filter { it.id != r.id }) }) { Text("Stop", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) }
+            }
+            Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline))
+        }
+        if (adding) {
+            var kind by remember { mutableStateOf("Income") }
+            var title by remember { mutableStateOf("") }
+            var amount by remember { mutableStateOf("") }
+            var day by remember { mutableStateOf("1") }
+            var category by remember { mutableStateOf("") }
+            var account by remember { mutableStateOf(accounts.first()) }
+            val amt = amount.toDoubleOrNull() ?: 0.0
+            val d = day.toIntOrNull() ?: 0
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Segmented(listOf("Income", "Expense"), kind, { kind = it; category = "" })
+                androidx.compose.material3.OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text("Name (e.g. Salary)") }, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.compose.material3.OutlinedTextField(value = amount, onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' } }, singleLine = true, label = { Text("Amount") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                    androidx.compose.material3.OutlinedTextField(value = day, onValueChange = { day = it.filter(Char::isDigit).take(2) }, singleLine = true, label = { Text("Day (1-28)") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), modifier = Modifier.weight(1f))
+                }
+                Text("Category", fontSize = 12.sp, color = muted())
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (if (kind == "Income") INCOME_CATEGORIES else Categories.all).forEach { c -> Pill(c, { category = c }, selected = c == category, compact = true) }
+                }
+                Text(if (kind == "Income") "Credited to" else "Paid from", fontSize = 12.sp, color = muted())
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    accounts.forEach { a -> Pill(a.label, { account = a }, selected = a.key == account.key, compact = true) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { adding = false }) { Text("Cancel") }
+                    Button(enabled = amt > 0 && d in 1..28, onClick = {
+                        val now = System.currentTimeMillis()
+                        store(items + Recurring(now.toString(), title.trim(), amt, kind, category.ifBlank { "Other" }, account.key, d, Recurrings.startLast(d, now)))
+                        vm.runRecurring(); adding = false
+                    }) { Text("Save") }
+                }
+            }
+        } else Button(onClick = { adding = true }, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("+ Add a repeating entry") }
     }
 }
 

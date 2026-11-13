@@ -1,5 +1,6 @@
 package com.sabharish.splittracker
 
+import kotlinx.coroutines.sync.withLock
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -529,6 +530,25 @@ object Repo {
     }
 
     /** Income typed in by hand (salary, rent, gift…). It counts as income straight away. */
+
+    private val recurMutex = kotlinx.coroutines.sync.Mutex()
+
+    /** Creates the entries that repeating items owe by now (each once). Safe to call often. */
+    suspend fun runRecurring(ctx: Context) = recurMutex.withLock {
+        val items = Recurrings.decode(getPref(ctx, Recurrings.KEY, ""))
+        if (items.isEmpty()) return@withLock
+        val due = Recurrings.due(items, System.currentTimeMillis())
+        if (due.isEmpty()) return@withLock
+        val latest = HashMap<String, String>()
+        for ((it, at) in due.sortedBy { x -> x.second }) {
+            if (it.kind == "Income") addHandIncome(ctx, it.title, it.amount, it.account, it.category, at)
+            else addHandExpense(ctx, it.title, it.amount, it.account, it.category, "Repeating entry", at)
+            val c = java.util.Calendar.getInstance().apply { timeInMillis = at }
+            latest[it.id] = Recurrings.monthKey(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH))
+        }
+        putPref(ctx, Recurrings.KEY, Recurrings.encode(items.map { r -> latest[r.id]?.let { r.copy(last = it) } ?: r }))
+    }
+
     suspend fun addHandIncome(ctx: Context, title: String, amount: Double, accountKey: String, category: String, at: Long) {
         val base = Entries.received(accountKey, title.ifBlank { category.ifBlank { "Added by me" } }, amount, at)
         Db.get(ctx).dao().insert(base.copy(status = "RECEIVED", note = "Received: " + category.ifBlank { "Income" }))
