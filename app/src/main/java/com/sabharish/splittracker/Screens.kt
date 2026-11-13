@@ -530,13 +530,10 @@ fun PendingScreen(vm: MainVm, q: String) {
         }
         items(ordered, key = { it.key }) { e ->
             val owed = e.value.sumOf { it.amount - it.settled }
-            val days = daysSince(e.value.minOf { it.txnDate })
-            Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text(e.key, fontSize = 17.sp)
-                        Text("${e.value.size} items · oldest $days days", fontSize = 13.sp,
-                            color = muted())
                     }
                     Text(Logic.money(owed).removePrefix("₹"), fontSize = 17.sp, color = blue())
                 }
